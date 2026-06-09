@@ -9,8 +9,8 @@
 
 | Phase | Focus                                               | Depends On      | Status      |
 | ----- | --------------------------------------------------- | --------------- | ----------- |
-| 1     | Foundation: stack boots, DB, auth, tenancy          | —               | In progress |
-| 2     | Projects, grid, control points (data + forms)       | 1               | In progress |
+| 1     | Foundation: stack boots, DB, auth, tenancy          | —               | Complete\*   |
+| 2     | Projects, grid, control points (data + forms)       | 1               | Complete\*   |
 | 3     | Geo-core: Helmert transform + residuals (Rust)      | 2               | Not started |
 | 4     | Coordinate conversion + units (Rust + UI)           | 3               | Not started |
 | 5     | Point import (CSV/LandXML) + categories/groups      | 2, 4            | Not started |
@@ -19,6 +19,9 @@
 | 8     | Export (CSV/LandXML/image) + standalone converter   | 4, 5, 6         | Not started |
 | 9     | Performance: benchmarks, profiling, API + UI tuning | 1–8 (API ready) | Not started |
 | 10    | Hardening: security, file-safety, E2E, deploy       | all             | Not started |
+
+\* Phase 1: rate-limiting, real email delivery, and forcing RLS are intentionally deferred to Phase 10.
+Phase 2: a searchable EPSG picker is deferred (EPSG is a free integer field with a US default for now).
 
 ```
 1 ──> 2 ──> 3 ──> 4 ──┐
