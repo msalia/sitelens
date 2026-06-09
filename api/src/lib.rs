@@ -1,4 +1,6 @@
 pub mod auth;
+pub mod convert;
+pub mod crs;
 pub mod db;
 pub mod geo;
 pub mod models;

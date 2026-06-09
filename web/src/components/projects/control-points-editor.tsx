@@ -1,9 +1,10 @@
 'use client';
 
-import { IconPencil, IconTrash } from '@tabler/icons-react';
+import { IconMapPin, IconPencil, IconTrash } from '@tabler/icons-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+import { CoordinateInspectorDialog } from '@/components/projects/coordinate-inspector-dialog';
 import { EditControlPointDialog } from '@/components/projects/edit-control-point-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -45,6 +46,7 @@ export function ControlPointsEditor({
   const [source, setSource] = useState('');
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<ControlPoint | null>(null);
+  const [inspecting, setInspecting] = useState<ControlPoint | null>(null);
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -124,6 +126,14 @@ export function ControlPointsEditor({
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Inspect coordinate"
+                      onClick={() => setInspecting(p)}
+                    >
+                      <IconMapPin className="size-4" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon-sm"
@@ -216,6 +226,12 @@ export function ControlPointsEditor({
             setEditing(null);
             onChanged();
           }}
+        />
+
+        <CoordinateInspectorDialog
+          project={project}
+          point={inspecting}
+          onClose={() => setInspecting(null)}
         />
       </CardContent>
     </Card>

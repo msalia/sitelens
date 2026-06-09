@@ -43,6 +43,17 @@ export interface ControlPoint {
   source: string;
 }
 
+export interface CoordinateSet {
+  gridX: number | null;
+  gridY: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  projectedGridE: number | null;
+  projectedGridN: number | null;
+  projectedGroundE: number | null;
+  projectedGroundN: number | null;
+}
+
 export interface TransformResidual {
   deltaEasting: number;
   deltaNorthing: number;

@@ -11,12 +11,25 @@ use crate::auth::{
     build_clearing_cookie, build_session_cookie, hash_password, issue_jwt, verify_password,
     AuthConfig, AuthContext, Role,
 };
-use crate::geo::{solve_helmert, Correspondence};
+use crate::convert::{self, Space};
+use crate::geo::{solve_helmert, Correspondence, HelmertParams};
 use crate::models::{
-    ControlPoint, GridAxis, GridAxisInput, GridAxisRow, InviteResult, LoginRow, Org, Project,
-    ProjectRow, SignupResult, Transform, TransformResidual, User, UserRow,
+    ControlPoint, CoordinateSet, CoordinateSpace, GridAxis, GridAxisInput, GridAxisRow,
+    InviteResult, LoginRow, Org, Project, ProjectRow, SignupResult, Transform, TransformResidual,
+    User, UserRow,
 };
 use crate::units::LengthUnit;
+
+/// Loads the persisted transform's parameters for a project, if solved.
+async fn load_transform_params(pool: &PgPool, project_id: Uuid) -> Result<Option<HelmertParams>> {
+    let row: Option<(f64, f64, f64, f64)> = sqlx::query_as(
+        "SELECT scale, rotation_rad, translation_e, translation_n FROM transforms WHERE project_id = $1",
+    )
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|(scale, rot, tx, ty)| HelmertParams::from_components(scale, rot, tx, ty)))
+}
 
 const USER_COLUMNS: &str = "id, org_id, email, role, email_verified, created_at";
 const MIN_PASSWORD_LEN: usize = 8;
@@ -207,6 +220,43 @@ impl QueryRoot {
         .fetch_optional(pool)
         .await?;
         Ok(row.map(Transform::from))
+    }
+
+    /// Converts a coordinate (given in `unit`, in the named `space`) into every
+    /// derivable representation: grid, projected (grid + ground), and geographic.
+    async fn convert_coordinate(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        space: CoordinateSpace,
+        x: f64,
+        y: f64,
+        unit: LengthUnit,
+    ) -> Result<CoordinateSet> {
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+
+        let (epsg, csf): (i32, f64) =
+            sqlx::query_as("SELECT epsg_code, combined_scale_factor FROM projects WHERE id = $1")
+                .bind(project_id)
+                .fetch_one(pool)
+                .await?;
+        let params = load_transform_params(pool, project_id).await?;
+
+        let space = match space {
+            CoordinateSpace::Grid => Space::Grid,
+            CoordinateSpace::Projected => Space::Projected,
+        };
+        let result = convert::convert(
+            space,
+            unit.to_meters(x),
+            unit.to_meters(y),
+            params,
+            epsg,
+            csf,
+        );
+        Ok(result.into())
     }
 }
 

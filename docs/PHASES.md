@@ -9,10 +9,10 @@
 
 | Phase | Focus                                               | Depends On      | Status      |
 | ----- | --------------------------------------------------- | --------------- | ----------- |
-| 1     | Foundation: stack boots, DB, auth, tenancy          | —               | Complete\*   |
-| 2     | Projects, grid, control points (data + forms)       | 1               | Complete\*   |
+| 1     | Foundation: stack boots, DB, auth, tenancy          | —               | Complete\*  |
+| 2     | Projects, grid, control points (data + forms)       | 1               | Complete\*  |
 | 3     | Geo-core: Helmert transform + residuals (Rust)      | 2               | Complete    |
-| 4     | Coordinate conversion + units (Rust + UI)           | 3               | Not started |
+| 4     | Coordinate conversion + units (Rust + UI)           | 3               | Complete    |
 | 5     | Point import (CSV/LandXML) + categories/groups      | 2, 4            | Not started |
 | 6     | 3D Cesium scene + terrain + point visualization     | 3, 5            | Not started |
 | 7     | DXF vector import + georeferenced overlay           | 6               | Not started |
@@ -118,22 +118,24 @@ Move any coordinate between systems and units, precisely.
 
 ### Deliverables
 
-- [ ] Rust: EPSG projections via PROJ (projected ↔ lat/long)
-- [ ] Grid ↔ ground via combined scale factor
-- [ ] Building grid ↔ projected via the solved transform
-- [ ] Unit conversion: us-survey-foot / intl-foot / meter (distinct)
-- [ ] `convertCoordinate` GraphQL op returning all representations
-- [ ] Per-point inspector showing all representations live (in project units)
+- [x] EPSG projections projected ↔ lat/long — pure-Rust `proj4rs` + `crs-definitions` (`api/src/crs.rs`), no libproj system dep
+- [x] Grid ↔ ground via combined scale factor
+- [x] Building grid ↔ projected via the solved transform (Helmert forward/inverse)
+- [x] Unit conversion: us-survey-foot / intl-foot / meter (distinct) — `units.rs`
+- [x] `convertCoordinate` GraphQL op returning all representations
+- [x] Per-point inspector showing all representations live (in project units)
 
 ### Tests
 
-- [ ] Rust unit tests: projections vs PROJ/published reference values
-- [ ] US-survey vs intl foot distinction verified (ppm-level)
-- [ ] Grid↔ground and grid↔projected round-trips
+- [x] Rust unit tests: geographic↔projected round-trip + coarse reference (EPSG:2229 LA)
+- [x] US-survey vs intl foot distinction verified (ppm-level)
+- [x] Grid↔ground and grid↔projected round-trips (unit + integration)
 
 ### Validates
 
-Clicking a (manually entered) point shows it in every system + unit, all correct.
+Clicking a control point shows it in every system + unit, all correct. ✅ Verified live (projected→grid via inverse transform; lat/long via EPSG 2229).
+
+> Note: EPSG projection uses pure-Rust proj4rs (no libproj in Docker); NAD83↔WGS84 is treated as ~identity for now (sub-2 m), refine with a datum grid later if needed.
 
 ---
 

@@ -219,6 +219,42 @@ pub struct TransformResidual {
     pub magnitude: f64,
 }
 
+/// The space an input coordinate is expressed in (GraphQL enum).
+#[derive(Enum, Copy, Clone, Eq, PartialEq, Debug)]
+pub enum CoordinateSpace {
+    Grid,
+    Projected,
+}
+
+/// All derivable representations of a coordinate. Linear fields are meters;
+/// latitude/longitude are degrees. `None` where a representation isn't derivable.
+#[derive(SimpleObject, Default)]
+pub struct CoordinateSet {
+    pub grid_x: Option<f64>,
+    pub grid_y: Option<f64>,
+    pub projected_grid_e: Option<f64>,
+    pub projected_grid_n: Option<f64>,
+    pub projected_ground_e: Option<f64>,
+    pub projected_ground_n: Option<f64>,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+}
+
+impl From<crate::convert::CoordinateSet> for CoordinateSet {
+    fn from(c: crate::convert::CoordinateSet) -> Self {
+        CoordinateSet {
+            grid_x: c.grid_x,
+            grid_y: c.grid_y,
+            projected_grid_e: c.projected_grid_e,
+            projected_grid_n: c.projected_grid_n,
+            projected_ground_e: c.projected_ground_e,
+            projected_ground_n: c.projected_ground_n,
+            latitude: c.latitude,
+            longitude: c.longitude,
+        }
+    }
+}
+
 /// A solved Helmert transform. Translations/RMS are meters; rotation in degrees.
 #[derive(SimpleObject, Clone)]
 pub struct Transform {

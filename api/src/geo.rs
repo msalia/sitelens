@@ -49,6 +49,23 @@ impl HelmertParams {
             self.b * x + self.a * y + self.ty,
         )
     }
+
+    /// Inverse: projected (E, N) → grid (x, y).
+    pub fn inverse(&self, e: f64, n: f64) -> (f64, f64) {
+        let d = self.a * self.a + self.b * self.b;
+        let (de, dn) = (e - self.tx, n - self.ty);
+        ((self.a * de + self.b * dn) / d, (-self.b * de + self.a * dn) / d)
+    }
+
+    /// Rebuilds parameters from the persisted scale/rotation/translation form.
+    pub fn from_components(scale: f64, rotation_rad: f64, tx: f64, ty: f64) -> Self {
+        Self {
+            a: scale * rotation_rad.cos(),
+            b: scale * rotation_rad.sin(),
+            tx,
+            ty,
+        }
+    }
 }
 
 /// Residual at one correspondence: observed − computed, in meters.
@@ -236,6 +253,14 @@ mod tests {
         // Scale should still be ~1.
         assert!((s.params.scale() - 1.0).abs() < 0.05);
         assert_eq!(s.residuals.len(), 4);
+    }
+
+    #[test]
+    fn forward_inverse_are_consistent() {
+        let p = HelmertParams::from_components(1.5, 0.4, 100.0, 200.0);
+        let (e, n) = p.apply(12.0, -7.0);
+        let (x, y) = p.inverse(e, n);
+        assert!((x - 12.0).abs() < 1e-9 && (y + 7.0).abs() < 1e-9);
     }
 
     #[test]

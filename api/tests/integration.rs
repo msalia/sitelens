@@ -502,3 +502,44 @@ async fn transform_query_returns_persisted(pool: PgPool) {
     let after = exec_ok(&schema, &q0, Some(admin_ctx(admin, org))).await;
     assert!((after["transform"]["scale"].as_f64().unwrap() - 1.0).abs() < 1e-6);
 }
+
+// ---------------------------------------------------------------------------
+// Phase 4: coordinate conversion
+// ---------------------------------------------------------------------------
+
+#[sqlx::test(migrations = "./migrations")]
+async fn convert_coordinate_returns_all_representations(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+
+    // Identity transform, translation E=100 N=200, so grid (x,y) → projected (x+100, y+200).
+    add_cp(&schema, admin_ctx(admin, org), pid, "A", 100.0, 200.0, 0.0, 0.0).await;
+    add_cp(&schema, admin_ctx(admin, org), pid, "B", 110.0, 200.0, 10.0, 0.0).await;
+    add_cp(&schema, admin_ctx(admin, org), pid, "C", 100.0, 210.0, 0.0, 10.0).await;
+    let solve = format!(r#"mutation {{ solveTransform(projectId: "{pid}") {{ scale }} }}"#);
+    exec_ok(&schema, &solve, Some(admin_ctx(admin, org))).await;
+
+    // Convert a projected coordinate → grid is recovered, geographic is present.
+    let q = format!(
+        r#"{{ convertCoordinate(projectId: "{pid}", space: PROJECTED, x: 110.0, y: 220.0, unit: METER) {{
+            gridX gridY projectedGroundE latitude longitude }} }}"#
+    );
+    let data = exec_ok(&schema, &q, Some(admin_ctx(admin, org))).await;
+    let c = &data["convertCoordinate"];
+    assert!((c["gridX"].as_f64().unwrap() - 10.0).abs() < 1e-6);
+    assert!((c["gridY"].as_f64().unwrap() - 20.0).abs() < 1e-6);
+    assert!((c["projectedGroundE"].as_f64().unwrap() - 110.0).abs() < 1e-6); // CSF defaults to 1
+    assert!(c["latitude"].as_f64().is_some());
+    assert!(c["longitude"].as_f64().is_some());
+
+    // Convert a grid coordinate → projected is computed via the transform.
+    let q2 = format!(
+        r#"{{ convertCoordinate(projectId: "{pid}", space: GRID, x: 10.0, y: 20.0, unit: METER) {{
+            projectedGridE projectedGridN }} }}"#
+    );
+    let data2 = exec_ok(&schema, &q2, Some(admin_ctx(admin, org))).await;
+    let c2 = &data2["convertCoordinate"];
+    assert!((c2["projectedGridE"].as_f64().unwrap() - 110.0).abs() < 1e-6);
+    assert!((c2["projectedGridN"].as_f64().unwrap() - 220.0).abs() < 1e-6);
+}
