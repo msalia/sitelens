@@ -17,13 +17,13 @@ docker compose up --build
 
 This starts three services (ports from `docker-compose.override.yml`):
 
-| Service | URL | Check |
-| ------- | --- | ----- |
-| Web     | http://localhost:3000 | Home shows "API: healthy · DB: connected" |
-| Web docs | http://localhost:3000/docs | Documentation site |
-| API health | http://localhost:4000/health | `{"status":"healthy","db":"connected"}` |
-| API GraphQL | http://localhost:4000/graphql | GraphiQL playground (GET) |
-| DB      | localhost:5432 | PostgreSQL + PostGIS |
+| Service     | URL                           | Check                                     |
+| ----------- | ----------------------------- | ----------------------------------------- |
+| Web         | http://localhost:3000         | Home shows "API: healthy · DB: connected" |
+| Web docs    | http://localhost:3000/docs    | Documentation site                        |
+| API health  | http://localhost:4000/health  | `{"status":"healthy","db":"connected"}`   |
+| API GraphQL | http://localhost:4000/graphql | GraphiQL playground (GET)                 |
+| DB          | localhost:5432                | PostgreSQL + PostGIS                      |
 
 Reset the database: `docker compose down -v && docker compose up --build`.
 

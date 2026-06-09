@@ -7,17 +7,18 @@
 
 ## Phase Summary
 
-| Phase | Focus                                             | Depends On | Status      |
-| ----- | ------------------------------------------------- | ---------- | ----------- |
-| 1     | Foundation: stack boots, DB, auth, tenancy        | —          | Not started |
-| 2     | Projects, grid, control points (data + forms)     | 1          | Not started |
-| 3     | Geo-core: Helmert transform + residuals (Rust)    | 2          | Not started |
-| 4     | Coordinate conversion + units (Rust + UI)         | 3          | Not started |
-| 5     | Point import (CSV/LandXML) + categories/groups    | 2, 4       | Not started |
-| 6     | 3D Cesium scene + terrain + point visualization   | 3, 5       | Not started |
-| 7     | DXF vector import + georeferenced overlay         | 6          | Not started |
-| 8     | Export (CSV/LandXML/image) + standalone converter | 4, 5, 6    | Not started |
-| 9     | Hardening: security, file-safety, E2E, deploy     | all        | Not started |
+| Phase | Focus                                               | Depends On      | Status      |
+| ----- | --------------------------------------------------- | --------------- | ----------- |
+| 1     | Foundation: stack boots, DB, auth, tenancy          | —               | In progress |
+| 2     | Projects, grid, control points (data + forms)       | 1               | Not started |
+| 3     | Geo-core: Helmert transform + residuals (Rust)      | 2               | Not started |
+| 4     | Coordinate conversion + units (Rust + UI)           | 3               | Not started |
+| 5     | Point import (CSV/LandXML) + categories/groups      | 2, 4            | Not started |
+| 6     | 3D Cesium scene + terrain + point visualization     | 3, 5            | Not started |
+| 7     | DXF vector import + georeferenced overlay           | 6               | Not started |
+| 8     | Export (CSV/LandXML/image) + standalone converter   | 4, 5, 6         | Not started |
+| 9     | Performance: benchmarks, profiling, API + UI tuning | 1–8 (API ready) | Not started |
+| 10    | Hardening: security, file-safety, E2E, deploy       | all             | Not started |
 
 ```
 1 ──> 2 ──> 3 ──> 4 ──┐
@@ -27,7 +28,7 @@
             ▼         │
        6 ──> 7        │
        └──────────────┘
-                      └──> 9 (after all)
+                      └──> 9 ──> 10 (after all)
 ```
 
 ---
@@ -39,22 +40,22 @@ Stack boots end-to-end with auth and multi-tenant scoping in place.
 ### Deliverables
 
 - [x] Dokploy compose: Next.js + Rust GraphQL + PostgreSQL+PostGIS, local Docker dev
-- [ ] PostGIS extension enabled; migration framework wired
-- [ ] Org + User models; email/password signup + login + email verification
-- [ ] Cookie-based JWT sessions; Argon2 hashing; auth rate-limiting
-- [ ] `org_id` scoping pattern + Postgres RLS scaffolding; roles (Admin/Surveyor/Viewer)
-- [ ] Storage abstraction interface (local volume implementation)
+- [x] PostGIS extension enabled; migration framework wired (`sqlx::migrate!`)
+- [x] Org + User models; email/password signup + login + email verification (verify flow built; real email sending deferred)
+- [x] Cookie-based JWT sessions; Argon2 hashing (auth rate-limiting → Phase 10 hardening)
+- [x] `org_id` scoping pattern + Postgres RLS scaffolding; roles (Admin/Surveyor/Viewer)
+- [x] Storage abstraction interface (local volume implementation)
 - [x] Health-check endpoint; subdomain `sitelens.msalia.org` reachable (web + api `/health`, DB connected, live in prod)
 
 ### Tests
 
-- [ ] API integration: signup/login/logout, role enforcement
-- [ ] Tenancy: org A cannot read org B (foundational isolation test)
-- [ ] Storage abstraction unit tests (local impl)
+- [x] API integration: signup → verify → login → me, role enforcement
+- [x] Tenancy: org A cannot read org B (foundational isolation test)
+- [x] Storage abstraction unit tests (local impl)
 
 ### Validates
 
-A user can sign up, verify, log in, and the app enforces org isolation. Services boot and health-check green in Dokploy.
+A user can sign up, verify, log in, and the app enforces org isolation. Services boot and health-check green in Dokploy. ✅ Verified live.
 
 ---
 
@@ -227,7 +228,34 @@ A surveyor exports points in the format/system their machine expects, and can do
 
 ---
 
-## Phase 9 — Hardening & Launch
+## Phase 9 — Performance & Optimization
+
+Once the API is feature-complete, measure and make the API and UIs as fast as
+possible. Optimize against real benchmarks, not guesses.
+
+### Deliverables
+
+- [ ] **Establish baselines** — benchmark harness + recorded baseline numbers for: GraphQL resolver latency (auth, project/point queries, `solveTransform`, `convertCoordinate`), import throughput (points/sec for large CSV/LandXML), and frontend metrics (TTFB, LCP, INP, bundle size, 3D scene first-render + frame rate with N points).
+- [ ] **Profile the API** — flamegraph the hot paths; identify N+1 queries, missing indexes, serialization costs, and geo-core hotspots.
+- [ ] **Database tuning** — add/verify indexes (org_id, project_id, spatial GiST on points), use connection pooling effectively, paginate large lists, batch where possible (dataloader pattern for nested resolvers).
+- [ ] **API optimizations** — eliminate N+1s, add response caching where safe, stream/segment large exports, parallelize independent work, tighten allocations in the geo-core.
+- [ ] **Frontend optimizations** — code-split heavy deps (Cesium, DXF parser), lazy-load the 3D scene, virtualize the point sidebar for large datasets, level-of-detail / clustering for many points, memoize expensive renders, trim bundle.
+- [ ] **Load testing** — sustained-load test (e.g. k6/oha) at realistic concurrency; confirm no regressions and acceptable p95/p99.
+- [ ] **Set budgets** — codify performance budgets (latency, bundle size, frame rate) and a repeatable benchmark script so regressions are caught later.
+
+### Tests
+
+- [ ] Benchmark suite is repeatable and committed (before/after numbers recorded)
+- [ ] Regression check: key operations stay within defined budgets
+- [ ] Large-dataset E2E: UI stays responsive with a high point count
+
+### Validates
+
+The app meets its performance budgets: API p95 latencies are low, large imports and exports are fast, and the 3D UI stays smooth with realistic data volumes — all backed by recorded benchmarks.
+
+---
+
+## Phase 10 — Hardening & Launch
 
 Security, robustness, and deploy.
 

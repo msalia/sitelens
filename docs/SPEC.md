@@ -16,6 +16,7 @@ SiteLens is an office-first web application for land/construction surveyors. The
 6. Coordinates can be **converted** between systems and units at any time, per-point or ad hoc, and **exported** back out.
 
 **Core principles**
+
 - **Imported Z (elevation) is the source of truth.** Terrain is visual backdrop only, never survey-grade.
 - **One canonical internal unit (meters).** Convert only at I/O boundaries; label units everywhere.
 - **Precision math lives in Rust.** Rendering and CAD parsing live in the browser.
@@ -31,24 +32,27 @@ SiteLens is an office-first web application for land/construction surveyors. The
 
 **Roles (within an org):**
 
-| Role     | Capabilities |
-| -------- | ------------ |
-| Admin    | Manage org, invite/manage users, all project capabilities |
+| Role     | Capabilities                                                                     |
+| -------- | -------------------------------------------------------------------------------- |
+| Admin    | Manage org, invite/manage users, all project capabilities                        |
 | Surveyor | Full project CRUD: grid/control entry, transforms, imports, conversions, exports |
-| Viewer   | Read-only access to shared projects (for GCs / architects) |
+| Viewer   | Read-only access to shared projects (for GCs / architects)                       |
 
 ## 3. Data Model
 
 Stored in PostgreSQL + PostGIS. All coordinates persisted in **meters** (canonical). Spatial columns use PostGIS geometry for indexing/queries.
 
 ### 3.1 Org
+
 - `id`, `name`, `created_at`
 - (subscription/billing fields stubbed for later — not used in v1)
 
 ### 3.2 User
+
 - `id`, `org_id` (FK), `email` (unique), `password_hash` (Argon2), `role` (Admin | Surveyor | Viewer), `email_verified`, `created_at`
 
 ### 3.3 Project (a building site)
+
 - `id`, `org_id` (FK), `name`, `description`
 - `epsg_code` — projected CRS selected from the EPSG library (US defaults; user-selectable)
 - `display_unit` — `us_survey_foot` | `international_foot` | `meter`
@@ -57,17 +61,20 @@ Stored in PostgreSQL + PostGIS. All coordinates persisted in **meters** (canonic
 - `created_at`, `updated_at`
 
 ### 3.4 ControlPoint
+
 - `id`, `project_id` (FK), `label`
 - `northing`, `easting`, `elevation` (meters, canonical)
 - `source` — e.g. "city published"
 - Used as the fixed points for the transform solve.
 
 ### 3.5 GridSystem
+
 - `id`, `project_id` (FK)
 - Axis definitions: named axes in two families (e.g. lettered A,B,C… and numbered 1,2,3…), each with an offset/coordinate in grid space.
 - The grid defines the local "building grid" coordinate space.
 
 ### 3.6 Transform
+
 - `id`, `project_id` (FK)
 - Type: 4-parameter Helmert (similarity): `translation_e`, `translation_n`, `rotation`, `scale`
 - Solve method: exact (2 points) or least-squares best-fit (3+ points)
@@ -76,28 +83,34 @@ Stored in PostgreSQL + PostGIS. All coordinates persisted in **meters** (canonic
 - Computed by the Rust geo-core; persisted with the inputs that produced it.
 
 ### 3.7 SurveyPoint
+
 - `id`, `project_id` (FK), `label`, `description`
 - `northing`, `easting`, `elevation` (meters, canonical) + PostGIS geometry
 - `category_id` (FK, exactly one) + `tags` (free-text array)
 - `import_batch_id` (FK, nullable)
 
 ### 3.8 PointCategory
+
 - `id`, `org_id` (FK, nullable for built-in defaults), `name`, `color`, `icon`
 - Default set (Control/Reference, Station/Setup, Column, Corner, Spot/Elevation, Utility, Other) + per-tenant custom categories.
 
 ### 3.9 PointGroup
+
 - `id`, `project_id` (FK), `name`, member point IDs — a saved named selection.
 
 ### 3.10 ImportBatch / ImportProfile
+
 - ImportBatch: `id`, `project_id`, `source_filename`, `format` (csv | landxml), `imported_at`, `row_count`
 - ImportProfile: saved column-mapping + unit per project for reusable CSV imports.
 
 ### 3.11 CadOverlay (DXF)
+
 - `id`, `project_id` (FK), `file_ref` (storage key), `original_filename`
 - Georeference: `offset_e`, `offset_n`, `rotation`, `scale`, `assume_real_world` (bool)
 - Parsed geometry cached (lines, polylines, arcs, text, layers).
 
 ### 3.12 Upload (generic file record)
+
 - `id`, `org_id`, `project_id`, `storage_key`, `kind` (dxf | csv | landxml | snapshot), `size`, `created_at`
 - Backed by a storage abstraction (local volume in v1, S3 later).
 
@@ -140,6 +153,7 @@ External: AWS open Terrain Tiles (backdrop), optional Cesium Ion token (per tena
 GraphQL over HTTPS. Auth via HTTP-only cookie (JWT). Every resolver enforces `org_id` scoping; Postgres RLS as defense-in-depth.
 
 **Representative operations**
+
 - Auth: `signup`, `login`, `logout`, `verifyEmail`, `me`
 - Org/users: `inviteUser`, `updateUserRole`, `listUsers`
 - Projects: `createProject`, `updateProject`, `listProjects`, `project(id)`
@@ -157,6 +171,7 @@ GraphQL over HTTPS. Auth via HTTP-only cookie (JWT). Every resolver enforces `or
 **Roundedness:** TBD per project (default to template). Use shadcn/ui components first.
 
 **Key screens**
+
 - **Auth** — login / signup / verify.
 - **Project list** — org's projects, create new.
 - **Project workspace** — the core screen:
@@ -171,6 +186,7 @@ GraphQL over HTTPS. Auth via HTTP-only cookie (JWT). Every resolver enforces `or
 ## 7. Coordinate Systems & Conversion
 
 **Spaces supported**
+
 1. **Building grid** — architect gridlines (axis + offset).
 2. **Projected** — northing/easting in an EPSG-selected CRS (US State Plane / UTM etc.), with **grid vs ground** distinction via the combined scale factor.
 3. **Geographic** — lat/long (WGS84).

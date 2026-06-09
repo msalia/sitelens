@@ -25,6 +25,11 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      COOKIE_SECURE: ${COOKIE_SECURE}
+      STORAGE_DIR: ${STORAGE_DIR}
+    volumes:
+      - uploads:${STORAGE_DIR}
     depends_on:
       db:
         condition: service_healthy
@@ -40,3 +45,4 @@ services:
 
 volumes:
   pgdata:
+  uploads:

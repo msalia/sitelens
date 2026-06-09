@@ -59,3 +59,23 @@ See [SPEC.md](./SPEC.md) for the full product & architecture specification and
 - **Decision:** Use a local volume in v1, behind a storage abstraction so AWS S3
   slots in later without rework.
 - **Consequences:** Faster v1; a clean seam for the future S3 implementation.
+
+## ADR-006: Auth and tenancy enforcement (Phase 1)
+
+- **Date:** 2026-06-09
+- **Context:** Multi-tenant SaaS needs authentication and strict per-org
+  isolation. Postgres RLS is desirable as defense-in-depth, but the API connects
+  as the table owner (which bypasses RLS unless forced), and forcing RLS in
+  Phase 1 would block legitimate cross-org auth queries (e.g. login-by-email).
+- **Decision:** Email/password auth with Argon2 hashing and JWT carried in an
+  HTTP-only `SameSite=Lax` cookie. The JWT carries `user_id`, `org_id`, and
+  `role`; resolvers derive an `AuthContext` and enforce **org_id scoping** in
+  every query as the primary control, plus role guards (Admin/Surveyor/Viewer).
+  RLS policies are **scaffolded but not forced** in Phase 1; Phase 10 will FORCE
+  RLS and set `app.current_org` per request as defense-in-depth. Self-service
+  signup creates an org and its first Admin. Email verification is implemented
+  but real email delivery is deferred (tokens surfaced in the API response for
+  now).
+- **Consequences:** Tenant isolation is enforced and tested (org A cannot read
+  org B) without blocking auth flows. A clear, low-risk path to full RLS later.
+  Rate-limiting and real email delivery are tracked as follow-ups.

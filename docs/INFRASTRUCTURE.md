@@ -30,11 +30,11 @@
 
 ## Services (docker-compose)
 
-| Service | Image / Build | Internal Port | Purpose |
-| ------- | ------------- | ------------- | ------- |
-| web     | ./web (Next.js, standalone) | 3000 | Frontend + docs; routed by Traefik |
-| api     | ./api (Rust GraphQL)        | 4000 | GraphQL API + geo-core |
-| db      | postgis/postgis:16-3.4      | 5432 | PostgreSQL + PostGIS (volume `pgdata`) |
+| Service | Image / Build               | Internal Port | Purpose                                |
+| ------- | --------------------------- | ------------- | -------------------------------------- |
+| web     | ./web (Next.js, standalone) | 3000          | Frontend + docs; routed by Traefik     |
+| api     | ./api (Rust GraphQL)        | 4000          | GraphQL API + geo-core                 |
+| db      | postgis/postgis:16-3.4      | 5432          | PostgreSQL + PostGIS (volume `pgdata`) |
 
 ## AWS
 
