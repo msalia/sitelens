@@ -10,7 +10,7 @@
 | Phase | Focus                                               | Depends On      | Status      |
 | ----- | --------------------------------------------------- | --------------- | ----------- |
 | 1     | Foundation: stack boots, DB, auth, tenancy          | —               | In progress |
-| 2     | Projects, grid, control points (data + forms)       | 1               | Not started |
+| 2     | Projects, grid, control points (data + forms)       | 1               | In progress |
 | 3     | Geo-core: Helmert transform + residuals (Rust)      | 2               | Not started |
 | 4     | Coordinate conversion + units (Rust + UI)           | 3               | Not started |
 | 5     | Point import (CSV/LandXML) + categories/groups      | 2, 4            | Not started |
@@ -65,21 +65,21 @@ The data backbone: create a project, define its grid, enter control points.
 
 ### Deliverables
 
-- [ ] Project CRUD (name, EPSG code selector, display unit, site origin lat/lon, scale factor)
-- [ ] EPSG library integration (US defaults; selectable)
-- [ ] GridSystem entry (lettered + numbered axes with offsets)
-- [ ] ControlPoint CRUD (label, N, E, Z) — stored canonical meters
-- [ ] Project list + workspace shell (panels, no 3D yet)
-- [ ] shadcn/ui forms for grid + control entry
+- [x] Project CRUD (name, EPSG code, display unit, site origin lat/lon, scale factor)
+- [~] EPSG code is a free integer field with a US default (2229); a searchable EPSG picker is deferred
+- [x] GridSystem entry (lettered + numbered axes with offsets) — `setGridAxes`
+- [x] ControlPoint CRUD (label, N, E, Z) — stored canonical meters
+- [x] Project list + workspace shell (panels, no 3D yet)
+- [x] shadcn/ui forms for grid + control entry (auth pages, projects list, workspace)
 
 ### Tests
 
-- [ ] API integration: project/grid/control CRUD, org-scoped
-- [ ] Unit-conversion at I/O boundary (input feet → stored meters) round-trips
+- [x] API integration: project/grid/control CRUD, org-scoped (org A cannot touch org B; viewer denied)
+- [x] Unit-conversion at I/O boundary (input feet → stored meters) round-trips
 
 ### Validates
 
-A surveyor can create a site, define its gridlines, and enter the city control points — all persisted and org-scoped.
+A surveyor can create a site, define its gridlines, and enter the city control points — all persisted and org-scoped. ✅ Verified live through the web GraphQL proxy.
 
 ---
 

@@ -19,6 +19,8 @@ const eslintConfig = defineConfig([
       'perfectionist/sort-named-exports': ['error', { order: 'asc', type: 'alphabetical' }],
       'perfectionist/sort-named-imports': ['error', { order: 'asc', type: 'alphabetical' }],
       'perfectionist/sort-objects': ['error', { order: 'asc', type: 'alphabetical' }],
+      // Advisory perf rule; our data-load and derive-from-props effects are intentional.
+      'react-hooks/set-state-in-effect': 'warn',
     },
   },
   globalIgnores(['.next/**', 'out/**', 'build/**', 'next-env.d.ts']),

@@ -1,4 +1,6 @@
 //! GraphQL schema: health, auth, and tenancy-scoped user management.
+// Resolvers idiomatically take many arguments (each maps to a GraphQL field arg).
+#![allow(clippy::too_many_arguments)]
 
 use async_graphql::{Context, Object, Result};
 use rand::{distributions::Alphanumeric, Rng};
@@ -9,7 +11,11 @@ use crate::auth::{
     build_clearing_cookie, build_session_cookie, hash_password, issue_jwt, verify_password,
     AuthConfig, AuthContext, Role,
 };
-use crate::models::{InviteResult, LoginRow, Org, SignupResult, User, UserRow};
+use crate::models::{
+    ControlPoint, GridAxis, GridAxisInput, GridAxisRow, InviteResult, LoginRow, Org, Project,
+    ProjectRow, SignupResult, User, UserRow,
+};
+use crate::units::LengthUnit;
 
 const USER_COLUMNS: &str = "id, org_id, email, role, email_verified, created_at";
 const MIN_PASSWORD_LEN: usize = 8;
@@ -42,6 +48,31 @@ fn require_admin<'a>(ctx: &'a Context) -> Result<&'a AuthContext> {
         return Err(async_graphql::Error::new("forbidden: admin role required"));
     }
     Ok(auth)
+}
+
+/// An authenticated principal who may edit project data (Admin or Surveyor).
+fn require_editor<'a>(ctx: &'a Context) -> Result<&'a AuthContext> {
+    let auth = require_auth(ctx)?;
+    if auth.role == Role::Viewer {
+        return Err(async_graphql::Error::new("forbidden: editor role required"));
+    }
+    Ok(auth)
+}
+
+const PROJECT_COLUMNS: &str = "id, org_id, name, description, epsg_code, display_unit, \
+    combined_scale_factor, site_origin_lat, site_origin_lon, created_at, updated_at";
+
+/// Verifies a project exists and belongs to the org, returning an error otherwise.
+async fn ensure_project_in_org(pool: &PgPool, project_id: Uuid, org_id: Uuid) -> Result<()> {
+    let found: Option<(Uuid,)> =
+        sqlx::query_as("SELECT id FROM projects WHERE id = $1 AND org_id = $2")
+            .bind(project_id)
+            .bind(org_id)
+            .fetch_optional(pool)
+            .await?;
+    found
+        .map(|_| ())
+        .ok_or_else(|| async_graphql::Error::new("project not found in your organization"))
 }
 
 fn normalize_email(email: &str) -> String {
@@ -99,6 +130,65 @@ impl QueryRoot {
         .fetch_all(pool(ctx)?)
         .await?;
         Ok(rows.into_iter().map(User::from).collect())
+    }
+
+    /// All projects in the caller's organization.
+    async fn projects(&self, ctx: &Context<'_>) -> Result<Vec<Project>> {
+        let auth = require_auth(ctx)?;
+        let rows: Vec<ProjectRow> = sqlx::query_as(&format!(
+            "SELECT {PROJECT_COLUMNS} FROM projects WHERE org_id = $1 ORDER BY created_at DESC"
+        ))
+        .bind(auth.org_id)
+        .fetch_all(pool(ctx)?)
+        .await?;
+        Ok(rows.into_iter().map(Project::from).collect())
+    }
+
+    /// A single project by id, scoped to the caller's organization.
+    async fn project(&self, ctx: &Context<'_>, id: Uuid) -> Result<Option<Project>> {
+        let auth = require_auth(ctx)?;
+        let row: Option<ProjectRow> = sqlx::query_as(&format!(
+            "SELECT {PROJECT_COLUMNS} FROM projects WHERE id = $1 AND org_id = $2"
+        ))
+        .bind(id)
+        .bind(auth.org_id)
+        .fetch_optional(pool(ctx)?)
+        .await?;
+        Ok(row.map(Project::from))
+    }
+
+    /// The grid axes for a project, ordered by family then position.
+    async fn grid_axes(&self, ctx: &Context<'_>, project_id: Uuid) -> Result<Vec<GridAxis>> {
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        let rows: Vec<GridAxisRow> = sqlx::query_as(
+            "SELECT id, project_id, family, label, position FROM grid_axes \
+             WHERE project_id = $1 ORDER BY family, position",
+        )
+        .bind(project_id)
+        .fetch_all(pool)
+        .await?;
+        Ok(rows.into_iter().map(GridAxis::from).collect())
+    }
+
+    /// The control points for a project.
+    async fn control_points(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+    ) -> Result<Vec<ControlPoint>> {
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        let rows: Vec<ControlPoint> = sqlx::query_as(
+            "SELECT id, project_id, label, northing, easting, elevation, source \
+             FROM control_points WHERE project_id = $1 ORDER BY created_at",
+        )
+        .bind(project_id)
+        .fetch_all(pool)
+        .await?;
+        Ok(rows)
     }
 }
 
@@ -308,5 +398,238 @@ impl MutationRoot {
         .await?;
         user.map(User::from)
             .ok_or_else(|| async_graphql::Error::new("user not found in your organization"))
+    }
+
+    // ----- Projects -----
+
+    /// Creates a project in the caller's organization. Editor role required.
+    async fn create_project(
+        &self,
+        ctx: &Context<'_>,
+        name: String,
+        description: Option<String>,
+        epsg_code: i32,
+        display_unit: LengthUnit,
+        combined_scale_factor: Option<f64>,
+        site_origin_lat: Option<f64>,
+        site_origin_lon: Option<f64>,
+    ) -> Result<Project> {
+        let auth = require_editor(ctx)?;
+        if name.trim().is_empty() {
+            return Err(async_graphql::Error::new("project name is required"));
+        }
+        let row: ProjectRow = sqlx::query_as(&format!(
+            "INSERT INTO projects \
+             (org_id, name, description, epsg_code, display_unit, combined_scale_factor, \
+              site_origin_lat, site_origin_lon) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING {PROJECT_COLUMNS}"
+        ))
+        .bind(auth.org_id)
+        .bind(name.trim())
+        .bind(description.unwrap_or_default())
+        .bind(epsg_code)
+        .bind(display_unit.as_db_str())
+        .bind(combined_scale_factor.unwrap_or(1.0))
+        .bind(site_origin_lat)
+        .bind(site_origin_lon)
+        .fetch_one(pool(ctx)?)
+        .await?;
+        Ok(row.into())
+    }
+
+    /// Updates mutable project fields. Editor role required.
+    async fn update_project(
+        &self,
+        ctx: &Context<'_>,
+        id: Uuid,
+        name: Option<String>,
+        description: Option<String>,
+        epsg_code: Option<i32>,
+        display_unit: Option<LengthUnit>,
+        combined_scale_factor: Option<f64>,
+        site_origin_lat: Option<f64>,
+        site_origin_lon: Option<f64>,
+    ) -> Result<Project> {
+        let auth = require_editor(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, id, auth.org_id).await?;
+        // COALESCE keeps existing values when an argument is omitted.
+        let row: ProjectRow = sqlx::query_as(&format!(
+            "UPDATE projects SET \
+               name = COALESCE($2, name), \
+               description = COALESCE($3, description), \
+               epsg_code = COALESCE($4, epsg_code), \
+               display_unit = COALESCE($5, display_unit), \
+               combined_scale_factor = COALESCE($6, combined_scale_factor), \
+               site_origin_lat = COALESCE($7, site_origin_lat), \
+               site_origin_lon = COALESCE($8, site_origin_lon), \
+               updated_at = now() \
+             WHERE id = $1 AND org_id = $9 RETURNING {PROJECT_COLUMNS}"
+        ))
+        .bind(id)
+        .bind(name)
+        .bind(description)
+        .bind(epsg_code)
+        .bind(display_unit.map(|u| u.as_db_str()))
+        .bind(combined_scale_factor)
+        .bind(site_origin_lat)
+        .bind(site_origin_lon)
+        .bind(auth.org_id)
+        .fetch_one(pool)
+        .await?;
+        Ok(row.into())
+    }
+
+    /// Deletes a project (cascades to its grid and control points). Editor role required.
+    async fn delete_project(&self, ctx: &Context<'_>, id: Uuid) -> Result<bool> {
+        let auth = require_editor(ctx)?;
+        let result = sqlx::query("DELETE FROM projects WHERE id = $1 AND org_id = $2")
+            .bind(id)
+            .bind(auth.org_id)
+            .execute(pool(ctx)?)
+            .await?;
+        if result.rows_affected() == 0 {
+            return Err(async_graphql::Error::new(
+                "project not found in your organization",
+            ));
+        }
+        Ok(true)
+    }
+
+    // ----- Grid -----
+
+    /// Replaces a project's entire grid. Axis positions are given in `unit`.
+    async fn set_grid_axes(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        unit: LengthUnit,
+        axes: Vec<GridAxisInput>,
+    ) -> Result<Vec<GridAxis>> {
+        let auth = require_editor(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+
+        let mut tx = pool.begin().await?;
+        sqlx::query("DELETE FROM grid_axes WHERE project_id = $1")
+            .bind(project_id)
+            .execute(&mut *tx)
+            .await?;
+        for axis in &axes {
+            if axis.label.trim().is_empty() {
+                return Err(async_graphql::Error::new("axis label is required"));
+            }
+            sqlx::query(
+                "INSERT INTO grid_axes (project_id, family, label, position) \
+                 VALUES ($1, $2, $3, $4)",
+            )
+            .bind(project_id)
+            .bind(axis.family.as_str())
+            .bind(axis.label.trim())
+            .bind(unit.to_meters(axis.position))
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+
+        let rows: Vec<GridAxisRow> = sqlx::query_as(
+            "SELECT id, project_id, family, label, position FROM grid_axes \
+             WHERE project_id = $1 ORDER BY family, position",
+        )
+        .bind(project_id)
+        .fetch_all(pool)
+        .await?;
+        Ok(rows.into_iter().map(GridAxis::from).collect())
+    }
+
+    // ----- Control points -----
+
+    /// Adds a control point. Coordinates are given in `unit` and stored as meters.
+    async fn add_control_point(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        label: String,
+        northing: f64,
+        easting: f64,
+        elevation: Option<f64>,
+        unit: LengthUnit,
+        source: Option<String>,
+    ) -> Result<ControlPoint> {
+        let auth = require_editor(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        if label.trim().is_empty() {
+            return Err(async_graphql::Error::new("control point label is required"));
+        }
+        let cp: ControlPoint = sqlx::query_as(
+            "INSERT INTO control_points (project_id, label, northing, easting, elevation, source) \
+             VALUES ($1, $2, $3, $4, $5, $6) \
+             RETURNING id, project_id, label, northing, easting, elevation, source",
+        )
+        .bind(project_id)
+        .bind(label.trim())
+        .bind(unit.to_meters(northing))
+        .bind(unit.to_meters(easting))
+        .bind(elevation.map(|e| unit.to_meters(e)))
+        .bind(source.unwrap_or_default())
+        .fetch_one(pool)
+        .await?;
+        Ok(cp)
+    }
+
+    /// Updates a control point. Coordinate fields, when provided, are in `unit`.
+    async fn update_control_point(
+        &self,
+        ctx: &Context<'_>,
+        id: Uuid,
+        label: Option<String>,
+        northing: Option<f64>,
+        easting: Option<f64>,
+        elevation: Option<f64>,
+        unit: LengthUnit,
+        source: Option<String>,
+    ) -> Result<ControlPoint> {
+        let auth = require_editor(ctx)?;
+        let cp: Option<ControlPoint> = sqlx::query_as(
+            "UPDATE control_points cp SET \
+               label = COALESCE($2, cp.label), \
+               northing = COALESCE($3, cp.northing), \
+               easting = COALESCE($4, cp.easting), \
+               elevation = COALESCE($5, cp.elevation), \
+               source = COALESCE($6, cp.source) \
+             FROM projects p \
+             WHERE cp.id = $1 AND cp.project_id = p.id AND p.org_id = $7 \
+             RETURNING cp.id, cp.project_id, cp.label, cp.northing, cp.easting, cp.elevation, cp.source",
+        )
+        .bind(id)
+        .bind(label)
+        .bind(northing.map(|v| unit.to_meters(v)))
+        .bind(easting.map(|v| unit.to_meters(v)))
+        .bind(elevation.map(|v| unit.to_meters(v)))
+        .bind(source)
+        .bind(auth.org_id)
+        .fetch_optional(pool(ctx)?)
+        .await?;
+        cp.ok_or_else(|| async_graphql::Error::new("control point not found in your organization"))
+    }
+
+    /// Deletes a control point in the caller's organization. Editor role required.
+    async fn delete_control_point(&self, ctx: &Context<'_>, id: Uuid) -> Result<bool> {
+        let auth = require_editor(ctx)?;
+        let result = sqlx::query(
+            "DELETE FROM control_points cp USING projects p \
+             WHERE cp.id = $1 AND cp.project_id = p.id AND p.org_id = $2",
+        )
+        .bind(id)
+        .bind(auth.org_id)
+        .execute(pool(ctx)?)
+        .await?;
+        if result.rows_affected() == 0 {
+            return Err(async_graphql::Error::new(
+                "control point not found in your organization",
+            ));
+        }
+        Ok(true)
     }
 }

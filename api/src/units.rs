@@ -29,6 +29,52 @@ pub fn meters_to_international_feet(meters: f64) -> f64 {
     meters / INTERNATIONAL_FOOT_M
 }
 
+/// A length unit used at I/O boundaries. The canonical internal unit is meters.
+#[derive(async_graphql::Enum, Copy, Clone, Eq, PartialEq, Debug)]
+pub enum LengthUnit {
+    UsSurveyFoot,
+    InternationalFoot,
+    Meter,
+}
+
+impl LengthUnit {
+    /// Converts a value expressed in this unit to meters.
+    pub fn to_meters(self, value: f64) -> f64 {
+        match self {
+            LengthUnit::UsSurveyFoot => us_survey_feet_to_meters(value),
+            LengthUnit::InternationalFoot => international_feet_to_meters(value),
+            LengthUnit::Meter => value,
+        }
+    }
+
+    /// Converts a value in meters to this unit.
+    pub fn from_meters(self, meters: f64) -> f64 {
+        match self {
+            LengthUnit::UsSurveyFoot => meters_to_us_survey_feet(meters),
+            LengthUnit::InternationalFoot => meters_to_international_feet(meters),
+            LengthUnit::Meter => meters,
+        }
+    }
+
+    /// The DB string for the `projects.display_unit` column.
+    pub fn as_db_str(self) -> &'static str {
+        match self {
+            LengthUnit::UsSurveyFoot => "us_survey_foot",
+            LengthUnit::InternationalFoot => "international_foot",
+            LengthUnit::Meter => "meter",
+        }
+    }
+
+    pub fn from_db_str(s: &str) -> Option<LengthUnit> {
+        match s {
+            "us_survey_foot" => Some(LengthUnit::UsSurveyFoot),
+            "international_foot" => Some(LengthUnit::InternationalFoot),
+            "meter" => Some(LengthUnit::Meter),
+            _ => None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -54,5 +100,19 @@ mod tests {
             diff.abs() < 0.01,
             "difference should be sub-centimeter over 1000 ft"
         );
+    }
+
+    #[test]
+    fn length_unit_to_from_meters_roundtrip() {
+        for unit in [
+            LengthUnit::UsSurveyFoot,
+            LengthUnit::InternationalFoot,
+            LengthUnit::Meter,
+        ] {
+            let meters = unit.to_meters(1234.567);
+            assert!((unit.from_meters(meters) - 1234.567).abs() < 1e-9);
+        }
+        // Meter is the identity.
+        assert_eq!(LengthUnit::Meter.to_meters(42.0), 42.0);
     }
 }

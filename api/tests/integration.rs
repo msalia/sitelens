@@ -181,3 +181,139 @@ async fn role_enforcement_blocks_non_admin(pool: PgPool) {
     let msg = exec_err(&schema, &update_q, Some(viewer_ctx)).await;
     assert!(msg.contains("forbidden"), "got: {msg}");
 }
+
+// ---------------------------------------------------------------------------
+// Phase 2: projects, grid, control points
+// ---------------------------------------------------------------------------
+
+async fn create_project(schema: &ApiSchema, auth: AuthContext, name: &str) -> Uuid {
+    let q = format!(
+        r#"mutation {{ createProject(name: "{name}", epsgCode: 2229, displayUnit: US_SURVEY_FOOT) {{ id orgId }} }}"#
+    );
+    let data = exec_ok(schema, &q, Some(auth)).await;
+    uuid_at(&data, &["createProject", "id"])
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn project_crud_is_org_scoped(pool: PgPool) {
+    let schema = schema(pool);
+    let (a_admin, a_org, _) = signup(&schema, "a@example.com", "Org A").await;
+    let (b_admin, b_org, _) = signup(&schema, "b@example.com", "Org B").await;
+
+    let pid = create_project(&schema, admin_ctx(a_admin, a_org), "Tower A").await;
+
+    // Org A sees its project; Org B sees none and cannot read it by id.
+    let data = exec_ok(
+        &schema,
+        "{ projects { id } }",
+        Some(admin_ctx(a_admin, a_org)),
+    )
+    .await;
+    assert_eq!(data["projects"].as_array().unwrap().len(), 1);
+    let data = exec_ok(
+        &schema,
+        "{ projects { id } }",
+        Some(admin_ctx(b_admin, b_org)),
+    )
+    .await;
+    assert_eq!(data["projects"].as_array().unwrap().len(), 0);
+    let q = format!(r#"{{ project(id: "{pid}") {{ id }} }}"#);
+    let data = exec_ok(&schema, &q, Some(admin_ctx(b_admin, b_org))).await;
+    assert!(
+        data["project"].is_null(),
+        "Org B must not read Org A's project"
+    );
+
+    // Org B cannot update or delete Org A's project.
+    let upd = format!(r#"mutation {{ updateProject(id: "{pid}", name: "Hijacked") {{ id }} }}"#);
+    assert!(exec_err(&schema, &upd, Some(admin_ctx(b_admin, b_org)))
+        .await
+        .contains("not found"));
+    let del = format!(r#"mutation {{ deleteProject(id: "{pid}") }}"#);
+    assert!(exec_err(&schema, &del, Some(admin_ctx(b_admin, b_org)))
+        .await
+        .contains("not found"));
+
+    // Org A can delete its own project.
+    let data = exec_ok(&schema, &del, Some(admin_ctx(a_admin, a_org))).await;
+    assert_eq!(data["deleteProject"], Json::Bool(true));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn control_point_feet_convert_to_meters(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+
+    // Add a control point in US survey feet; it must be stored/returned in meters.
+    let add = format!(
+        r#"mutation {{ addControlPoint(projectId: "{pid}", label: "CP1", northing: 1000.0, easting: 2000.0, elevation: 100.0, unit: US_SURVEY_FOOT) {{ id northing easting elevation }} }}"#
+    );
+    exec_ok(&schema, &add, Some(admin_ctx(admin, org))).await;
+
+    let data = exec_ok(
+        &schema,
+        &format!(r#"{{ controlPoints(projectId: "{pid}") {{ northing easting elevation }} }}"#),
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    let cp = &data["controlPoints"][0];
+    let us_ft_m = 1200.0_f64 / 3937.0;
+    assert!((cp["northing"].as_f64().unwrap() - 1000.0 * us_ft_m).abs() < 1e-6);
+    assert!((cp["easting"].as_f64().unwrap() - 2000.0 * us_ft_m).abs() < 1e-6);
+    assert!((cp["elevation"].as_f64().unwrap() - 100.0 * us_ft_m).abs() < 1e-6);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn set_grid_axes_replaces_and_converts(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+
+    let q = format!(
+        r#"mutation {{ setGridAxes(projectId: "{pid}", unit: METER, axes: [
+            {{ family: LETTERED, label: "A", position: 0.0 }},
+            {{ family: LETTERED, label: "B", position: 10.0 }},
+            {{ family: NUMBERED, label: "1", position: 0.0 }}
+        ]) {{ label position family }} }}"#
+    );
+    let data = exec_ok(&schema, &q, Some(admin_ctx(admin, org))).await;
+    assert_eq!(data["setGridAxes"].as_array().unwrap().len(), 3);
+
+    // Replacing yields only the new set.
+    let q2 = format!(
+        r#"mutation {{ setGridAxes(projectId: "{pid}", unit: METER, axes: [
+            {{ family: LETTERED, label: "A", position: 0.0 }}
+        ]) {{ label }} }}"#
+    );
+    let data = exec_ok(&schema, &q2, Some(admin_ctx(admin, org))).await;
+    assert_eq!(data["setGridAxes"].as_array().unwrap().len(), 1);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn viewer_cannot_create_project(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+
+    let invite = r#"mutation { inviteUser(email: "v@example.com", role: VIEWER) { user { id } inviteToken } }"#;
+    let data = exec_ok(&schema, invite, Some(admin_ctx(admin, org))).await;
+    let viewer_id = uuid_at(&data, &["inviteUser", "user", "id"]);
+    let token = data["inviteUser"]["inviteToken"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let accept = format!(
+        r#"mutation {{ acceptInvite(token: "{token}", password: "password123") {{ id }} }}"#
+    );
+    exec_ok(&schema, &accept, None).await;
+
+    let viewer_ctx = AuthContext {
+        user_id: viewer_id,
+        org_id: org,
+        role: Role::Viewer,
+    };
+    let q = r#"mutation { createProject(name: "X", epsgCode: 2229, displayUnit: METER) { id } }"#;
+    assert!(exec_err(&schema, q, Some(viewer_ctx))
+        .await
+        .contains("forbidden"));
+}

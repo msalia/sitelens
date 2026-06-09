@@ -24,12 +24,26 @@ export default async function Home() {
         API: <span className="font-semibold">{health.status}</span> · DB:{' '}
         <span className="font-semibold">{health.db}</span>
       </div>
-      <Link
-        href="/docs"
-        className="text-sm font-medium text-zinc-900 underline-offset-4 hover:underline dark:text-zinc-100"
-      >
-        Read the documentation →
-      </Link>
+      <div className="flex items-center gap-5 text-sm font-medium">
+        <Link
+          href="/login"
+          className="text-zinc-900 underline-offset-4 hover:underline dark:text-zinc-100"
+        >
+          Log in
+        </Link>
+        <Link
+          href="/signup"
+          className="text-zinc-900 underline-offset-4 hover:underline dark:text-zinc-100"
+        >
+          Sign up
+        </Link>
+        <Link
+          href="/docs"
+          className="text-zinc-900 underline-offset-4 hover:underline dark:text-zinc-100"
+        >
+          Docs →
+        </Link>
+      </div>
     </main>
   );
 }
