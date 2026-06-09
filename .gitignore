@@ -1,0 +1,28 @@
+# dependencies
+**/node_modules/
+
+# rust build artifacts
+**/target/
+
+# next.js
+**/.next/
+**/out/
+
+# env files (root .env holds safe local defaults and IS committed;
+# ignore local/production override files)
+.env.local
+.env*.local
+**/.env.local
+**/.env.production
+
+# project
+.dokploy.json
+
+# test artifacts
+**/test-results/
+**/playwright-report/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store

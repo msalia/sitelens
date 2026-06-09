@@ -1,0 +1,251 @@
+# SiteLens — Implementation Phases
+
+> Sequenced roadmap. Each phase has clear deliverables and validation criteria.
+> See [SPEC.md](./SPEC.md) for the full architecture and design decisions.
+
+---
+
+## Phase Summary
+
+| Phase | Focus                                             | Depends On | Status      |
+| ----- | ------------------------------------------------- | ---------- | ----------- |
+| 1     | Foundation: stack boots, DB, auth, tenancy        | —          | Not started |
+| 2     | Projects, grid, control points (data + forms)     | 1          | Not started |
+| 3     | Geo-core: Helmert transform + residuals (Rust)    | 2          | Not started |
+| 4     | Coordinate conversion + units (Rust + UI)         | 3          | Not started |
+| 5     | Point import (CSV/LandXML) + categories/groups    | 2, 4       | Not started |
+| 6     | 3D Cesium scene + terrain + point visualization   | 3, 5       | Not started |
+| 7     | DXF vector import + georeferenced overlay         | 6          | Not started |
+| 8     | Export (CSV/LandXML/image) + standalone converter | 4, 5, 6    | Not started |
+| 9     | Hardening: security, file-safety, E2E, deploy     | all        | Not started |
+
+```
+1 ──> 2 ──> 3 ──> 4 ──┐
+            │         ├──> 8
+            ▼         │
+       5 ──>┤         │
+            ▼         │
+       6 ──> 7        │
+       └──────────────┘
+                      └──> 9 (after all)
+```
+
+---
+
+## Phase 1 — Foundation
+
+Stack boots end-to-end with auth and multi-tenant scoping in place.
+
+### Deliverables
+
+- [ ] Dokploy compose: Next.js + Rust GraphQL + PostgreSQL+PostGIS, local Docker dev
+- [ ] PostGIS extension enabled; migration framework wired
+- [ ] Org + User models; email/password signup + login + email verification
+- [ ] Cookie-based JWT sessions; Argon2 hashing; auth rate-limiting
+- [ ] `org_id` scoping pattern + Postgres RLS scaffolding; roles (Admin/Surveyor/Viewer)
+- [ ] Storage abstraction interface (local volume implementation)
+- [ ] Health-check endpoint; subdomain `sitelens.msalia.org` reachable
+
+### Tests
+
+- [ ] API integration: signup/login/logout, role enforcement
+- [ ] Tenancy: org A cannot read org B (foundational isolation test)
+- [ ] Storage abstraction unit tests (local impl)
+
+### Validates
+
+A user can sign up, verify, log in, and the app enforces org isolation. Services boot and health-check green in Dokploy.
+
+---
+
+## Phase 2 — Projects, Grid & Control Points
+
+The data backbone: create a project, define its grid, enter control points.
+
+### Deliverables
+
+- [ ] Project CRUD (name, EPSG code selector, display unit, site origin lat/lon, scale factor)
+- [ ] EPSG library integration (US defaults; selectable)
+- [ ] GridSystem entry (lettered + numbered axes with offsets)
+- [ ] ControlPoint CRUD (label, N, E, Z) — stored canonical meters
+- [ ] Project list + workspace shell (panels, no 3D yet)
+- [ ] shadcn/ui forms for grid + control entry
+
+### Tests
+
+- [ ] API integration: project/grid/control CRUD, org-scoped
+- [ ] Unit-conversion at I/O boundary (input feet → stored meters) round-trips
+
+### Validates
+
+A surveyor can create a site, define its gridlines, and enter the city control points — all persisted and org-scoped.
+
+---
+
+## Phase 3 — Geo-Core: Helmert Transform
+
+The heart: solve the building-grid → projected tie with residuals.
+
+### Deliverables
+
+- [ ] Rust geo-core module: 4-parameter Helmert solve (translation, rotation, scale)
+- [ ] Exact solve (2 points) + least-squares best-fit (3+ points) via nalgebra
+- [ ] Per-control-point residuals (ΔE, ΔN, magnitude) + RMS error
+- [ ] `solveTransform` GraphQL op; Transform persisted with inputs
+- [ ] Residuals + RMS surfaced in the grid/control panel UI
+
+### Tests
+
+- [ ] Rust unit tests against known-good reference values (hand-computed)
+- [ ] Least-squares residual correctness; degenerate cases (collinear points) handled
+- [ ] API integration: solve returns structured residuals even at high RMS
+
+### Validates
+
+Given grid + 2..n control points, the app computes the transform and shows residuals/RMS so the surveyor can judge the tie.
+
+---
+
+## Phase 4 — Coordinate Conversion & Units
+
+Move any coordinate between systems and units, precisely.
+
+### Deliverables
+
+- [ ] Rust: EPSG projections via PROJ (projected ↔ lat/long)
+- [ ] Grid ↔ ground via combined scale factor
+- [ ] Building grid ↔ projected via the solved transform
+- [ ] Unit conversion: us-survey-foot / intl-foot / meter (distinct)
+- [ ] `convertCoordinate` GraphQL op returning all representations
+- [ ] Per-point inspector showing all representations live (in project units)
+
+### Tests
+
+- [ ] Rust unit tests: projections vs PROJ/published reference values
+- [ ] US-survey vs intl foot distinction verified (ppm-level)
+- [ ] Grid↔ground and grid↔projected round-trips
+
+### Validates
+
+Clicking a (manually entered) point shows it in every system + unit, all correct.
+
+---
+
+## Phase 5 — Point Import & Organization
+
+Bring in field data; organize it.
+
+### Deliverables
+
+- [ ] CSV import with interactive column-mapping (P/N/E/Z/Description) + unit pick
+- [ ] Saved ImportProfiles per project
+- [ ] LandXML import (points)
+- [ ] ImportBatch records; sandboxed parsing with size/timeout limits
+- [ ] PointCategory: default set + per-tenant custom (color/icon); one category + free-text tags per point
+- [ ] PointGroup (saved named selections)
+- [ ] Searchable/filterable point sidebar (category, label, description, tags), multi-select
+
+### Tests
+
+- [ ] Parser unit tests: CSV column orders, LandXML; malformed/oversized rejected
+- [ ] API integration: import batch org-scoped; category/group CRUD
+- [ ] Round-trip: imported feet → stored meters → displayed correctly
+
+### Validates
+
+A surveyor imports a machine export, sees the points listed, categorized, searchable.
+
+---
+
+## Phase 6 — 3D Visualization
+
+See the site in 3D over terrain.
+
+### Deliverables
+
+- [ ] CesiumJS scene in the workspace viewport
+- [ ] AWS open Terrain Tiles base (no token); optional per-tenant Cesium Ion token
+- [ ] Render grid lines + control points + surveyed points at their Z
+- [ ] Category-driven marker color/icon; category visibility toggles
+- [ ] Point selection in 3D ↔ sidebar/inspector sync
+- [ ] Scene centered on project site origin
+
+### Tests
+
+- [ ] Component tests: scene mounts, layers toggle
+- [ ] Playwright: create project → enter data → solve → import → points visible in 3D
+
+### Validates
+
+The full grid + control + surveyed points render in 3D over terrain; imported Z drives elevation (terrain is backdrop).
+
+---
+
+## Phase 7 — DXF Vector Overlay
+
+Overlay the architect's drawing.
+
+### Deliverables
+
+- [ ] DXF upload + client-side vector parse (lines, polylines, arcs, text, layers)
+- [ ] Render DXF geometry in the Cesium scene
+- [ ] Georeference: default assume real-world coords + manual offset/rotation/scale with live preview
+- [ ] Toggle DXF visibility; per-layer handling
+- [ ] CadOverlay persisted (file + georeference params)
+
+### Tests
+
+- [ ] Parser unit tests on sample DXFs (entity types, layers)
+- [ ] Playwright: upload DXF → appears → adjust georeference → persists
+
+### Validates
+
+A DXF drawing drops into the 3D scene aligned to the grid/control points, adjustable by the user.
+
+---
+
+## Phase 8 — Export & Standalone Converter
+
+Get data back out; ad-hoc conversions.
+
+### Deliverables
+
+- [ ] Export selected points / group / category to CSV (choose system, unit, column order incl. PNEZD presets)
+- [ ] LandXML export
+- [ ] Image snapshot (PDF/PNG) of the 3D view
+- [ ] Standalone converter tool (paste coord in any system+unit → all others, copy buttons)
+
+### Tests
+
+- [ ] Export round-trip: export → re-import yields equivalent coordinates
+- [ ] Unit tests on column-order presets + format generation
+- [ ] Playwright: select points → export → verify file contents
+
+### Validates
+
+A surveyor exports points in the format/system their machine expects, and can do ad-hoc conversions without storing a point.
+
+---
+
+## Phase 9 — Hardening & Launch
+
+Security, robustness, and deploy.
+
+### Deliverables
+
+- [ ] Postgres RLS fully enforced + verified; API tenancy audit
+- [ ] File-upload safety: size limits, timeouts, XML-bomb defense confirmed
+- [ ] HTTPS/Traefik, Argon2, auth rate-limiting verified in prod
+- [ ] Full Playwright E2E core-flow suite green
+- [ ] Production deploy on Dokploy; migrations on deploy; PostGIS init
+- [ ] Docs: README + deploy notes
+
+### Tests
+
+- [ ] Cross-org isolation suite (comprehensive)
+- [ ] Malicious-file rejection tests
+- [ ] End-to-end smoke on production environment
+
+### Validates
+
+SiteLens is deployed, isolated per tenant, resilient to bad uploads, and the full surveyor workflow works in production.

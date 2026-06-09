@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.gitignore
+.env.local
+.env.production
+.dokploy.json
+*.md
+.DS_Store
+.idea
+.vscode

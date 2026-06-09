@@ -1,0 +1,14 @@
+# Local development overrides — auto-merged by `docker compose up`.
+# Dokploy deploys with `-f docker-compose.yml`, so these ports are local-only.
+services:
+  db:
+    ports:
+      - '5432:5432'
+
+  api:
+    ports:
+      - '${API_PORT:-4000}:4000'
+
+  web:
+    ports:
+      - '${WEB_PORT:-3000}:3000'
