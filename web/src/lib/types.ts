@@ -34,11 +34,30 @@ export interface GridAxis {
 export interface ControlPoint {
   easting: number;
   elevation: number | null;
+  gridX: number | null;
+  gridY: number | null;
   id: string;
   label: string;
   northing: number;
   projectId: string;
   source: string;
+}
+
+export interface TransformResidual {
+  deltaEasting: number;
+  deltaNorthing: number;
+  label: string;
+  magnitude: number;
+}
+
+export interface Transform {
+  pointCount: number;
+  residuals: TransformResidual[];
+  rmsError: number;
+  rotationDegrees: number;
+  scale: number;
+  translationE: number;
+  translationN: number;
 }
 
 export const UNIT_LABELS: Record<LengthUnit, string> = {

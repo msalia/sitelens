@@ -11,7 +11,7 @@
 | ----- | --------------------------------------------------- | --------------- | ----------- |
 | 1     | Foundation: stack boots, DB, auth, tenancy          | —               | Complete\*   |
 | 2     | Projects, grid, control points (data + forms)       | 1               | Complete\*   |
-| 3     | Geo-core: Helmert transform + residuals (Rust)      | 2               | Not started |
+| 3     | Geo-core: Helmert transform + residuals (Rust)      | 2               | Complete    |
 | 4     | Coordinate conversion + units (Rust + UI)           | 3               | Not started |
 | 5     | Point import (CSV/LandXML) + categories/groups      | 2, 4            | Not started |
 | 6     | 3D Cesium scene + terrain + point visualization     | 3, 5            | Not started |
@@ -92,21 +92,23 @@ The heart: solve the building-grid → projected tie with residuals.
 
 ### Deliverables
 
-- [ ] Rust geo-core module: 4-parameter Helmert solve (translation, rotation, scale)
-- [ ] Exact solve (2 points) + least-squares best-fit (3+ points) via nalgebra
-- [ ] Per-control-point residuals (ΔE, ΔN, magnitude) + RMS error
-- [ ] `solveTransform` GraphQL op; Transform persisted with inputs
-- [ ] Residuals + RMS surfaced in the grid/control panel UI
+- [x] Rust geo-core module: 4-parameter Helmert solve (translation, rotation, scale) — `api/src/geo.rs`
+- [x] Exact solve (2 points) + least-squares best-fit (3+ points) via nalgebra (SVD)
+- [x] Per-control-point residuals (ΔE, ΔN, magnitude) + RMS error
+- [x] `solveTransform` GraphQL op; Transform persisted (one per project, upsert) with residuals
+- [x] Residuals + RMS surfaced in the workspace transform panel (in display unit)
 
 ### Tests
 
-- [ ] Rust unit tests against known-good reference values (hand-computed)
-- [ ] Least-squares residual correctness; degenerate cases (collinear points) handled
-- [ ] API integration: solve returns structured residuals even at high RMS
+- [x] Rust unit tests against known-good reference values (translation, rotation+scale)
+- [x] Least-squares non-zero RMS; degenerate (coincident) + too-few-points handled
+- [x] API integration: solve returns structured residuals even at high RMS; persisted transform query
 
 ### Validates
 
-Given grid + 2..n control points, the app computes the transform and shows residuals/RMS so the surveyor can judge the tie.
+Given grid + 2..n control points, the app computes the transform and shows residuals/RMS so the surveyor can judge the tie. ✅ Verified live (translation/scale/rotation recovered, RMS ≈ 0).
+
+> Note: control points carry **grid X/Y** (added in migration 0003) alongside their projected N/E — these correspondences are what the Helmert solve fits.
 
 ---
 

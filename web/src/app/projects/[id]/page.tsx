@@ -9,14 +9,25 @@ import { toast } from 'sonner';
 import { ControlPointsEditor } from '@/components/projects/control-points-editor';
 import { EditProjectDialog } from '@/components/projects/edit-project-dialog';
 import { GridEditor } from '@/components/projects/grid-editor';
+import { TransformPanel } from '@/components/projects/transform-panel';
 import { gql } from '@/lib/graphql';
-import { type ControlPoint, type GridAxis, type Project, UNIT_LABELS } from '@/lib/types';
+import {
+  type ControlPoint,
+  type GridAxis,
+  type Project,
+  type Transform,
+  UNIT_LABELS,
+} from '@/lib/types';
 
 const WORKSPACE_QUERY = `
   query ($id: UUID!) {
     project(id: $id) { id name description epsgCode displayUnit combinedScaleFactor siteOriginLat siteOriginLon }
     gridAxes(projectId: $id) { id family label position }
-    controlPoints(projectId: $id) { id label northing easting elevation source }
+    controlPoints(projectId: $id) { id label northing easting elevation gridX gridY source }
+    transform(projectId: $id) {
+      translationE translationN rotationDegrees scale rmsError pointCount
+      residuals { label deltaEasting deltaNorthing magnitude }
+    }
   }`;
 
 export default function ProjectWorkspace() {
@@ -24,6 +35,7 @@ export default function ProjectWorkspace() {
   const [project, setProject] = useState<Project | null>(null);
   const [axes, setAxes] = useState<GridAxis[]>([]);
   const [points, setPoints] = useState<ControlPoint[]>([]);
+  const [transform, setTransform] = useState<Transform | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -32,10 +44,12 @@ export default function ProjectWorkspace() {
         project: Project | null;
         gridAxes: GridAxis[];
         controlPoints: ControlPoint[];
+        transform: Transform | null;
       }>(WORKSPACE_QUERY, { id });
       setProject(data.project);
       setAxes(data.gridAxes);
       setPoints(data.controlPoints);
+      setTransform(data.transform);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load project');
     } finally {
@@ -86,6 +100,7 @@ export default function ProjectWorkspace() {
       <div className="grid gap-6 lg:grid-cols-2">
         <GridEditor project={project} axes={axes} onSaved={load} />
         <ControlPointsEditor project={project} points={points} onChanged={load} />
+        <TransformPanel project={project} initialTransform={transform} />
       </div>
     </div>
   );

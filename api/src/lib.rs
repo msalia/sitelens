@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod db;
+pub mod geo;
 pub mod models;
 pub mod schema;
 pub mod storage;

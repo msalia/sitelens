@@ -317,3 +317,188 @@ async fn viewer_cannot_create_project(pool: PgPool) {
         .await
         .contains("forbidden"));
 }
+
+// ---------------------------------------------------------------------------
+// Phase 3: Helmert transform
+// ---------------------------------------------------------------------------
+
+/// Adds a control point with grid coordinates (all values in meters).
+#[allow(clippy::too_many_arguments)]
+async fn add_cp(
+    schema: &ApiSchema,
+    auth: AuthContext,
+    pid: Uuid,
+    label: &str,
+    e: f64,
+    n: f64,
+    gx: f64,
+    gy: f64,
+) {
+    let q = format!(
+        r#"mutation {{ addControlPoint(projectId: "{pid}", label: "{label}", northing: {n}, easting: {e}, gridX: {gx}, gridY: {gy}, unit: METER) {{ id }} }}"#
+    );
+    exec_ok(schema, &q, Some(auth)).await;
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn solve_transform_recovers_translation(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+
+    // Identity rotation/scale, translation E=100, N=200.
+    add_cp(
+        &schema,
+        admin_ctx(admin, org),
+        pid,
+        "A",
+        100.0,
+        200.0,
+        0.0,
+        0.0,
+    )
+    .await;
+    add_cp(
+        &schema,
+        admin_ctx(admin, org),
+        pid,
+        "B",
+        110.0,
+        200.0,
+        10.0,
+        0.0,
+    )
+    .await;
+    add_cp(
+        &schema,
+        admin_ctx(admin, org),
+        pid,
+        "C",
+        100.0,
+        210.0,
+        0.0,
+        10.0,
+    )
+    .await;
+
+    let q = format!(
+        r#"mutation {{ solveTransform(projectId: "{pid}") {{ translationE translationN scale rotationDegrees rmsError pointCount residuals {{ label magnitude }} }} }}"#
+    );
+    let data = exec_ok(&schema, &q, Some(admin_ctx(admin, org))).await;
+    let t = &data["solveTransform"];
+    assert!((t["translationE"].as_f64().unwrap() - 100.0).abs() < 1e-6);
+    assert!((t["translationN"].as_f64().unwrap() - 200.0).abs() < 1e-6);
+    assert!((t["scale"].as_f64().unwrap() - 1.0).abs() < 1e-6);
+    assert!(t["rotationDegrees"].as_f64().unwrap().abs() < 1e-6);
+    assert!(t["rmsError"].as_f64().unwrap() < 1e-6);
+    assert_eq!(t["pointCount"].as_i64().unwrap(), 3);
+    assert_eq!(t["residuals"].as_array().unwrap().len(), 3);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn solve_transform_reports_residuals_at_high_rms(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+
+    // Identity-ish, but the 4th point is 1 m off → non-zero RMS, full residuals.
+    add_cp(&schema, admin_ctx(admin, org), pid, "A", 0.0, 0.0, 0.0, 0.0).await;
+    add_cp(
+        &schema,
+        admin_ctx(admin, org),
+        pid,
+        "B",
+        10.0,
+        0.0,
+        10.0,
+        0.0,
+    )
+    .await;
+    add_cp(
+        &schema,
+        admin_ctx(admin, org),
+        pid,
+        "C",
+        0.0,
+        10.0,
+        0.0,
+        10.0,
+    )
+    .await;
+    add_cp(
+        &schema,
+        admin_ctx(admin, org),
+        pid,
+        "D",
+        11.0,
+        10.0,
+        10.0,
+        10.0,
+    )
+    .await;
+
+    let q = format!(
+        r#"mutation {{ solveTransform(projectId: "{pid}") {{ rmsError residuals {{ label magnitude }} }} }}"#
+    );
+    let data = exec_ok(&schema, &q, Some(admin_ctx(admin, org))).await;
+    assert!(data["solveTransform"]["rmsError"].as_f64().unwrap() > 0.0);
+    assert_eq!(
+        data["solveTransform"]["residuals"]
+            .as_array()
+            .unwrap()
+            .len(),
+        4
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn solve_transform_too_few_points_errors(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+    add_cp(&schema, admin_ctx(admin, org), pid, "A", 0.0, 0.0, 0.0, 0.0).await;
+
+    let q = format!(r#"mutation {{ solveTransform(projectId: "{pid}") {{ scale }} }}"#);
+    let msg = exec_err(&schema, &q, Some(admin_ctx(admin, org))).await;
+    assert!(msg.contains("two control points"), "got: {msg}");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn transform_query_returns_persisted(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+    add_cp(
+        &schema,
+        admin_ctx(admin, org),
+        pid,
+        "A",
+        100.0,
+        200.0,
+        0.0,
+        0.0,
+    )
+    .await;
+    add_cp(
+        &schema,
+        admin_ctx(admin, org),
+        pid,
+        "B",
+        110.0,
+        200.0,
+        10.0,
+        0.0,
+    )
+    .await;
+
+    // Before solving: null.
+    let q0 = format!(r#"{{ transform(projectId: "{pid}") {{ scale }} }}"#);
+    let before = exec_ok(&schema, &q0, Some(admin_ctx(admin, org))).await;
+    assert!(before["transform"].is_null());
+
+    let solve = format!(r#"mutation {{ solveTransform(projectId: "{pid}") {{ scale }} }}"#);
+    exec_ok(&schema, &solve, Some(admin_ctx(admin, org))).await;
+
+    let after = exec_ok(&schema, &q0, Some(admin_ctx(admin, org))).await;
+    assert!((after["transform"]["scale"].as_f64().unwrap() - 1.0).abs() < 1e-6);
+}

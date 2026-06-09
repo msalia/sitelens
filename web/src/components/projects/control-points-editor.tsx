@@ -22,8 +22,8 @@ import { type ControlPoint, type Project, UNIT_LABELS } from '@/lib/types';
 import { fromMeters } from '@/lib/units';
 
 const ADD_CONTROL_POINT = `
-  mutation ($id: UUID!, $label: String!, $n: Float!, $e: Float!, $z: Float, $unit: LengthUnit!, $src: String) {
-    addControlPoint(projectId: $id, label: $label, northing: $n, easting: $e, elevation: $z, unit: $unit, source: $src) { id }
+  mutation ($id: UUID!, $label: String!, $n: Float!, $e: Float!, $z: Float, $gx: Float, $gy: Float, $unit: LengthUnit!, $src: String) {
+    addControlPoint(projectId: $id, label: $label, northing: $n, easting: $e, elevation: $z, gridX: $gx, gridY: $gy, unit: $unit, source: $src) { id }
   }`;
 
 export function ControlPointsEditor({
@@ -40,6 +40,8 @@ export function ControlPointsEditor({
   const [northing, setNorthing] = useState('');
   const [easting, setEasting] = useState('');
   const [elevation, setElevation] = useState('');
+  const [gridX, setGridX] = useState('');
+  const [gridY, setGridY] = useState('');
   const [source, setSource] = useState('');
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<ControlPoint | null>(null);
@@ -50,6 +52,8 @@ export function ControlPointsEditor({
     try {
       await gql(ADD_CONTROL_POINT, {
         e: parseFloat(easting),
+        gx: gridX ? parseFloat(gridX) : null,
+        gy: gridY ? parseFloat(gridY) : null,
         id: project.id,
         label,
         n: parseFloat(northing),
@@ -62,6 +66,8 @@ export function ControlPointsEditor({
       setNorthing('');
       setEasting('');
       setElevation('');
+      setGridX('');
+      setGridY('');
       setSource('');
       onChanged();
     } catch (err) {
@@ -94,6 +100,8 @@ export function ControlPointsEditor({
               <TableHead>N ({unitLabel})</TableHead>
               <TableHead>E ({unitLabel})</TableHead>
               <TableHead>Z ({unitLabel})</TableHead>
+              <TableHead>Grid X</TableHead>
+              <TableHead>Grid Y</TableHead>
               <TableHead />
             </TableRow>
           </TableHeader>
@@ -107,6 +115,12 @@ export function ControlPointsEditor({
                   {p.elevation === null
                     ? '—'
                     : fromMeters(p.elevation, project.displayUnit).toFixed(3)}
+                </TableCell>
+                <TableCell>
+                  {p.gridX === null ? '—' : fromMeters(p.gridX, project.displayUnit).toFixed(3)}
+                </TableCell>
+                <TableCell>
+                  {p.gridY === null ? '—' : fromMeters(p.gridY, project.displayUnit).toFixed(3)}
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1">
@@ -132,7 +146,7 @@ export function ControlPointsEditor({
             ))}
             {points.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-muted-foreground text-center text-sm">
+                <TableCell colSpan={7} className="text-muted-foreground text-center text-sm">
                   No control points yet.
                 </TableCell>
               </TableRow>
@@ -171,6 +185,18 @@ export function ControlPointsEditor({
             type="number"
             value={elevation}
             onChange={(e) => setElevation(e.target.value)}
+          />
+          <Input
+            placeholder={`Grid X (${unitLabel})`}
+            type="number"
+            value={gridX}
+            onChange={(e) => setGridX(e.target.value)}
+          />
+          <Input
+            placeholder={`Grid Y (${unitLabel})`}
+            type="number"
+            value={gridY}
+            onChange={(e) => setGridY(e.target.value)}
           />
           <Input
             placeholder="Source (optional)"
