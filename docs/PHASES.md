@@ -38,13 +38,13 @@ Stack boots end-to-end with auth and multi-tenant scoping in place.
 
 ### Deliverables
 
-- [ ] Dokploy compose: Next.js + Rust GraphQL + PostgreSQL+PostGIS, local Docker dev
+- [x] Dokploy compose: Next.js + Rust GraphQL + PostgreSQL+PostGIS, local Docker dev
 - [ ] PostGIS extension enabled; migration framework wired
 - [ ] Org + User models; email/password signup + login + email verification
 - [ ] Cookie-based JWT sessions; Argon2 hashing; auth rate-limiting
 - [ ] `org_id` scoping pattern + Postgres RLS scaffolding; roles (Admin/Surveyor/Viewer)
 - [ ] Storage abstraction interface (local volume implementation)
-- [ ] Health-check endpoint; subdomain `sitelens.msalia.org` reachable
+- [x] Health-check endpoint; subdomain `sitelens.msalia.org` reachable (web + api `/health`, DB connected, live in prod)
 
 ### Tests
 
