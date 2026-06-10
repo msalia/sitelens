@@ -42,11 +42,23 @@ const CONTROL_COLOR = '#ef4444';
 const DEFAULT_POINT_COLOR = '#38bdf8';
 const GRID_COLOR = '#64748b';
 
+/** A DXF overlay ready to render: geometry + georeference. */
+export interface RenderableOverlay {
+  hiddenLayers: string[];
+  id: string;
+  offsetE: number;
+  offsetN: number;
+  polylines: { layer: string; points: { x: number; y: number }[] }[];
+  rotationDeg: number;
+  scale: number;
+}
+
 export interface CesiumViewerProps {
   categories: PointCategory[];
   ionToken?: string;
   /** Called with a survey point id (the entity id) when picked in 3D. */
   onSelectPoint?: (id: string) => void;
+  overlays?: RenderableOverlay[];
   scene: SceneData;
   /** Category ids to show; null shows all. Points without a category always show. */
   visibleCategoryIds: Set<string> | null;
@@ -110,6 +122,39 @@ function populate(Cesium: any, viewer: any, props: CesiumViewerProps) {
         width: 1.5,
       },
     });
+  }
+
+  // DXF overlays — placed in a local east-north frame anchored at the origin.
+  const op = scene.origin;
+  const opE = scene.originProjectedE;
+  const opN = scene.originProjectedN;
+  if (op && opE !== null && opN !== null && props.overlays?.length) {
+    const originCart = Cesium.Cartesian3.fromDegrees(op.longitude, op.latitude, 0);
+    const enu = Cesium.Transforms.eastNorthUpToFixedFrame(originCart);
+    for (const ov of props.overlays) {
+      const hidden = new Set(ov.hiddenLayers);
+      const theta = (ov.rotationDeg * Math.PI) / 180;
+      const cos = Math.cos(theta);
+      const sin = Math.sin(theta);
+      for (const pl of ov.polylines) {
+        if (hidden.has(pl.layer)) {
+          continue;
+        }
+        const positions = pl.points.map((p) => {
+          const worldE = ov.offsetE + ov.scale * (p.x * cos - p.y * sin);
+          const worldN = ov.offsetN + ov.scale * (p.x * sin + p.y * cos);
+          const local = new Cesium.Cartesian3(worldE - opE, worldN - opN, 0);
+          return Cesium.Matrix4.multiplyByPoint(enu, local, new Cesium.Cartesian3());
+        });
+        viewer.entities.add({
+          polyline: {
+            material: Cesium.Color.fromCssColorString('#f59e0b').withAlpha(0.9),
+            positions,
+            width: 1,
+          },
+        });
+      }
+    }
   }
 
   if (viewer.entities.values.length > 0) {
@@ -209,7 +254,7 @@ export function CesiumViewer(props: CesiumViewerProps) {
     return () => {
       cancelled = true;
     };
-  }, [props.scene, props.visibleCategoryIds, props.categories]);
+  }, [props.scene, props.visibleCategoryIds, props.categories, props.overlays]);
 
   return <div ref={containerRef} className="h-[70vh] w-full overflow-hidden rounded-lg border" />;
 }

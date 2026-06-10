@@ -98,12 +98,26 @@ export interface SceneData {
   controlPoints: ScenePoint[];
   gridLines: SceneLine[];
   origin: LatLng | null;
+  originProjectedE: number | null;
+  originProjectedN: number | null;
   surveyPoints: ScenePoint[];
 }
 
 export interface EpsgEntry {
   code: number;
   name: string;
+}
+
+export interface CadOverlay {
+  assumeRealWorld: boolean;
+  id: string;
+  offsetE: number;
+  offsetN: number;
+  originalFilename: string;
+  projectId: string;
+  rotationDeg: number;
+  scale: number;
+  visible: boolean;
 }
 
 /** Minimal shape the coordinate inspector needs. */

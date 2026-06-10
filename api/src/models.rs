@@ -402,6 +402,10 @@ pub struct SceneLine {
 #[derive(SimpleObject, Default)]
 pub struct SceneData {
     pub origin: Option<LatLng>,
+    /// The origin's projected easting/northing (meters) — lets the client place
+    /// DXF overlays in a local east-north frame anchored at the origin.
+    pub origin_projected_e: Option<f64>,
+    pub origin_projected_n: Option<f64>,
     pub control_points: Vec<ScenePoint>,
     pub survey_points: Vec<ScenePoint>,
     pub grid_lines: Vec<SceneLine>,
@@ -416,4 +420,22 @@ pub struct SceneData {
 pub struct EpsgEntry {
     pub code: i32,
     pub name: String,
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7: DXF overlays
+// ---------------------------------------------------------------------------
+
+/// A georeferenced DXF overlay. The raw file lives in storage (key not exposed).
+#[derive(SimpleObject, Clone, sqlx::FromRow)]
+pub struct CadOverlay {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub original_filename: String,
+    pub offset_e: f64,
+    pub offset_n: f64,
+    pub rotation_deg: f64,
+    pub scale: f64,
+    pub assume_real_world: bool,
+    pub visible: bool,
 }

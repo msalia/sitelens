@@ -5,11 +5,14 @@ import dynamic from 'next/dynamic';
 import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-import type { InspectablePoint, PointCategory, Project, SceneData } from '@/lib/types';
+import type { RenderableOverlay } from '@/components/projects/cesium-viewer';
+import type { CadOverlay, InspectablePoint, PointCategory, Project, SceneData } from '@/lib/types';
 
+import { CadOverlayPanel } from '@/components/projects/cad-overlay-panel';
 import { CoordinateInspectorDialog } from '@/components/projects/coordinate-inspector-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { parseDxf } from '@/lib/dxf';
 import { gql } from '@/lib/graphql';
 
 // Cesium is heavy and browser-only; load it lazily and never on the server.
@@ -25,11 +28,18 @@ const SCENE_QUERY = `
   query ($id: UUID!) {
     sceneData(projectId: $id) {
       origin { latitude longitude height }
+      originProjectedE
+      originProjectedN
       controlPoints { id label latitude longitude height easting northing categoryId }
       surveyPoints { id label latitude longitude height easting northing categoryId }
       gridLines { label coordinates { latitude longitude height } }
     }
+    cadOverlays(projectId: $id) {
+      id projectId originalFilename offsetE offsetN rotationDeg scale assumeRealWorld visible
+    }
   }`;
+
+const OVERLAY_CONTENT = `query ($id: UUID!) { cadOverlayContent(id: $id) }`;
 
 export function SceneView({
   categories,
@@ -39,6 +49,8 @@ export function SceneView({
   categories: PointCategory[];
 }) {
   const [scene, setScene] = useState<SceneData | null>(null);
+  const [overlayMeta, setOverlayMeta] = useState<CadOverlay[]>([]);
+  const [renderables, setRenderables] = useState<RenderableOverlay[]>([]);
   const [shown, setShown] = useState(false);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [inspecting, setInspecting] = useState<InspectablePoint | null>(null);
@@ -50,9 +62,40 @@ export function SceneView({
 
   const load = useCallback(async () => {
     try {
-      const data = await gql<{ sceneData: SceneData }>(SCENE_QUERY, { id: project.id });
+      const data = await gql<{ sceneData: SceneData; cadOverlays: CadOverlay[] }>(SCENE_QUERY, {
+        id: project.id,
+      });
       setScene(data.sceneData);
+      setOverlayMeta(data.cadOverlays);
       setShown(true);
+
+      // Fetch + parse DXF content for visible overlays.
+      const visible = data.cadOverlays.filter((o) => o.visible);
+      const parsed = await Promise.all(
+        visible.map(async (o) => {
+          try {
+            const { cadOverlayContent } = await gql<{ cadOverlayContent: string }>(
+              OVERLAY_CONTENT,
+              {
+                id: o.id,
+              },
+            );
+            const { polylines } = parseDxf(cadOverlayContent);
+            return {
+              hiddenLayers: [] as string[],
+              id: o.id,
+              offsetE: o.offsetE,
+              offsetN: o.offsetN,
+              polylines,
+              rotationDeg: o.rotationDeg,
+              scale: o.scale,
+            } satisfies RenderableOverlay;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      setRenderables(parsed.filter((o): o is RenderableOverlay => o !== null));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load scene');
     }
@@ -120,7 +163,10 @@ export function SceneView({
               categories={categories}
               visibleCategoryIds={visibleCategoryIds}
               onSelectPoint={onSelectPoint}
+              overlays={renderables}
+              ionToken={process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN || undefined}
             />
+            <CadOverlayPanel project={project} overlays={overlayMeta} onChanged={load} />
           </>
         )}
       </CardContent>
