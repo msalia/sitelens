@@ -24,8 +24,8 @@ use crate::models::{
     CadOverlay, ControlPoint, CoordinateSet, CoordinateSpace, CsvMappingInput, EpsgEntry,
     ExportColumn, ExportFormat, ExportSpace, GridAxis, GridAxisInput, GridAxisRow, ImportBatch,
     ImportFormat, ImportProfile, ImportProfileRow, InviteResult, LoginRow, Org, PointCategory,
-    PointGroup, Project, ProjectRow, ProjectTerrain, PublicConfig, SceneData, SceneLine,
-    ScenePoint, SignupResult, SurveyPoint, Transform, TransformResidual, User, UserRow,
+    PointGroup, Project, ProjectBuildings, ProjectRow, ProjectTerrain, PublicConfig, SceneData,
+    SceneLine, ScenePoint, SignupResult, SurveyPoint, Transform, TransformResidual, User, UserRow,
 };
 use crate::ratelimit::{ClientIp, RateLimiter};
 use crate::storage::Storage;
@@ -33,6 +33,30 @@ use crate::storage::Storage;
 const CAD_OVERLAY_COLUMNS: &str = "id, project_id, original_filename, offset_e, offset_n, \
     rotation_deg, scale, assume_real_world, visible";
 const TERRAIN_COLUMNS: &str = "project_id, demtype, south, north, west, east, fetched_at";
+const BUILDINGS_COLUMNS: &str = "project_id, count, fetched_at";
+
+/// Best-effort building height (meters) from OSM tags: `height`, else
+/// `building:levels` × 3 m, else a 2-storey default.
+fn building_height(tags: &serde_json::Value) -> f64 {
+    if let Some(h) = tags.get("height").and_then(|v| v.as_str()) {
+        if let Some(n) = h
+            .trim()
+            .split_whitespace()
+            .next()
+            .and_then(|s| s.parse::<f64>().ok())
+        {
+            if n > 0.0 {
+                return n;
+            }
+        }
+    }
+    if let Some(l) = tags.get("building:levels").and_then(|v| v.as_str()) {
+        if let Ok(n) = l.trim().parse::<f64>() {
+            return (n * 3.0).max(2.0);
+        }
+    }
+    6.0
+}
 
 /// Returns the storage key of a CAD overlay if it belongs to the org.
 async fn overlay_key_in_org(pool: &PgPool, id: Uuid, org_id: Uuid) -> Result<String> {
@@ -350,6 +374,7 @@ impl QueryRoot {
         project_id: Uuid,
         search: Option<String>,
         category_id: Option<Uuid>,
+        group_id: Option<Uuid>,
         limit: Option<i64>,
         offset: Option<i64>,
         sort: Option<String>,
@@ -379,6 +404,9 @@ impl QueryRoot {
              AND ($2::text IS NULL OR label ILIKE '%'||$2||'%' OR description ILIKE '%'||$2||'%' \
                   OR array_to_string(tags, ' ') ILIKE '%'||$2||'%') \
              AND ($3::uuid IS NULL OR category_id = $3) \
+             AND ($6::uuid IS NULL OR id = ANY(COALESCE( \
+                  (SELECT member_ids FROM point_groups WHERE id = $6 AND project_id = $1), \
+                  ARRAY[]::uuid[]))) \
              ORDER BY {sort_col} {dir} NULLS LAST, seq ASC LIMIT $4 OFFSET $5"
         ))
         .bind(project_id)
@@ -386,6 +414,7 @@ impl QueryRoot {
         .bind(category_id)
         .bind(limit)
         .bind(offset)
+        .bind(group_id)
         .fetch_all(pool)
         .await?;
         Ok(rows)
@@ -399,6 +428,7 @@ impl QueryRoot {
         project_id: Uuid,
         search: Option<String>,
         category_id: Option<Uuid>,
+        group_id: Option<Uuid>,
     ) -> Result<i64> {
         let auth = require_auth(ctx)?;
         let pool = pool(ctx)?;
@@ -408,11 +438,15 @@ impl QueryRoot {
             "SELECT count(*) FROM survey_points WHERE project_id = $1 \
              AND ($2::text IS NULL OR label ILIKE '%'||$2||'%' OR description ILIKE '%'||$2||'%' \
                   OR array_to_string(tags, ' ') ILIKE '%'||$2||'%') \
-             AND ($3::uuid IS NULL OR category_id = $3)",
+             AND ($3::uuid IS NULL OR category_id = $3) \
+             AND ($4::uuid IS NULL OR id = ANY(COALESCE( \
+                  (SELECT member_ids FROM point_groups WHERE id = $4 AND project_id = $1), \
+                  ARRAY[]::uuid[])))",
         )
         .bind(project_id)
         .bind(search)
         .bind(category_id)
+        .bind(group_id)
         .fetch_one(pool)
         .await?;
         Ok(count)
@@ -532,6 +566,49 @@ impl QueryRoot {
         let storage = ctx.data::<Arc<dyn Storage>>()?;
         let bytes = storage.get(&key).await.map_err(async_graphql::Error::new)?;
         Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+    }
+
+    /// Cached OSM buildings metadata for a project (null when none fetched yet).
+    async fn project_buildings(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+    ) -> Result<Option<ProjectBuildings>> {
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        let row = sqlx::query_as(&format!(
+            "SELECT {BUILDINGS_COLUMNS} FROM project_buildings WHERE project_id = $1"
+        ))
+        .bind(project_id)
+        .fetch_optional(pool)
+        .await?;
+        Ok(row)
+    }
+
+    /// The cached building footprints as a JSON string:
+    /// `[{"poly":[[lat,lon],...],"height":<m>}, ...]`.
+    async fn project_buildings_content(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+    ) -> Result<String> {
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        let key: Option<(String,)> =
+            sqlx::query_as("SELECT storage_key FROM project_buildings WHERE project_id = $1")
+                .bind(project_id)
+                .fetch_optional(pool)
+                .await?;
+        let Some((key,)) = key else {
+            return Err(async_graphql::Error::new(
+                "no buildings cached for this project",
+            ));
+        };
+        let storage = ctx.data::<Arc<dyn Storage>>()?;
+        let bytes = storage.get(&key).await.map_err(async_graphql::Error::new)?;
+        Ok(String::from_utf8_lossy(&bytes).into_owned())
     }
 
     /// Searches the EPSG coordinate-reference-system catalog by code or name.
@@ -1703,6 +1780,34 @@ impl MutationRoot {
         Ok(true)
     }
 
+    /// Adds points to an existing group (union, de-duplicated). Editor role.
+    async fn add_points_to_group(
+        &self,
+        ctx: &Context<'_>,
+        group_id: Uuid,
+        member_ids: Vec<Uuid>,
+    ) -> Result<PointGroup> {
+        let auth = require_editor(ctx)?;
+        if member_ids.is_empty() {
+            return Err(async_graphql::Error::new("no points to add"));
+        }
+        let group: Option<PointGroup> = sqlx::query_as(
+            "UPDATE point_groups pg \
+             SET member_ids = ( \
+               SELECT array_agg(DISTINCT m) FROM unnest(pg.member_ids || $2::uuid[]) AS m \
+             ) \
+             FROM projects p \
+             WHERE pg.id = $1 AND pg.project_id = p.id AND p.org_id = $3 \
+             RETURNING pg.id, pg.project_id, pg.name, pg.member_ids",
+        )
+        .bind(group_id)
+        .bind(&member_ids)
+        .bind(auth.org_id)
+        .fetch_optional(pool(ctx)?)
+        .await?;
+        group.ok_or_else(|| async_graphql::Error::new("group not found in your organization"))
+    }
+
     // ----- DXF overlays -----
 
     /// Uploads a DXF file: stores the raw text and creates an overlay record
@@ -1765,7 +1870,9 @@ impl MutationRoot {
         let auth = require_editor(ctx)?;
         let pool = pool(ctx)?;
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
-        let demtype = demtype.unwrap_or_else(|| "SRTMGL1".to_string());
+        // `demtype` is optional: when omitted we auto-select the best available
+        // (USGS 3DEP 10 m for the US, falling back to global SRTM 30 m).
+        let explicit_demtype = demtype.filter(|d| !d.trim().is_empty());
         let force = force.unwrap_or(false);
 
         let existing: Option<(DateTime<Utc>,)> =
@@ -1795,28 +1902,53 @@ impl MutationRoot {
 
         let api_key = std::env::var("OPENTOPO_API_KEY")
             .map_err(|_| async_graphql::Error::new("OPENTOPO_API_KEY is not configured"))?;
-        let url = format!(
-            "https://portal.opentopography.org/API/globaldem?demtype={demtype}\
-             &south={south}&north={north}&west={west}&east={east}&outputFormat=GTiff&API_Key={api_key}"
-        );
-        let resp = reqwest::Client::new().get(&url).send().await.map_err(|e| {
-            async_graphql::Error::new(format!("OpenTopography request failed: {e}"))
-        })?;
-        if !resp.status().is_success() {
-            let code = resp.status().as_u16();
-            let body = resp.text().await.unwrap_or_default();
-            let snippet: String = body.chars().take(200).collect();
-            return Err(async_graphql::Error::new(format!(
-                "OpenTopography error ({code}): {snippet}"
-            )));
+        let client = reqwest::Client::new();
+
+        // Fetch a GeoTIFF DEM from a URL; None on any non-success/empty response.
+        async fn fetch_dem(client: &reqwest::Client, url: &str) -> Option<Vec<u8>> {
+            let resp = client.get(url).send().await.ok()?;
+            if !resp.status().is_success() {
+                return None;
+            }
+            let b = resp.bytes().await.ok()?;
+            if b.is_empty() {
+                None
+            } else {
+                Some(b.to_vec())
+            }
         }
-        let bytes = resp
-            .bytes()
-            .await
-            .map_err(|e| async_graphql::Error::new(format!("OpenTopography read failed: {e}")))?;
-        if bytes.is_empty() {
-            return Err(async_graphql::Error::new("OpenTopography returned no data"));
-        }
+        let bbox = format!("south={south}&north={north}&west={west}&east={east}");
+
+        let (bytes, used_demtype): (Vec<u8>, String) = if let Some(dt) = explicit_demtype {
+            // Caller asked for a specific global DEM type.
+            let url = format!(
+                "https://portal.opentopography.org/API/globaldem?demtype={dt}&{bbox}\
+                 &outputFormat=GTiff&API_Key={api_key}"
+            );
+            match fetch_dem(&client, &url).await {
+                Some(b) => (b, dt),
+                None => return Err(async_graphql::Error::new("OpenTopography returned no data")),
+            }
+        } else {
+            // Auto: USGS 3DEP 10 m (US), else global SRTM 30 m.
+            let usgs = format!(
+                "https://portal.opentopography.org/API/usgsdem?datasetName=USGS10m&{bbox}\
+                 &outputFormat=GTiff&API_Key={api_key}"
+            );
+            let srtm = format!(
+                "https://portal.opentopography.org/API/globaldem?demtype=SRTMGL1&{bbox}\
+                 &outputFormat=GTiff&API_Key={api_key}"
+            );
+            if let Some(b) = fetch_dem(&client, &usgs).await {
+                (b, "USGS10m".to_string())
+            } else if let Some(b) = fetch_dem(&client, &srtm).await {
+                (b, "SRTMGL1".to_string())
+            } else {
+                return Err(async_graphql::Error::new(
+                    "OpenTopography returned no terrain for this area",
+                ));
+            }
+        };
 
         let storage = ctx.data::<Arc<dyn Storage>>()?;
         let key = format!("terrain/{project_id}.tif");
@@ -1835,12 +1967,159 @@ impl MutationRoot {
              RETURNING {TERRAIN_COLUMNS}"
         ))
         .bind(project_id)
-        .bind(demtype.trim())
+        .bind(used_demtype.trim())
         .bind(south)
         .bind(north)
         .bind(west)
         .bind(east)
         .bind(&key)
+        .fetch_one(pool)
+        .await?;
+        Ok(row)
+    }
+
+    /// Fetches (if needed) and caches OSM building footprints for the bbox from
+    /// the free Overpass API. Same 7-day cooldown as terrain. Visual context only.
+    async fn refresh_buildings(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        south: f64,
+        north: f64,
+        west: f64,
+        east: f64,
+        force: Option<bool>,
+    ) -> Result<ProjectBuildings> {
+        let auth = require_editor(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        let force = force.unwrap_or(false);
+
+        let existing: Option<(DateTime<Utc>,)> =
+            sqlx::query_as("SELECT fetched_at FROM project_buildings WHERE project_id = $1")
+                .bind(project_id)
+                .fetch_optional(pool)
+                .await?;
+        if let Some((fetched_at,)) = existing {
+            if !force {
+                let row = sqlx::query_as(&format!(
+                    "SELECT {BUILDINGS_COLUMNS} FROM project_buildings WHERE project_id = $1"
+                ))
+                .bind(project_id)
+                .fetch_one(pool)
+                .await?;
+                return Ok(row);
+            }
+            let age = Utc::now() - fetched_at;
+            if age < chrono::Duration::days(7) {
+                let days = (7 - age.num_days()).max(1);
+                return Err(async_graphql::Error::new(format!(
+                    "Buildings were refreshed recently — try again in {days} day(s)."
+                )));
+            }
+        }
+
+        // Overpass QL: building ways within the bbox, with node geometry + tags.
+        let query = format!(
+            "[out:json][timeout:25];(way[\"building\"]({south},{west},{north},{east}););out geom tags;"
+        );
+        // The public Overpass instances are frequently overloaded (transient 504s)
+        // and reject a missing/default User-Agent with HTTP 406. We try the primary
+        // endpoint then community mirrors in turn, retrying past transient failures
+        // (network errors, timeouts, 429, 5xx) but bailing on a definitive 4xx. The
+        // query is sent as the canonical form-encoded `data=` parameter.
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(40))
+            .build()
+            .map_err(|e| async_graphql::Error::new(format!("HTTP client error: {e}")))?;
+        const OVERPASS_ENDPOINTS: [&str; 3] = [
+            "https://overpass-api.de/api/interpreter",
+            "https://overpass.kumi.systems/api/interpreter",
+            "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+        ];
+        let mut json: Option<serde_json::Value> = None;
+        let mut last_err = String::from("Overpass request failed");
+        for endpoint in OVERPASS_ENDPOINTS {
+            match client
+                .post(endpoint)
+                .header("User-Agent", "SiteLens/1.0 (+https://sitelens.msalia.org)")
+                .form(&[("data", query.as_str())])
+                .send()
+                .await
+            {
+                Ok(resp) => {
+                    let status = resp.status();
+                    if status.is_success() {
+                        match resp.bytes().await {
+                            Ok(body) => match serde_json::from_slice(&body) {
+                                Ok(parsed) => {
+                                    json = Some(parsed);
+                                    break;
+                                }
+                                Err(e) => last_err = format!("Overpass parse failed: {e}"),
+                            },
+                            Err(e) => last_err = format!("Overpass read failed: {e}"),
+                        }
+                    } else {
+                        let code = status.as_u16();
+                        last_err = format!("Overpass error ({code})");
+                        // 4xx (other than rate-limit) is a definitive client error —
+                        // retrying another mirror won't help, so stop now.
+                        if (400..500).contains(&code) && code != 429 {
+                            return Err(async_graphql::Error::new(last_err));
+                        }
+                    }
+                }
+                Err(e) => last_err = format!("Overpass request failed: {e}"),
+            }
+        }
+        let json = json.ok_or_else(|| {
+            async_graphql::Error::new(format!(
+                "{last_err}. OpenStreetMap's building service is busy — please try again shortly."
+            ))
+        })?;
+
+        let mut buildings: Vec<serde_json::Value> = Vec::new();
+        if let Some(elements) = json["elements"].as_array() {
+            for el in elements {
+                let Some(geom) = el["geometry"].as_array() else {
+                    continue;
+                };
+                let poly: Vec<[f64; 2]> = geom
+                    .iter()
+                    .filter_map(|g| Some([g["lat"].as_f64()?, g["lon"].as_f64()?]))
+                    .collect();
+                if poly.len() < 3 {
+                    continue;
+                }
+                buildings.push(serde_json::json!({
+                    "poly": poly,
+                    "height": building_height(&el["tags"]),
+                }));
+                if buildings.len() >= 4000 {
+                    break;
+                }
+            }
+        }
+
+        let count = buildings.len() as i32;
+        let payload = serde_json::Value::Array(buildings).to_string();
+        let storage = ctx.data::<Arc<dyn Storage>>()?;
+        let key = format!("buildings/{project_id}.json");
+        storage
+            .put(&key, payload.as_bytes())
+            .await
+            .map_err(async_graphql::Error::new)?;
+        let row: ProjectBuildings = sqlx::query_as(&format!(
+            "INSERT INTO project_buildings (project_id, storage_key, count, fetched_at) \
+             VALUES ($1, $2, $3, now()) \
+             ON CONFLICT (project_id) DO UPDATE SET \
+               storage_key = EXCLUDED.storage_key, count = EXCLUDED.count, fetched_at = now() \
+             RETURNING {BUILDINGS_COLUMNS}"
+        ))
+        .bind(project_id)
+        .bind(&key)
+        .bind(count)
         .fetch_one(pool)
         .await?;
         Ok(row)

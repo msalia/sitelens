@@ -15,6 +15,7 @@ import { fromArrayBuffer } from 'geotiff';
 import { useTheme } from 'next-themes';
 import { type ComponentType, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 import type { PointCategory, SceneData } from '@/lib/types';
 
@@ -40,7 +41,9 @@ if (typeof window !== 'undefined') {
 }
 
 const CONTROL_COLOR = '#ef4444';
-const DEFAULT_POINT_COLOR = '#3b82f6';
+// Uncategorized survey points: a neutral slate that doesn't collide with the
+// default category palette (red / blue / green / amber / …).
+const DEFAULT_POINT_COLOR = '#475569';
 const GRID_COLOR = '#94a3b8';
 // Idle "attract" orbit: after IDLE_DELAY seconds without interaction the camera
 // continuously rotates around the target, very slowly (radians/second).
@@ -53,6 +56,11 @@ const PALETTE = {
   dark: { bg: '#12151b', clay: '#2c323d' },
   light: { bg: '#eef1f5', clay: '#e7eaee' },
 };
+// Radial alpha falloff for the terrain tile, as fractions of the tile's
+// half-diagonal: fully opaque within FADE_START, fully transparent beyond
+// FADE_END. Buildings reuse these so they dissolve in step with the terrain edge.
+const TERRAIN_FADE_START = 0.12;
+const TERRAIN_FADE_END = 0.62;
 
 /** Predefined camera viewpoints offered by the view selector. */
 export type CameraView = 'top' | 'front' | 'back' | 'left' | 'right' | 'iso';
@@ -80,19 +88,50 @@ export interface TerrainData {
   contentBase64: string;
 }
 
+/** An OSM building footprint (from `projectBuildingsContent`): a lat/lon ring
+ * plus an estimated height in meters. Visual context only. */
+export interface BuildingFootprint {
+  /** Estimated height in meters. */
+  height: number;
+  /** Outer ring as [lat, lon] pairs. */
+  poly: [number, number][];
+}
+
+/** A parsed + georeferenced DXF overlay, ready to draw. */
+export interface RenderableOverlay {
+  id: string;
+  offsetE: number;
+  offsetN: number;
+  polylines: { layer: string; points: { x: number; y: number }[] }[];
+  rotationDeg: number;
+  scale: number;
+}
+
 export interface TerrainViewerProps {
+  /** OSM building footprints to extrude (visual context only). */
+  buildings?: BuildingFootprint[];
   /** When set, the viewer assigns a function that downloads the canvas as a PNG. */
   captureRef?: React.MutableRefObject<(() => void) | null>;
   categories: PointCategory[];
   /** Move the camera to a point. `nonce` re-triggers. */
   focus?: { lon: number; lat: number; height: number; id: string; nonce: number };
+  /** DXF layer names to hide. */
+  hiddenLayers?: Set<string>;
   /** Called with a survey point id when picked in 3D. */
   onSelectPoint?: (id: string) => void;
+  originProjectedE?: number | null;
+  originProjectedN?: number | null;
+  /** Georeferenced DXF overlays to draw, with the project's projected origin. */
+  overlays?: RenderableOverlay[];
   /** Drape zero-elevation points + grid lines onto the terrain surface. */
   projectOnTerrain?: boolean;
   scene: SceneData;
+  /** Whether to render the extruded OSM buildings. */
+  showBuildings?: boolean;
   /** Whether to draw the building-grid lines + labels. */
   showGrid?: boolean;
+  /** Master toggle for drawing the DXF overlays. */
+  showOverlays?: boolean;
   /** Whether to show the point pins (control + survey markers). */
   showPins?: boolean;
   /** Whether to render the terrain mesh. */
@@ -103,6 +142,8 @@ export interface TerrainViewerProps {
   viewNonce?: number;
   /** Category ids to show; null shows all. Points without a category always show. */
   visibleCategoryIds: Set<string> | null;
+  /** Survey-point ids to show (group filter); null shows all. */
+  visibleIds?: Set<string> | null;
 }
 
 /** A flat-Earth ENU frame anchored at a reference lat/lon. Good for site-scale. */
@@ -232,8 +273,8 @@ async function buildTerrainGeometry(buf: ArrayBuffer, frame: Frame): Promise<Ter
   const cxg = (minX + maxX) / 2;
   const czg = (minZ + maxZ) / 2;
   const maxR = Math.hypot((maxX - minX) / 2, (maxZ - minZ) / 2) || 1;
-  const fadeStart = 0.12; // fully opaque within this fraction of the radius
-  const fadeEnd = 0.62; // fully transparent beyond this fraction
+  const fadeStart = TERRAIN_FADE_START; // fully opaque within this fraction of the radius
+  const fadeEnd = TERRAIN_FADE_END; // fully transparent beyond this fraction
   for (let k = 0; k < nRows * nCols; k++) {
     const x = positions[k * 3];
     const z = positions[k * 3 + 2];
@@ -409,44 +450,37 @@ function CameraRig({
       if (!ready.current) {
         camera.position.copy(g.pos);
         controls.target.copy(g.target);
-        controls.update();
         ready.current = true;
         goal.current = null;
-        return;
+      } else {
+        // Frame-rate-independent exponential ease — a low rate makes a slow,
+        // smooth glide (~1.5s) regardless of display refresh.
+        const k = 1 - Math.exp(-delta * 1.8);
+        camera.position.lerp(g.pos, k);
+        controls.target.lerp(g.target, k);
+        if (camera.position.distanceTo(g.pos) < Math.max(ext * 0.004, 0.25)) {
+          goal.current = null;
+        }
       }
-      // Frame-rate-independent exponential ease — a low rate makes a slow, smooth
-      // glide (~1.5s) regardless of display refresh.
-      const k = 1 - Math.exp(-delta * 1.8);
-      camera.position.lerp(g.pos, k);
-      controls.target.lerp(g.target, k);
       controls.update();
-      if (camera.position.distanceTo(g.pos) < Math.max(ext * 0.004, 0.25)) {
-        goal.current = null;
+    } else if (!interacting.current && !reduceMotion.current) {
+      // Inactive state: after a short idle delay, slowly orbit around the target.
+      idleFor.current += delta;
+      if (idleFor.current >= IDLE_DELAY) {
+        const dAngle = ORBIT_SPEED * delta;
+        const { target } = controls;
+        const px = camera.position.x - target.x;
+        const pz = camera.position.z - target.z;
+        const cos = Math.cos(dAngle);
+        const sin = Math.sin(dAngle);
+        camera.position.set(
+          target.x + px * cos - pz * sin,
+          camera.position.y,
+          target.z + px * sin + pz * cos,
+        );
+        controls.update();
       }
-      return;
     }
-
-    // Inactive state: after a short idle delay, slowly orbit around the target
-    // (skipped when the user prefers reduced motion).
-    if (interacting.current || reduceMotion.current) {
-      return;
-    }
-    idleFor.current += delta;
-    if (idleFor.current < IDLE_DELAY) {
-      return;
-    }
-    const dAngle = ORBIT_SPEED * delta;
-    const { target } = controls;
-    const px = camera.position.x - target.x;
-    const pz = camera.position.z - target.z;
-    const cos = Math.cos(dAngle);
-    const sin = Math.sin(dAngle);
-    camera.position.set(
-      target.x + px * cos - pz * sin,
-      camera.position.y,
-      target.z + px * sin + pz * cos,
-    );
-    controls.update();
   });
   return null;
 }
@@ -561,6 +595,204 @@ function GridLines({ frame, sample, scene }: { scene: SceneData; frame: Frame; s
   );
 }
 
+const OVERLAY_COLOR = '#f59e0b';
+
+/** Georeferenced DXF overlays as amber linework. Each polyline's drawing (x, y)
+ * is placed by its offset/rotation/scale into projected E/N, then mapped to the
+ * local frame via the project's projected origin. Hidden layers are skipped, and
+ * vertices drape onto terrain when projecting is enabled. */
+function DxfOverlays({
+  frame,
+  hiddenLayers,
+  originE,
+  originN,
+  overlays,
+  sample,
+}: {
+  overlays: RenderableOverlay[];
+  originE: number;
+  originN: number;
+  frame: Frame;
+  sample: Sampler;
+  hiddenLayers?: Set<string>;
+}) {
+  const lines = useMemo(() => {
+    const out: { key: string; points: Vec3[] }[] = [];
+    for (const ov of overlays) {
+      const theta = (ov.rotationDeg * Math.PI) / 180;
+      const cos = Math.cos(theta);
+      const sin = Math.sin(theta);
+      ov.polylines.forEach((pl, i) => {
+        if (hiddenLayers?.has(pl.layer)) {
+          return;
+        }
+        const points = pl.points.map((p): Vec3 => {
+          const worldE = ov.offsetE + ov.scale * (p.x * cos - p.y * sin);
+          const worldN = ov.offsetN + ov.scale * (p.x * sin + p.y * cos);
+          const lx = worldE - originE;
+          const lz = -(worldN - originN);
+          let y = 0.3;
+          if (sample) {
+            const lat = frame.lat0 - lz / frame.mPerLat;
+            const lon = frame.lon0 + lx / frame.mPerLon;
+            const e = sample(lat, lon);
+            if (e !== null) {
+              y = e + 0.3;
+            }
+          }
+          return [lx, y, lz];
+        });
+        out.push({ key: `${ov.id}-${i}`, points });
+      });
+    }
+    return out;
+  }, [overlays, originE, originN, frame, sample, hiddenLayers]);
+
+  if (lines.length === 0) {
+    return null;
+  }
+  return (
+    <group>
+      {lines.map((l) => (
+        <Line
+          key={l.key}
+          points={l.points}
+          color={OVERLAY_COLOR}
+          lineWidth={1.2}
+          transparent
+          opacity={0.9}
+        />
+      ))}
+    </group>
+  );
+}
+
+// Matte building shades — a touch darker than the clay terrain in light mode and
+// a touch lighter in dark mode, so footprints read as solid massing either way.
+const BUILDING_COLOR = { dark: '#3b424f', light: '#d6dbe3' };
+// Minimum extrusion so flat/zero-height OSM footprints still read as buildings.
+const MIN_BUILDING_HEIGHT = 3;
+
+/** OSM building footprints, extruded into matte prisms. Each lat/lon ring becomes
+ * a `THREE.Shape` in the local frame, extruded by its height, and lifted so its
+ * base sits on the sampled ground elevation. To keep buildings within the visible
+ * terrain, each footprint is culled past the terrain tile's fade radius and given
+ * a per-vertex alpha matching the terrain's radial gradient, so they dissolve into
+ * the background in step with the terrain edge instead of floating on white. All
+ * footprints merge into one geometry to keep the draw-call count low. */
+function Buildings({
+  buildings,
+  center,
+  color,
+  frame,
+  radius,
+  sample,
+}: {
+  buildings: BuildingFootprint[];
+  /** Terrain tile centre in local meters (null when no terrain is loaded). */
+  center: { x: number; z: number } | null;
+  color: string;
+  frame: Frame;
+  /** Terrain tile half-diagonal in meters (null when no terrain is loaded). */
+  radius: number | null;
+  sample: Sampler;
+}) {
+  const geometry = useMemo(() => {
+    const parts: THREE.BufferGeometry[] = [];
+    const smooth = (t: number) => {
+      const c = Math.min(Math.max(t, 0), 1);
+      return c * c * (3 - 2 * c);
+    };
+    for (const b of buildings) {
+      if (!b.poly || b.poly.length < 3) {
+        continue;
+      }
+      const shape = new THREE.Shape();
+      let sumX = 0;
+      let sumZ = 0;
+      let sumLat = 0;
+      let sumLon = 0;
+      b.poly.forEach(([lat, lon], i) => {
+        const [x, , z] = toLocal(frame, lat, lon, 0);
+        // Shape is XY; rotateX(-90°) maps shape-X→world-X and shape-(-Y)→world-Z,
+        // so negate z here to keep footprints un-mirrored. Extrude depth → world-Y.
+        if (i === 0) {
+          shape.moveTo(x, -z);
+        } else {
+          shape.lineTo(x, -z);
+        }
+        sumX += x;
+        sumZ += z;
+        sumLat += lat;
+        sumLon += lon;
+      });
+      const n = b.poly.length;
+      // Radial alpha from the terrain centre — cull (and fade) to the terrain edge.
+      let alpha = 1;
+      if (center && radius) {
+        const frac = Math.hypot(sumX / n - center.x, sumZ / n - center.z) / radius;
+        if (frac >= TERRAIN_FADE_END) {
+          continue; // beyond the visible terrain — would float, so drop it
+        }
+        alpha = 1 - smooth((frac - TERRAIN_FADE_START) / (TERRAIN_FADE_END - TERRAIN_FADE_START));
+      }
+      const height = Math.max(b.height || 0, MIN_BUILDING_HEIGHT);
+      let geo: THREE.ExtrudeGeometry;
+      try {
+        geo = new THREE.ExtrudeGeometry(shape, { bevelEnabled: false, depth: height });
+      } catch {
+        continue; // self-intersecting ring earcut can throw — skip it
+      }
+      geo.rotateX(-Math.PI / 2);
+      if (sample) {
+        const e = sample(sumLat / n, sumLon / n);
+        if (e !== null) {
+          geo.translate(0, e, 0);
+        }
+      }
+      // Bake the building's alpha into a per-vertex RGBA color (RGB stays white so
+      // the material tint shows through; alpha drives the edge dissolve).
+      const vcount = geo.attributes.position.count;
+      const colors = new Float32Array(vcount * 4);
+      for (let k = 0; k < vcount; k++) {
+        colors[k * 4] = 1;
+        colors[k * 4 + 1] = 1;
+        colors[k * 4 + 2] = 1;
+        colors[k * 4 + 3] = alpha;
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 4));
+      parts.push(geo);
+    }
+    if (parts.length === 0) {
+      return null;
+    }
+    const merged = mergeGeometries(parts, false);
+    parts.forEach((g) => g.dispose());
+    if (merged) {
+      merged.computeVertexNormals();
+    }
+    return merged;
+  }, [buildings, frame, sample, center, radius]);
+
+  useEffect(() => () => geometry?.dispose(), [geometry]);
+
+  if (!geometry) {
+    return null;
+  }
+  return (
+    <mesh geometry={geometry}>
+      <meshStandardMaterial
+        color={color}
+        vertexColors
+        transparent
+        roughness={1}
+        metalness={0}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
+  );
+}
+
 interface Marker {
   color: string;
   Icon: ComponentType<{ className?: string }>;
@@ -577,12 +809,15 @@ function useMarkers(
   frame: Frame,
   categories: PointCategory[],
   visibleCategoryIds: Set<string> | null,
+  visibleIds: Set<string> | null,
   sample: Sampler,
 ): Marker[] {
   return useMemo(() => {
     const catById = new Map(categories.map((c) => [c.id, c]));
     const out: Marker[] = [];
-    // A point keeps its own z; only zero-elevation points get draped (when on).
+    // Each point is placed independently: a point with no Z (height 0) is draped
+    // onto the terrain surface so it sits on the ground; a point with a real Z
+    // keeps it. We do NOT assume control points lie exactly on the DEM.
     const place = (lat: number, lon: number, h: number): [number, number, number] =>
       toLocal(frame, lat, lon, drapedHeight(sample, lat, lon, h));
 
@@ -600,6 +835,10 @@ function useMarkers(
       if (visibleCategoryIds && sp.categoryId && !visibleCategoryIds.has(sp.categoryId)) {
         continue;
       }
+      // Group filter: when active, show only points that belong to the group.
+      if (visibleIds && (!sp.id || !visibleIds.has(sp.id))) {
+        continue;
+      }
       const cat = sp.categoryId ? catById.get(sp.categoryId) : undefined;
       out.push({
         color: cat?.color ?? DEFAULT_POINT_COLOR,
@@ -611,7 +850,15 @@ function useMarkers(
       });
     }
     return out;
-  }, [scene.controlPoints, scene.surveyPoints, frame, categories, visibleCategoryIds, sample]);
+  }, [
+    scene.controlPoints,
+    scene.surveyPoints,
+    frame,
+    categories,
+    visibleCategoryIds,
+    visibleIds,
+    sample,
+  ]);
 }
 
 function Markers({
@@ -679,24 +926,34 @@ function useBounds(scene: SceneData, frame: Frame): { cx: number; cz: number; ex
 
 export function TerrainViewer(props: TerrainViewerProps) {
   const {
+    buildings,
     captureRef,
     categories,
     focus,
+    hiddenLayers,
     onSelectPoint,
+    originProjectedE,
+    originProjectedN,
+    overlays,
     projectOnTerrain = true,
     scene,
+    showBuildings = true,
     showGrid = true,
+    showOverlays = true,
     showPins = true,
     showTerrain = true,
     terrain,
     view = 'iso',
     viewNonce = 0,
     visibleCategoryIds,
+    visibleIds,
   } = props;
   const frame = useMemo(() => makeFrame(scene), [scene]);
   const { cx, cz, ext } = useBounds(scene, frame);
   const { resolvedTheme } = useTheme();
-  const palette = resolvedTheme === 'dark' ? PALETTE.dark : PALETTE.light;
+  const isDark = resolvedTheme === 'dark';
+  const palette = isDark ? PALETTE.dark : PALETTE.light;
+  const buildingColor = isDark ? BUILDING_COLOR.dark : BUILDING_COLOR.light;
 
   const [terrainMesh, setTerrainMesh] = useState<TerrainMesh | null>(null);
   useEffect(() => {
@@ -727,7 +984,15 @@ export function TerrainViewer(props: TerrainViewerProps) {
 
   // The terrain elevation sampler, only when projecting is enabled + loaded.
   const sampler: Sampler = projectOnTerrain ? (terrainMesh?.sample ?? null) : null;
-  const markers = useMarkers(scene, frame, categories, visibleCategoryIds, sampler);
+
+  const markers = useMarkers(
+    scene,
+    frame,
+    categories,
+    visibleCategoryIds,
+    visibleIds ?? null,
+    sampler,
+  );
 
   // Camera orbits the grid centre; its Y tracks the terrain when projecting so
   // toggling projection re-aims the pivot onto/off the surface.
@@ -772,7 +1037,35 @@ export function TerrainViewer(props: TerrainViewerProps) {
         </mesh>
       ) : null}
 
+      {showBuildings && buildings?.length ? (
+        <Buildings
+          buildings={buildings}
+          color={buildingColor}
+          frame={frame}
+          // Buildings always sit on the terrain surface (independent of the
+          // point/grid projection toggle) and are culled/faded to its extent.
+          sample={terrainMesh?.sample ?? null}
+          center={terrainMesh ? { x: terrainMesh.cx, z: terrainMesh.cz } : null}
+          radius={terrainMesh?.radius ?? null}
+        />
+      ) : null}
+
       {showGrid ? <GridLines scene={scene} frame={frame} sample={sampler} /> : null}
+      {showOverlays &&
+      overlays?.length &&
+      originProjectedE !== null &&
+      originProjectedE !== undefined &&
+      originProjectedN !== null &&
+      originProjectedN !== undefined ? (
+        <DxfOverlays
+          overlays={overlays}
+          originE={originProjectedE}
+          originN={originProjectedN}
+          frame={frame}
+          sample={sampler}
+          hiddenLayers={hiddenLayers}
+        />
+      ) : null}
       {showPins ? <Markers markers={markers} onSelectPoint={onSelectPoint} /> : null}
 
       {/* No `target` prop — CameraRig owns the pivot so it always glides (never

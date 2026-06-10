@@ -42,7 +42,7 @@ export async function createProjectAndOpen(page: Page, name: string): Promise<vo
 /** Switches the workspace detail panel to a tab. */
 export async function gotoTab(
   page: Page,
-  name: 'Setup' | 'Control' | 'Grid' | 'Points' | 'Converter',
+  name: 'Setup' | 'Grid' | 'Points' | 'Overlays',
 ): Promise<void> {
   await page.getByRole('button', { exact: true, name }).click();
 }
@@ -62,7 +62,7 @@ export async function addControlPoint(
   page: Page,
   point: { label: string; n: number; e: number; gx?: number; gy?: number },
 ): Promise<void> {
-  await gotoTab(page, 'Control');
+  await gotoTab(page, 'Grid');
   await page.locator('#cp-label').fill(point.label);
   await page.locator('#cp-northing').fill(String(point.n));
   await page.locator('#cp-easting').fill(String(point.e));

@@ -59,7 +59,8 @@ test('bulk select and delete with confirmation', async ({ page }) => {
 
   await page.getByRole('checkbox', { name: 'Select all on page' }).check();
   await expect(page.getByText('3 selected')).toBeVisible();
-  await page.getByRole('button', { exact: true, name: 'Delete' }).click();
+  await page.getByRole('button', { name: 'Actions' }).click();
+  await page.getByRole('menuitem', { name: /Delete 3 points/ }).click();
   const dialog = page.getByRole('alertdialog');
   await expect(dialog.getByText(/Delete 3 point\(s\)\?/)).toBeVisible();
   await dialog.getByRole('button', { name: 'Delete' }).click();

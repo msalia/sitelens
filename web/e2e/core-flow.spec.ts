@@ -34,7 +34,7 @@ test('core surveyor workflow: control points → solve → import → convert', 
   await expect(page.getByText('PT1', { exact: true })).toBeVisible();
 
   // Standalone converter (Converter tab) returns every representation.
-  await gotoTab(page, 'Converter');
+  await gotoTab(page, 'Points');
   await page.getByLabel('Easting', { exact: true }).fill('545000');
   await page.getByLabel('Northing', { exact: true }).fill('4184000');
   await page.getByRole('button', { exact: true, name: 'Convert' }).click();

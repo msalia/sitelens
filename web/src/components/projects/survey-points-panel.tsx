@@ -3,6 +3,7 @@
 import {
   IconArrowDown,
   IconArrowUp,
+  IconChevronDown,
   IconChevronRight,
   IconCurrentLocation,
   IconDotsVertical,
@@ -11,6 +12,7 @@ import {
   IconTag,
   IconTrash,
   IconUpload,
+  IconUsersGroup,
 } from '@tabler/icons-react';
 import {
   type ComponentPropsWithoutRef,
@@ -27,6 +29,7 @@ import { CategoryManagerDialog } from '@/components/projects/category-manager-di
 import { ConfirmDialog } from '@/components/projects/confirm-dialog';
 import { CoordinateInspectorDialog } from '@/components/projects/coordinate-inspector-dialog';
 import { ExportDialog } from '@/components/projects/export-dialog';
+import { GroupManagerDialog } from '@/components/projects/group-manager-dialog';
 import { ImportDialog } from '@/components/projects/import-dialog';
 import { Button } from '@/components/ui/button';
 import {
@@ -38,9 +41,23 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
@@ -66,6 +83,7 @@ import { gql } from '@/lib/graphql';
 import {
   type InspectablePoint,
   type PointCategory,
+  type PointGroup,
   type Project,
   type SurveyPoint,
   UNIT_OPTIONS,
@@ -85,6 +103,7 @@ const SURVEY_POINTS = graphql(`
     $id: UUID!
     $search: String
     $cat: UUID
+    $group: UUID
     $limit: Int
     $offset: Int
     $sort: String
@@ -94,6 +113,7 @@ const SURVEY_POINTS = graphql(`
       projectId: $id
       search: $search
       categoryId: $cat
+      groupId: $group
       limit: $limit
       offset: $offset
       sort: $sort
@@ -110,7 +130,7 @@ const SURVEY_POINTS = graphql(`
       tags
       importBatchId
     }
-    surveyPointCount(projectId: $id, search: $search, categoryId: $cat)
+    surveyPointCount(projectId: $id, search: $search, categoryId: $cat, groupId: $group)
   }
 `);
 const DELETE_SURVEY_POINT = graphql(`
@@ -135,6 +155,24 @@ const CREATE_POINT_GROUP = graphql(`
     }
   }
 `);
+const POINT_GROUPS = graphql(`
+  query PointGroups($id: UUID!) {
+    pointGroups(projectId: $id) {
+      id
+      projectId
+      name
+      memberIds
+    }
+  }
+`);
+const ADD_TO_GROUP = graphql(`
+  mutation AddPointsToGroup($groupId: UUID!, $ids: [UUID!]!) {
+    addPointsToGroup(groupId: $groupId, memberIds: $ids) {
+      id
+      memberIds
+    }
+  }
+`);
 
 export function SurveyPointsPanel({
   categories,
@@ -156,12 +194,17 @@ export function SurveyPointsPanel({
   // Debounced search so we hit the server after typing settles, not per keystroke.
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL);
+  const [groupFilter, setGroupFilter] = useState<string>(ALL);
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDesc, setSortDesc] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [inspecting, setInspecting] = useState<InspectablePoint | null>(null);
   const [pendingDelete, setPendingDelete] = useState<SurveyPoint | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [groups, setGroups] = useState<PointGroup[]>([]);
+  const [groupDialogOpen, setGroupDialogOpen] = useState(false);
+  const [groupName, setGroupName] = useState('');
 
   const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
 
@@ -170,6 +213,7 @@ export function SurveyPointsPanel({
       const data = await gql(SURVEY_POINTS, {
         cat: categoryFilter === ALL ? null : categoryFilter,
         descending: sortDesc,
+        group: groupFilter === ALL ? null : groupFilter,
         id: project.id,
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
@@ -181,11 +225,24 @@ export function SurveyPointsPanel({
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load points');
     }
-  }, [project.id, debouncedSearch, categoryFilter, page, sortField, sortDesc]);
+  }, [project.id, debouncedSearch, categoryFilter, groupFilter, page, sortField, sortDesc]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const loadGroups = useCallback(async () => {
+    try {
+      const { pointGroups } = await gql(POINT_GROUPS, { id: project.id });
+      setGroups(pointGroups);
+    } catch {
+      /* groups are non-critical; ignore load failures */
+    }
+  }, [project.id]);
+
+  useEffect(() => {
+    void loadGroups();
+  }, [loadGroups]);
 
   // Debounce the search input → server query fires ~300ms after typing settles.
   useEffect(() => {
@@ -196,7 +253,7 @@ export function SurveyPointsPanel({
   // Reset to the first page whenever the filters or sort change.
   useEffect(() => {
     setPage(0);
-  }, [debouncedSearch, categoryFilter, sortField, sortDesc]);
+  }, [debouncedSearch, categoryFilter, groupFilter, sortField, sortDesc]);
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const showPagination = pageCount > 1;
@@ -279,66 +336,46 @@ export function SurveyPointsPanel({
     }
   }
 
-  async function saveGroup() {
-    const name = window.prompt(`Save ${selected.size} points as a group named:`);
-    if (!name?.trim()) {
+  function openSaveGroup() {
+    setGroupName('');
+    setGroupDialogOpen(true);
+  }
+
+  async function confirmSaveGroup() {
+    const name = groupName.trim();
+    if (!name) {
       return;
     }
+    setBusy(true);
     try {
-      await gql(CREATE_POINT_GROUP, { id: project.id, ids: [...selected], name: name.trim() });
+      await gql(CREATE_POINT_GROUP, { id: project.id, ids: [...selected], name });
       toast.success('Group saved');
+      setGroupDialogOpen(false);
       setSelected(new Set());
+      void loadGroups();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Save group failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addToGroup(groupId: string) {
+    setBusy(true);
+    try {
+      const { addPointsToGroup } = await gql(ADD_TO_GROUP, { groupId, ids: [...selected] });
+      toast.success(`Added to group (${addPointsToGroup.memberIds.length} points total)`);
+      setSelected(new Set());
+      void loadGroups();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Add to group failed');
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
     <div className="flex flex-col gap-4 [&>*]:shrink-0">
-      <Card>
-        <CardHeader>
-          <CardTitle>Manage points</CardTitle>
-          <CardDescription>Import, categorize, and export survey points.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2">
-          <ImportDialog
-            project={project}
-            categories={categories}
-            onImported={load}
-            trigger={
-              <ActionRow
-                icon={<IconUpload className="size-5" />}
-                title="Import points"
-                description="From a survey-machine CSV or LandXML export."
-              />
-            }
-          />
-          <CategoryManagerDialog
-            categories={categories}
-            onChanged={onCategoriesChanged}
-            trigger={
-              <ActionRow
-                icon={<IconTag className="size-5" />}
-                title="Categories"
-                description="Manage point categories for this organization."
-              />
-            }
-          />
-          <ExportDialog
-            project={project}
-            selectedIds={[...selected]}
-            categoryFilter={categoryFilter === ALL ? null : categoryFilter}
-            trigger={
-              <ActionRow
-                icon={<IconDownload className="size-5" />}
-                title="Export points"
-                description="Download CSV or LandXML in any space and unit."
-              />
-            }
-          />
-        </CardContent>
-      </Card>
-
       <Card>
         <CardHeader>
           <CardTitle>Survey points</CardTitle>
@@ -374,54 +411,80 @@ export function SurveyPointsPanel({
                 </SelectGroup>
               </SelectContent>
             </Select>
-          </div>
-
-          {selected.size > 0 && (
-            <div className="bg-muted/40 flex flex-wrap items-center gap-2 rounded-lg border p-2 text-sm">
-              <span className="font-medium">{selected.size} selected</span>
-              <Select value="" onValueChange={(v) => v && bulkAssign(v)}>
-                <SelectTrigger className="h-8 w-44" disabled={busy}>
-                  <SelectValue placeholder="Assign category…" />
+            {groups.length > 0 && (
+              <Select value={groupFilter} onValueChange={(v) => setGroupFilter(v ?? ALL)}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="All groups" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectLabel>Assign to</SelectLabel>
-                    <SelectItem value={NONE}>— Clear category —</SelectItem>
-                    {categories.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        <span className="inline-flex items-center gap-2">
-                          <span
-                            className="size-2.5 rounded-full"
-                            style={{ backgroundColor: c.color }}
-                          />
-                          {c.name}
-                        </span>
+                    <SelectLabel>Filter by group</SelectLabel>
+                    <SelectItem value={ALL}>All groups</SelectItem>
+                    {groups.map((g) => (
+                      <SelectItem key={g.id} value={g.id}>
+                        {g.name}
                       </SelectItem>
                     ))}
                   </SelectGroup>
                 </SelectContent>
               </Select>
-              <Button size="sm" variant="outline" disabled={busy} onClick={saveGroup}>
-                Save as group
-              </Button>
-              <ConfirmDialog
-                title={`Delete ${selected.size} point(s)?`}
-                description="The selected survey points will be removed. This can’t be undone."
-                onConfirm={bulkDelete}
-                trigger={
-                  <Button size="sm" variant="destructive" disabled={busy}>
-                    Delete
-                  </Button>
-                }
-              />
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={busy}
-                onClick={() => setSelected(new Set())}
-              >
-                Clear
-              </Button>
+            )}
+          </div>
+
+          {selected.size > 0 && (
+            <div className="flex items-center gap-3 text-sm">
+              <span className="font-medium">{selected.size} selected</span>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button size="sm" variant="outline" disabled={busy}>
+                      Actions
+                      <IconChevronDown className="ml-1 size-4" />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="start" className="w-56">
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>Assign category</DropdownMenuLabel>
+                    <DropdownMenuItem onClick={() => bulkAssign(NONE)}>
+                      — Clear category —
+                    </DropdownMenuItem>
+                    {categories.map((c) => (
+                      <DropdownMenuItem key={c.id} onClick={() => bulkAssign(c.id)}>
+                        <span
+                          className="size-2.5 rounded-full"
+                          style={{ backgroundColor: c.color }}
+                        />
+                        {c.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>Add to group</DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                      <DropdownMenuItem onClick={openSaveGroup}>New group…</DropdownMenuItem>
+                      {groups.length > 0 && <DropdownMenuSeparator />}
+                      {groups.map((g) => (
+                        <DropdownMenuItem key={g.id} onClick={() => addToGroup(g.id)}>
+                          {g.name}
+                          <span className="text-muted-foreground ml-auto text-xs">
+                            {g.memberIds.length}
+                          </span>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                  <DropdownMenuItem onClick={() => setSelected(new Set())}>
+                    Clear selection
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" onClick={() => setBulkDeleteOpen(true)}>
+                    <IconTrash className="size-4" /> Delete {selected.size} point
+                    {selected.size > 1 ? 's' : ''}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           )}
 
@@ -613,6 +676,103 @@ export function SurveyPointsPanel({
             setPendingDelete(null);
           }}
         />
+
+        <ConfirmDialog
+          open={bulkDeleteOpen}
+          onOpenChange={setBulkDeleteOpen}
+          title={`Delete ${selected.size} point(s)?`}
+          description="The selected survey points will be removed. This can’t be undone."
+          onConfirm={() => {
+            void bulkDelete();
+            setBulkDeleteOpen(false);
+          }}
+        />
+
+        <Dialog open={groupDialogOpen} onOpenChange={setGroupDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Save as group</DialogTitle>
+              <DialogDescription>
+                Name this selection of {selected.size} point(s) to reuse it later.
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void confirmSaveGroup();
+              }}
+            >
+              <Input
+                autoFocus
+                placeholder="Group name"
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+              />
+              <DialogFooter className="mt-4">
+                <Button type="submit" disabled={busy || !groupName.trim()}>
+                  Save group
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Manage points</CardTitle>
+          <CardDescription>Import, categorize, and export survey points.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
+          <ImportDialog
+            project={project}
+            categories={categories}
+            onImported={load}
+            trigger={
+              <ActionRow
+                icon={<IconUpload className="size-5" />}
+                title="Import points"
+                description="From a survey-machine CSV or LandXML export."
+              />
+            }
+          />
+          <CategoryManagerDialog
+            categories={categories}
+            onChanged={onCategoriesChanged}
+            trigger={
+              <ActionRow
+                icon={<IconTag className="size-5" />}
+                title="Categories"
+                description="Manage point categories for this organization."
+              />
+            }
+          />
+          <ExportDialog
+            project={project}
+            selectedIds={[...selected]}
+            categoryFilter={categoryFilter === ALL ? null : categoryFilter}
+            trigger={
+              <ActionRow
+                icon={<IconDownload className="size-5" />}
+                title="Export points"
+                description="Download CSV or LandXML in any space and unit."
+              />
+            }
+          />
+          <GroupManagerDialog
+            project={project}
+            selectedIds={[...selected]}
+            onApply={(ids) => setSelected(new Set(ids))}
+            onChanged={loadGroups}
+            trigger={
+              <ActionRow
+                icon={<IconUsersGroup className="size-5" />}
+                title="Groups"
+                description="Create, apply, and delete saved point groups."
+              />
+            }
+          />
+        </CardContent>
       </Card>
     </div>
   );

@@ -11,6 +11,7 @@ matte **"clay"** style — bright in light mode, a deep neutral in dark mode. It
 shows:
 
 - The **terrain** for your site, fetched from open elevation data.
+- Nearby **buildings**, extruded from OpenStreetMap footprints, for context.
 - The **building grid** lines, with axis labels.
 - **Control points** as red pins.
 - All **surveyed points** as pins colored by category.
@@ -28,24 +29,33 @@ orbit around the site — a gentle "attract" motion for dashboards and screens. 
 interaction stops it immediately, and it resumes after you're idle again. It is
 disabled automatically if your system is set to _reduce motion_.
 
-## Terrain
+## Terrain &amp; buildings
 
-Terrain is fetched server-side from **OpenTopography** (SRTM global DEM) for the
-area covering your points, then cached with your project so it loads instantly and
-isn't re-fetched on every visit.
+Two context layers are fetched server-side for the area covering your points and
+cached with your project, so they load instantly and aren't re-fetched on every
+visit:
 
-- Click **Load terrain** to fetch it the first time.
-- **Refresh terrain** re-fetches it. Because OpenTopography is rate-limited, a
+- **Terrain** — an elevation grid from **OpenTopography** (USGS 3DEP 10 m where
+  available in the US, falling back to the global SRTM 30 m DEM).
+- **Buildings** — nearby building footprints from **OpenStreetMap** (the free
+  Overpass API), extruded to their tagged height (or a sensible default), sitting
+  on the terrain surface.
+
+A single button (top-right) handles both:
+
+- Click **Load site data** to fetch them the first time.
+- **Refresh site** re-fetches them. Because both sources are rate-limited, a
   refresh is blocked for **7 days** after the last fetch (the button shows why),
-  plus a short client-side cooldown to prevent accidental repeats.
+  plus a short client-side cooldown to prevent accidental repeats. Whichever layer
+  is still fresh is skipped, so only stale data is re-fetched.
 
 The fetched area is derived automatically from your control and survey points, so
 there's nothing to configure. The terrain tile fades out at its edges so it blends
 seamlessly into the background rather than reading as a floating slab.
 
-> Terrain is a **backdrop for context only — it is not survey-grade.** The Z on
-> your imported points is always the source of truth and is never replaced by
-> terrain.
+> Terrain and buildings are a **backdrop for context only — they are not
+> survey-grade.** The Z on your imported points is always the source of truth and
+> is never replaced by terrain.
 
 ## Project onto terrain
 
@@ -67,6 +77,8 @@ The **Display** menu (top-left) toggles what's drawn:
 - **Grid lines** — show/hide the building grid and its labels. Grid lines extend
   past their ends with a dashed lead-out so the labels stay clear of the pins.
 - **Terrain** — show/hide the terrain mesh.
+- **Buildings** — show/hide the extruded OpenStreetMap buildings (appears once
+  buildings have been fetched).
 - **Project onto terrain** — drape zero-elevation features onto the surface.
 
 ## Camera views

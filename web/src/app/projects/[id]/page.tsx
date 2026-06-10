@@ -1,11 +1,12 @@
 'use client';
 
-import { IconArrowLeft } from '@tabler/icons-react';
+import { IconArrowLeft, IconFolderQuestion } from '@tabler/icons-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import { CadOverlayPanel } from '@/components/projects/cad-overlay-panel';
 import { ControlPointsEditor } from '@/components/projects/control-points-editor';
 import { ConverterPanel } from '@/components/projects/converter-panel';
 import { EditProjectDialog } from '@/components/projects/edit-project-dialog';
@@ -14,9 +15,19 @@ import { SceneView } from '@/components/projects/scene-view';
 import { SetupChecklist } from '@/components/projects/setup-checklist';
 import { SurveyPointsPanel } from '@/components/projects/survey-points-panel';
 import { TransformPanel } from '@/components/projects/transform-panel';
+import { buttonVariants } from '@/components/ui/button';
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty';
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 import {
+  type CadOverlay,
   type ControlPoint,
   type GridAxis,
   type PointCategory,
@@ -82,11 +93,22 @@ const WORKSPACE_QUERY = graphql(`
       icon
       isDefault
     }
+    cadOverlays(projectId: $id) {
+      id
+      projectId
+      originalFilename
+      offsetE
+      offsetN
+      rotationDeg
+      scale
+      assumeRealWorld
+      visible
+    }
     surveyPointCount(projectId: $id)
   }
 `);
 
-type Tab = 'setup' | 'control' | 'grid' | 'points' | 'convert';
+type Tab = 'setup' | 'control' | 'points' | 'overlays';
 
 export default function ProjectWorkspace() {
   const { id } = useParams<{ id: string }>();
@@ -95,10 +117,15 @@ export default function ProjectWorkspace() {
   const [points, setPoints] = useState<ControlPoint[]>([]);
   const [transform, setTransform] = useState<Transform | null>(null);
   const [categories, setCategories] = useState<PointCategory[]>([]);
+  const [overlays, setOverlays] = useState<CadOverlay[]>([]);
   const [pointCount, setPointCount] = useState(0);
   const [focus, setFocus] = useState<{ id: string; nonce: number } | null>(null);
+  const [sceneReload, setSceneReload] = useState(0);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('setup');
+  // On the very first load, land on Points when the site is already set up
+  // (transform solved), otherwise Setup. Doesn't override later manual switches.
+  const initialTabPicked = useRef(false);
 
   // Fly the persistent 3D hero to a point picked from the table.
   const locate = useCallback((p: SurveyPoint) => {
@@ -107,12 +134,13 @@ export default function ProjectWorkspace() {
 
   // Checklist navigation: some steps live in other tabs; the rest scroll.
   const navigateTo = useCallback((target: string) => {
-    if (target === 'panel-grid' || target === 'panel-transform') {
-      setTab('grid');
-      return;
-    }
-    if (target === 'panel-control') {
+    // Control, grid, and transform now share one tab.
+    if (target === 'panel-grid' || target === 'panel-transform' || target === 'panel-control') {
       setTab('control');
+      // Let the tab mount, then scroll the requested card into view.
+      setTimeout(() => {
+        document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 0);
       return;
     }
     if (target === 'panel-points') {
@@ -130,7 +158,12 @@ export default function ProjectWorkspace() {
       setPoints(data.controlPoints);
       setTransform(data.transform);
       setCategories(data.categories);
+      setOverlays(data.cadOverlays);
       setPointCount(data.surveyPointCount);
+      if (!initialTabPicked.current) {
+        initialTabPicked.current = true;
+        setTab(data.transform ? 'points' : 'setup');
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load project');
     } finally {
@@ -152,12 +185,22 @@ export default function ProjectWorkspace() {
   }
   if (!project) {
     return (
-      <div className="p-6">
-        <p className="text-sm">Project not found.</p>
-        <Link href="/projects" className="text-sm underline">
-          Back to projects
-        </Link>
-      </div>
+      <Empty className="h-full">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <IconFolderQuestion />
+          </EmptyMedia>
+          <EmptyTitle>Project not found</EmptyTitle>
+          <EmptyDescription>
+            This project doesn’t exist or you don’t have access to it — it may have been deleted.
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <Link href="/projects" className={buttonVariants({ variant: 'outline' })}>
+            <IconArrowLeft className="mr-1 size-4" /> Back to projects
+          </Link>
+        </EmptyContent>
+      </Empty>
     );
   }
 
@@ -188,10 +231,9 @@ export default function ProjectWorkspace() {
           {(
             [
               ['setup', 'Setup'],
-              ['control', 'Control'],
-              ['grid', 'Grid'],
+              ['control', 'Grid'],
               ['points', 'Points'],
-              ['convert', 'Converter'],
+              ['overlays', 'Overlays'],
             ] as const
           ).map(([key, label]) => (
             <button
@@ -199,7 +241,7 @@ export default function ProjectWorkspace() {
               type="button"
               onClick={() => setTab(key)}
               className={cn(
-                'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+                'flex-1 rounded-lg px-3 py-1.5 text-center text-sm font-medium transition-colors',
                 tab === key
                   ? 'bg-primary/10 text-primary'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -223,12 +265,10 @@ export default function ProjectWorkspace() {
             />
           )}
           {tab === 'control' && (
-            <section id="panel-control">
-              <ControlPointsEditor project={project} points={points} onChanged={load} />
-            </section>
-          )}
-          {tab === 'grid' && (
             <>
+              <section id="panel-control">
+                <ControlPointsEditor project={project} points={points} onChanged={load} />
+              </section>
               <section id="panel-grid">
                 <GridEditor project={project} axes={axes} onSaved={load} />
               </section>
@@ -238,16 +278,32 @@ export default function ProjectWorkspace() {
             </>
           )}
           {tab === 'points' && (
-            <section id="panel-points">
-              <SurveyPointsPanel
+            <>
+              <section id="panel-points">
+                <SurveyPointsPanel
+                  project={project}
+                  categories={categories}
+                  onCategoriesChanged={load}
+                  onLocate={locate}
+                />
+              </section>
+              <section id="panel-convert">
+                <ConverterPanel project={project} />
+              </section>
+            </>
+          )}
+          {tab === 'overlays' && (
+            <section id="panel-overlays">
+              <CadOverlayPanel
                 project={project}
-                categories={categories}
-                onCategoriesChanged={load}
-                onLocate={locate}
+                overlays={overlays}
+                onChanged={() => {
+                  void load();
+                  setSceneReload((n) => n + 1);
+                }}
               />
             </section>
           )}
-          {tab === 'convert' && <ConverterPanel project={project} />}
         </div>
       </aside>
 
@@ -258,6 +314,7 @@ export default function ProjectWorkspace() {
           project={project}
           categories={categories}
           focus={focus}
+          reloadNonce={sceneReload}
           stats={[
             { label: 'Control', value: points.length },
             { label: 'Points', value: pointCount },

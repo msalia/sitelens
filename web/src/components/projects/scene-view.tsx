@@ -6,12 +6,19 @@ import {
   IconMountain,
   IconRefresh,
   IconStack2,
+  IconStack3,
+  IconUsersGroup,
 } from '@tabler/icons-react';
 import dynamic from 'next/dynamic';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import type { CameraView, TerrainData } from '@/components/projects/terrain-viewer';
+import type {
+  BuildingFootprint,
+  CameraView,
+  RenderableOverlay,
+  TerrainData,
+} from '@/components/projects/terrain-viewer';
 import type { InspectablePoint, PointCategory, Project, SceneData } from '@/lib/types';
 
 import { CoordinateInspectorDialog } from '@/components/projects/coordinate-inspector-dialog';
@@ -25,6 +32,8 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -38,6 +47,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { parseDxf } from '@/lib/dxf';
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 
@@ -99,12 +109,41 @@ const SCENE_QUERY = graphql(`
       demtype
       fetchedAt
     }
+    projectBuildings(projectId: $id) {
+      count
+      fetchedAt
+    }
+    cadOverlays(projectId: $id) {
+      id
+      offsetE
+      offsetN
+      rotationDeg
+      scale
+      visible
+    }
+    pointGroups(projectId: $id) {
+      id
+      name
+      memberIds
+    }
   }
 `);
 
 const TERRAIN_CONTENT = graphql(`
   query TerrainContent($id: UUID!) {
     projectTerrainContent(projectId: $id)
+  }
+`);
+
+const BUILDINGS_CONTENT = graphql(`
+  query BuildingsContent($id: UUID!) {
+    projectBuildingsContent(projectId: $id)
+  }
+`);
+
+const OVERLAY_CONTENT = graphql(`
+  query OverlayContent($id: UUID!) {
+    cadOverlayContent(id: $id)
   }
 `);
 
@@ -126,6 +165,29 @@ const REFRESH_TERRAIN = graphql(`
       force: $force
     ) {
       demtype
+      fetchedAt
+    }
+  }
+`);
+
+const REFRESH_BUILDINGS = graphql(`
+  mutation RefreshBuildings(
+    $id: UUID!
+    $south: Float!
+    $north: Float!
+    $west: Float!
+    $east: Float!
+    $force: Boolean
+  ) {
+    refreshBuildings(
+      projectId: $id
+      south: $south
+      north: $north
+      west: $west
+      east: $east
+      force: $force
+    ) {
+      count
       fetchedAt
     }
   }
@@ -168,12 +230,15 @@ export function SceneView({
   categories,
   focus,
   project,
+  reloadNonce,
   stats,
 }: {
   project: Project;
   categories: PointCategory[];
   /** Request from the table to fly to a point; `nonce` re-triggers. */
   focus?: { id: string; nonce: number } | null;
+  /** Bumped by the parent to force a scene reload (e.g. after a DXF upload). */
+  reloadNonce?: number;
   /** Live stats overlaid on the viewer (bottom-left), as a label: value list. */
   stats?: { label: string; value: ReactNode }[];
 }) {
@@ -182,6 +247,15 @@ export function SceneView({
   const [terrainMeta, setTerrainMeta] = useState<{ fetchedAt: string; demtype: string } | null>(
     null,
   );
+  const [buildings, setBuildings] = useState<BuildingFootprint[]>([]);
+  const [buildingsMeta, setBuildingsMeta] = useState<{ count: number; fetchedAt: string } | null>(
+    null,
+  );
+  const [overlays, setOverlays] = useState<RenderableOverlay[]>([]);
+  const [overlayLayers, setOverlayLayers] = useState<string[]>([]);
+  const [hiddenLayers, setHiddenLayers] = useState<Set<string>>(new Set());
+  const [groups, setGroups] = useState<{ id: string; name: string; memberIds: string[] }[]>([]);
+  const [groupFilter, setGroupFilter] = useState<string>('all');
   const [refreshing, setRefreshing] = useState(false);
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -190,6 +264,8 @@ export function SceneView({
   const [showGrid, setShowGrid] = useState(true);
   const [showPins, setShowPins] = useState(true);
   const [showTerrain, setShowTerrain] = useState(true);
+  const [showBuildings, setShowBuildings] = useState(true);
+  const [showOverlays, setShowOverlays] = useState(true);
   const [projectOnTerrain, setProjectOnTerrain] = useState(true);
   const [view, setView] = useState<CameraView>('iso');
   const [viewNonce, setViewNonce] = useState(0);
@@ -206,6 +282,15 @@ export function SceneView({
     () => new Set(categories.filter((c) => !hidden.has(c.id)).map((c) => c.id)),
     [categories, hidden],
   );
+
+  // Group filter: when a group is chosen, only its members render.
+  const visibleIds = useMemo(() => {
+    if (groupFilter === 'all') {
+      return null;
+    }
+    const g = groups.find((x) => x.id === groupFilter);
+    return g ? new Set(g.memberIds) : null;
+  }, [groupFilter, groups]);
 
   // Translate a table "locate" request into a viewer focus (lon/lat/height).
   const viewerFocus = useMemo(() => {
@@ -237,6 +322,57 @@ export function SceneView({
     }
   }, [project.id]);
 
+  // Loads + parses the cached OSM building footprints (no-op if none cached).
+  const loadBuildingsContent = useCallback(async () => {
+    try {
+      const { projectBuildingsContent } = await gql(BUILDINGS_CONTENT, { id: project.id });
+      const parsed = JSON.parse(projectBuildingsContent) as BuildingFootprint[];
+      setBuildings(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      setBuildings([]);
+    }
+  }, [project.id]);
+
+  // Fetches + parses the visible DXF overlays into renderable linework, and
+  // collects the union of their layer names for the layer selector.
+  const loadOverlays = useCallback(
+    async (
+      metas: {
+        id: string;
+        offsetE: number;
+        offsetN: number;
+        rotationDeg: number;
+        scale: number;
+        visible: boolean;
+      }[],
+    ) => {
+      const visible = metas.filter((o) => o.visible);
+      const layers = new Set<string>();
+      const parsed = await Promise.all(
+        visible.map(async (o): Promise<RenderableOverlay | null> => {
+          try {
+            const { cadOverlayContent } = await gql(OVERLAY_CONTENT, { id: o.id });
+            const dxf = parseDxf(cadOverlayContent);
+            dxf.layers.forEach((l) => layers.add(l));
+            return {
+              id: o.id,
+              offsetE: o.offsetE,
+              offsetN: o.offsetN,
+              polylines: dxf.polylines,
+              rotationDeg: o.rotationDeg,
+              scale: o.scale,
+            };
+          } catch {
+            return null;
+          }
+        }),
+      );
+      setOverlays(parsed.filter((o): o is RenderableOverlay => o !== null));
+      setOverlayLayers([...layers].sort());
+    },
+    [],
+  );
+
   const load = useCallback(async () => {
     try {
       const data = await gql(SCENE_QUERY, { id: project.id });
@@ -251,52 +387,108 @@ export function SceneView({
       } else {
         setTerrain(null);
       }
+      setBuildingsMeta(
+        data.projectBuildings
+          ? { count: data.projectBuildings.count, fetchedAt: data.projectBuildings.fetchedAt }
+          : null,
+      );
+      if (data.projectBuildings) {
+        void loadBuildingsContent();
+      } else {
+        setBuildings([]);
+      }
+      void loadOverlays(data.cadOverlays);
+      setGroups(data.pointGroups);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load scene');
     }
-  }, [project.id, loadTerrainContent]);
+  }, [project.id, loadTerrainContent, loadBuildingsContent, loadOverlays]);
 
-  // The 3D view is always present — load as soon as the panel mounts.
+  // The 3D view is always present — load on mount and when the parent bumps
+  // `reloadNonce` (e.g. after a DXF overlay is uploaded or georeferenced).
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, reloadNonce]);
 
-  // Fetch (or refresh) the DEM server-side. The Rust API enforces the 7-day
-  // cooldown and owns the OpenTopography call, so we just surface the result.
-  const refreshTerrain = useCallback(
-    async (force: boolean) => {
-      if (!scene) {
-        return;
+  function toggleLayer(layer: string) {
+    setHiddenLayers((h) => {
+      const next = new Set(h);
+      if (next.has(layer)) {
+        next.delete(layer);
+      } else {
+        next.add(layer);
       }
-      const bbox = sceneBbox(scene);
-      if (!bbox) {
-        toast.error('Add control or survey points before fetching terrain.');
-        return;
-      }
-      setRefreshing(true);
+      return next;
+    });
+  }
+
+  // Fetch (or refresh) both the DEM and the OSM buildings server-side, in one
+  // action. The Rust API owns the OpenTopography / Overpass calls and enforces a
+  // 7-day per-source cooldown; here we just skip whichever source is still fresh
+  // (so a fresh resource isn't needlessly re-fetched) and surface the result.
+  const refreshSite = useCallback(async () => {
+    if (!scene) {
+      return;
+    }
+    const bbox = sceneBbox(scene);
+    if (!bbox) {
+      toast.error('Add control or survey points before fetching site data.');
+      return;
+    }
+    const t = Date.now();
+    const terrainFresh = !!terrainMeta && t < new Date(terrainMeta.fetchedAt).getTime() + FRESH_MS;
+    const buildingsFresh =
+      !!buildingsMeta && t < new Date(buildingsMeta.fetchedAt).getTime() + FRESH_MS;
+    const args = {
+      east: bbox.east,
+      id: project.id,
+      north: bbox.north,
+      south: bbox.south,
+      west: bbox.west,
+    };
+    setRefreshing(true);
+    const done: string[] = [];
+    const failed: string[] = [];
+    // For each source: fetch when missing (force=false) or stale (force=true);
+    // skip when fresh. `force = !!meta` because if we got here with a row present
+    // it must be stale (fresh ones are filtered out above).
+    if (!terrainFresh) {
       try {
         const { refreshTerrain: meta } = await gql(REFRESH_TERRAIN, {
-          east: bbox.east,
-          force,
-          id: project.id,
-          north: bbox.north,
-          south: bbox.south,
-          west: bbox.west,
+          ...args,
+          force: !!terrainMeta,
         });
         setTerrainMeta({ demtype: meta.demtype, fetchedAt: meta.fetchedAt });
         await loadTerrainContent();
-        toast.success(force ? 'Terrain refreshed.' : 'Terrain loaded.');
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Failed to fetch terrain');
-      } finally {
-        setRefreshing(false);
-        // Anti-spam: any attempt (success or failure) holds the button for 30 min.
-        setCooldownUntil(Date.now() + SPAM_COOLDOWN_MS);
-        setNow(Date.now());
+        done.push('terrain');
+      } catch {
+        failed.push('terrain');
       }
-    },
-    [scene, project.id, loadTerrainContent],
-  );
+    }
+    if (!buildingsFresh) {
+      try {
+        const { refreshBuildings: meta } = await gql(REFRESH_BUILDINGS, {
+          ...args,
+          force: !!buildingsMeta,
+        });
+        setBuildingsMeta({ count: meta.count, fetchedAt: meta.fetchedAt });
+        await loadBuildingsContent();
+        done.push('buildings');
+      } catch {
+        failed.push('buildings');
+      }
+    }
+    setRefreshing(false);
+    // Anti-spam: any attempt (success or failure) holds the button for 30 min.
+    setCooldownUntil(Date.now() + SPAM_COOLDOWN_MS);
+    setNow(Date.now());
+    if (done.length > 0) {
+      toast.success(`Updated ${done.join(' & ')}.`);
+    }
+    if (failed.length > 0) {
+      toast.error(`Couldn't fetch ${failed.join(' & ')}.`);
+    }
+  }, [scene, project.id, terrainMeta, buildingsMeta, loadTerrainContent, loadBuildingsContent]);
 
   const onSelectPoint = useCallback(
     (id: string) => {
@@ -325,29 +517,43 @@ export function SceneView({
     setViewNonce((n) => n + 1);
   }
 
-  // Terrain button state: disabled while in flight, while the cached DEM is still
-  // fresh (server's 7-day rule), or during the client anti-spam window.
-  const fetchedAtMs = terrainMeta ? new Date(terrainMeta.fetchedAt).getTime() : null;
-  const freshUntil = fetchedAtMs !== null ? fetchedAtMs + FRESH_MS : null;
-  const isFresh = freshUntil !== null && now < freshUntil;
+  // Combined "site data" button state: disabled while in flight, while BOTH the
+  // DEM and buildings are still fresh (server's 7-day rule), or during the client
+  // anti-spam window. Enabled as soon as either source is missing or stale.
+  const terrainFreshUntil = terrainMeta
+    ? new Date(terrainMeta.fetchedAt).getTime() + FRESH_MS
+    : null;
+  const buildingsFreshUntil = buildingsMeta
+    ? new Date(buildingsMeta.fetchedAt).getTime() + FRESH_MS
+    : null;
+  const terrainFresh = terrainFreshUntil !== null && now < terrainFreshUntil;
+  const buildingsFresh = buildingsFreshUntil !== null && now < buildingsFreshUntil;
+  const bothFresh = terrainFresh && buildingsFresh;
+  // When both are fresh, the button re-enables when the earlier one goes stale.
+  const earliestFreshUntil = Math.min(
+    terrainFreshUntil ?? Infinity,
+    buildingsFreshUntil ?? Infinity,
+  );
+  const hasSiteData = !!terrainMeta || !!buildingsMeta;
   const inSpamCooldown = cooldownUntil !== null && now < cooldownUntil;
-  const terrainDisabled = refreshing || isFresh || inSpamCooldown;
-  const terrainReason = refreshing
-    ? 'Fetching terrain from OpenTopography…'
-    : isFresh
-      ? `Terrain is up to date (fetched ${new Date(fetchedAtMs!).toLocaleDateString()}). ` +
-        `It can be refreshed again on ${new Date(freshUntil!).toLocaleDateString()} — ` +
-        `OpenTopography limits how often we can re-fetch.`
+  const siteDisabled = refreshing || bothFresh || inSpamCooldown;
+  const siteReason = refreshing
+    ? 'Fetching terrain & buildings…'
+    : bothFresh
+      ? `Site data is up to date. It can be refreshed again on ` +
+        `${new Date(earliestFreshUntil).toLocaleDateString()} — the elevation and ` +
+        `OpenStreetMap sources limit how often we can re-fetch.`
       : inSpamCooldown
         ? `Just fetched — please wait about ${Math.max(
             1,
             Math.ceil((cooldownUntil! - now) / 60_000),
           )} min before fetching again.`
-        : terrainMeta
-          ? 'Re-fetch terrain elevation from OpenTopography.'
-          : 'Fetch terrain elevation from OpenTopography for this site.';
+        : hasSiteData
+          ? 'Re-fetch terrain elevation and OpenStreetMap buildings.'
+          : 'Fetch terrain elevation and OpenStreetMap buildings for this site.';
 
   const hiddenCount = categories.filter((c) => hidden.has(c.id)).length;
+  const hiddenLayerCount = overlayLayers.filter((l) => hiddenLayers.has(l)).length;
   const noPoints = !!scene && scene.controlPoints.length === 0 && scene.surveyPoints.length === 0;
 
   return (
@@ -361,14 +567,22 @@ export function SceneView({
           <TerrainViewer
             scene={scene}
             terrain={terrain}
+            buildings={buildings}
+            showBuildings={showBuildings}
             categories={categories}
             visibleCategoryIds={visibleCategoryIds}
+            visibleIds={visibleIds}
             onSelectPoint={onSelectPoint}
             focus={viewerFocus}
             captureRef={captureRef}
             showGrid={showGrid}
             showPins={showPins}
             showTerrain={showTerrain}
+            showOverlays={showOverlays}
+            overlays={overlays}
+            originProjectedE={scene.originProjectedE}
+            originProjectedN={scene.originProjectedN}
+            hiddenLayers={hiddenLayers}
             projectOnTerrain={projectOnTerrain}
             view={view}
             viewNonce={viewNonce}
@@ -426,6 +640,76 @@ export function SceneView({
               </DropdownMenuContent>
             </DropdownMenu>
           ) : null}
+          {scene && groups.length > 0 ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button size="sm" variant="outline">
+                    <IconUsersGroup className="mr-1 size-4" />
+                    {groupFilter === 'all'
+                      ? 'All groups'
+                      : (groups.find((g) => g.id === groupFilter)?.name ?? 'Group')}
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="start" className="w-52">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>Filter by group</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup value={groupFilter} onValueChange={setGroupFilter}>
+                    <DropdownMenuRadioItem value="all">All groups</DropdownMenuRadioItem>
+                    {groups.map((g) => (
+                      <DropdownMenuRadioItem key={g.id} value={g.id}>
+                        {g.name}
+                        <span className="text-muted-foreground ml-auto text-xs">
+                          {g.memberIds.length}
+                        </span>
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
+          {overlayLayers.length > 0 ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button size="sm" variant="outline">
+                    <IconStack3 className="mr-1 size-4" />
+                    Layers
+                    {hiddenLayerCount > 0 ? (
+                      <span className="text-muted-foreground ml-1 text-xs">
+                        ({hiddenLayerCount} hidden)
+                      </span>
+                    ) : null}
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="start" className="max-h-80 w-56 overflow-auto">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>DXF layers</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    closeOnClick={false}
+                    onClick={() =>
+                      setHiddenLayers(hiddenLayerCount === 0 ? new Set(overlayLayers) : new Set())
+                    }
+                  >
+                    {hiddenLayerCount === 0 ? 'Select none' : 'Select all'}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  {overlayLayers.map((l) => (
+                    <DropdownMenuCheckboxItem
+                      key={l}
+                      checked={!hiddenLayers.has(l)}
+                      onCheckedChange={() => toggleLayer(l)}
+                    >
+                      {l}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -464,12 +748,28 @@ export function SceneView({
                 >
                   Terrain
                 </DropdownMenuCheckboxItem>
+                {buildings.length > 0 ? (
+                  <DropdownMenuCheckboxItem
+                    checked={showBuildings}
+                    onCheckedChange={(v) => setShowBuildings(Boolean(v))}
+                  >
+                    Buildings
+                  </DropdownMenuCheckboxItem>
+                ) : null}
                 <DropdownMenuCheckboxItem
                   checked={projectOnTerrain}
                   onCheckedChange={(v) => setProjectOnTerrain(Boolean(v))}
                 >
                   Project onto terrain
                 </DropdownMenuCheckboxItem>
+                {overlays.length > 0 ? (
+                  <DropdownMenuCheckboxItem
+                    checked={showOverlays}
+                    onCheckedChange={(v) => setShowOverlays(Boolean(v))}
+                  >
+                    DXF overlays
+                  </DropdownMenuCheckboxItem>
+                ) : null}
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -478,17 +778,12 @@ export function SceneView({
         <div className="pointer-events-auto flex shrink-0 items-center gap-2">
           <Tooltip>
             <TooltipTrigger render={<span className="inline-flex" />}>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={terrainDisabled}
-                onClick={() => refreshTerrain(Boolean(terrainMeta))}
-              >
+              <Button size="sm" variant="outline" disabled={siteDisabled} onClick={refreshSite}>
                 <IconMountain className="mr-1 size-4" />
-                {refreshing ? 'Fetching…' : terrainMeta ? 'Refresh terrain' : 'Load terrain'}
+                {refreshing ? 'Fetching…' : hasSiteData ? 'Refresh site' : 'Load site data'}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{terrainReason}</TooltipContent>
+            <TooltipContent>{siteReason}</TooltipContent>
           </Tooltip>
           <Button size="sm" variant="outline" onClick={load}>
             <IconRefresh className="mr-1 size-4" />
@@ -513,6 +808,20 @@ export function SceneView({
                 {terrainMeta.demtype ? `${terrainMeta.demtype} · ` : ''}
                 {new Date(terrainMeta.fetchedAt).toLocaleDateString()}
               </span>
+            </div>
+          ) : null}
+          {buildingsMeta ? (
+            <div>
+              <span className="text-muted-foreground">Buildings:</span>{' '}
+              <span className="text-foreground font-medium">
+                {buildingsMeta.count} · OSM ·{' '}
+                {new Date(buildingsMeta.fetchedAt).toLocaleDateString()}
+              </span>
+            </div>
+          ) : null}
+          {terrainMeta || buildingsMeta ? (
+            <div className="text-muted-foreground pt-1 text-[10px] whitespace-nowrap">
+              Terrain &amp; buildings are not survey-grade — for visual reference only.
             </div>
           ) : null}
         </div>

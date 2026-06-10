@@ -456,6 +456,15 @@ pub struct ProjectTerrain {
     pub fetched_at: DateTime<Utc>,
 }
 
+/// Cached OpenStreetMap building footprints for a project (the footprint JSON
+/// lives in storage; `storage_key` is intentionally not exposed via GraphQL).
+#[derive(SimpleObject, Clone, sqlx::FromRow)]
+pub struct ProjectBuildings {
+    pub project_id: Uuid,
+    pub count: i32,
+    pub fetched_at: DateTime<Utc>,
+}
+
 // ---------------------------------------------------------------------------
 // Phase 8: export
 // ---------------------------------------------------------------------------

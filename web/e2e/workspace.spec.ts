@@ -12,7 +12,7 @@ test('workspace shows all tabs, setup alerts, and stat pills', async ({ page }) 
   await signUpAndLogin(page, 'ws-tabs');
   await createProjectAndOpen(page, 'Tabs Site');
 
-  for (const tab of ['Setup', 'Control', 'Grid', 'Points', 'Converter']) {
+  for (const tab of ['Setup', 'Grid', 'Points', 'Overlays']) {
     await expect(page.getByRole('button', { exact: true, name: tab })).toBeVisible();
   }
 
@@ -52,7 +52,7 @@ test('solve the Helmert transform shows residuals', async ({ page }) => {
 test('converter returns every representation', async ({ page }) => {
   await signUpAndLogin(page, 'ws-convert');
   await createProjectAndOpen(page, 'Convert Site');
-  await gotoTab(page, 'Converter');
+  await gotoTab(page, 'Points');
 
   await page.getByLabel('Easting', { exact: true }).fill('545000');
   await page.getByLabel('Northing', { exact: true }).fill('4184000');

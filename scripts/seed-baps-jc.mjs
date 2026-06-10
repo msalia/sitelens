@@ -1,9 +1,13 @@
 #!/usr/bin/env node
-// Seeds a realistic project from a real survey: the BAPS Mandir site in Jersey
-// City. The source CSV is a local site grid (feet) based at (1000, 7000). We tie
-// that base to the real site origin (40.768679, -74.043270) in NJ State Plane
-// (EPSG:3424, US survey feet) so points land at their true geographic location
-// and terrain (OpenTopography) renders over the actual site.
+// Seeds a realistic project from a real survey: the BAPS Mandir site. Per the
+// survey title block the property is Lot 38, Block 27, Township of North Bergen,
+// Hudson County, NJ — 2000 Tonnelle Avenue, North Bergen, NJ 07047 (the drawing
+// is titled "BAPS Jersey City Temple" but the land is physically in North
+// Bergen). Vertical datum is NAVD 88; the horizontal coords on the plan are a
+// local assumed grid (no NAD83/State Plane tie on the sheet), so we tie the
+// local base (1000, 7000) to the geocoded parcel centroid below in NJ State
+// Plane meters so points land at their true geographic location and terrain
+// renders over the actual site.
 //
 // COURT STEPH and TACO BELL CURB are treated as control points; everything else
 // is imported as surveyed points.
@@ -24,18 +28,19 @@ const CSV_PATH =
 
 // --- site tie --------------------------------------------------------------
 // The CSV is a local site grid in METERS, based at (1000, 7000). That base is
-// tied to the site origin (40.768679, -74.043270) in NJ State Plane meters
-// (EPSG:32111). The projected-meter origin was computed with the API's own
-// projection engine (round-trips to the lat/lon exactly), so the tie is a pure
-// translation: projected = origin + (local - base).
+// tied to the geocoded parcel centroid of 2000 Tonnelle Avenue, North Bergen
+// (40.769271, -74.044481) in NJ State Plane meters (EPSG:32111). The
+// projected-meter origin was computed with the same Transverse Mercator
+// projection the API uses (round-trips to the lat/lon to sub-mm), so the tie is
+// a pure translation: projected = origin + (local - base).
 const EPSG = 32111;
 const UNIT = 'METER';
-const ORIGIN_LAT = 40.768679;
-const ORIGIN_LON = -74.04327;
+const ORIGIN_LAT = 40.769271;
+const ORIGIN_LON = -74.044481;
 const BASE = { e: 1000, n: 7000 };
-const ORIGIN_PROJ_M = { e: 188557.3002, n: 214961.9037 };
+const ORIGIN_PROJ_M = { e: 188454.7255, n: 215027.1072 };
 const CONTROL_CODES = new Set(['COURT STEPH', 'TACO BELL CURB']);
-const PROJECT_NAME = 'BAPS Mandir — Jersey City';
+const PROJECT_NAME = 'BAPS Mandir — North Bergen';
 
 const projE = (localE) => ORIGIN_PROJ_M.e + (localE - BASE.e);
 const projN = (localN) => ORIGIN_PROJ_M.n + (localN - BASE.n);
@@ -143,10 +148,12 @@ async function main() {
   log(`parsed ${rows.length} points (${controls.length} control, ${surveys.length} survey)`);
 
   // Clean slate: drop any prior copy of this project so re-runs don't duplicate.
+  // Match the "BAPS Mandir" prefix so older names (e.g. the former
+  // "— Jersey City") are cleaned up after the North Bergen rename too.
   const existing = await gql(`query{projects{id name}}`);
-  for (const p of existing.projects.filter((p) => p.name === PROJECT_NAME)) {
+  for (const p of existing.projects.filter((p) => p.name.startsWith('BAPS Mandir'))) {
     await gql(`mutation($id:UUID!){deleteProject(id:$id)}`, { id: p.id });
-    log(`removed existing "${PROJECT_NAME}"`);
+    log(`removed existing "${p.name}"`);
   }
 
   const d = await gql(
@@ -156,7 +163,7 @@ async function main() {
     {
       name: PROJECT_NAME,
       description:
-        'Plaza and structure control survey for the BAPS Mandir, Jersey City. Local site grid (meters) tied to NJ State Plane (EPSG:32111).',
+        'Plaza and structure control survey for the BAPS Mandir — Lot 38, Block 27, Township of North Bergen, Hudson County, NJ (2000 Tonnelle Avenue). Local site grid (meters) tied to NJ State Plane (EPSG:32111); elevations NAVD 88.',
       epsg: EPSG,
       unit: UNIT,
       csf: 1.0,

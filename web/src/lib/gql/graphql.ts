@@ -2,9 +2,7 @@
 /** Internal type. DO NOT USE DIRECTLY. */
 type Exact<T extends { [key: string]: unknown }> = { [K in keyof T]: T[K] };
 /** Internal type. DO NOT USE DIRECTLY. */
-export type Incremental<T> =
-  | T
-  | { [P in keyof T]?: P extends ' $fragmentName' | '__typename' ? T[P] : never };
+export type Incremental<T> = T | { [P in keyof T]?: P extends ' $fragmentName' | '__typename' ? T[P] : never };
 import { DocumentTypeDecoration } from '@graphql-typed-document-node/core';
 /** The space an input coordinate is expressed in (GraphQL enum). */
 export type CoordinateSpace =
@@ -12,7 +10,9 @@ export type CoordinateSpace =
    * Geographic input: `x` is longitude, `y` is latitude (degrees); `unit` is
    * ignored. Derives projected/grid/ground via the project's CRS + transform.
    */
-  'GEOGRAPHIC' | 'GRID' | 'PROJECTED';
+  | 'GEOGRAPHIC'
+  | 'GRID'
+  | 'PROJECTED';
 
 /** CSV column mapping (0-based indices). */
 export type CsvMappingInput = {
@@ -34,10 +34,16 @@ export type ExportColumn =
   | 'NORTHING'
   | 'POINT';
 
-export type ExportFormat = 'CSV' | 'LANDXML';
+export type ExportFormat =
+  | 'CSV'
+  | 'LANDXML';
 
 /** Which coordinate space the exported northing/easting are in. */
-export type ExportSpace = 'GEOGRAPHIC' | 'GRID' | 'PROJECTED_GRID' | 'PROJECTED_GROUND';
+export type ExportSpace =
+  | 'GEOGRAPHIC'
+  | 'GRID'
+  | 'PROJECTED_GRID'
+  | 'PROJECTED_GROUND';
 
 /** Input for replacing the grid. `position` is expressed in `unit`. */
 export type GridAxisInput = {
@@ -47,107 +53,50 @@ export type GridAxisInput = {
 };
 
 /** Which family a grid axis belongs to. */
-export type GridFamily = 'LETTERED' | 'NUMBERED';
+export type GridFamily =
+  | 'LETTERED'
+  | 'NUMBERED';
 
 /** Import file format. */
-export type ImportFormat = 'CSV' | 'LANDXML';
+export type ImportFormat =
+  | 'CSV'
+  | 'LANDXML';
 
 /** A length unit used at I/O boundaries. The canonical internal unit is meters. */
-export type LengthUnit = 'INTERNATIONAL_FOOT' | 'METER' | 'US_SURVEY_FOOT';
+export type LengthUnit =
+  | 'INTERNATIONAL_FOOT'
+  | 'METER'
+  | 'US_SURVEY_FOOT';
 
 /** In-org role. The string values match the `users.role` CHECK constraint. */
-export type Role = 'ADMIN' | 'SURVEYOR' | 'VIEWER';
+export type Role =
+  | 'ADMIN'
+  | 'SURVEYOR'
+  | 'VIEWER';
 
 export type WorkspaceQueryVariables = Exact<{
   id: string;
 }>;
 
-export type WorkspaceQuery = {
-  surveyPointCount: number;
-  project: {
-    id: string;
-    orgId: string;
-    name: string;
-    description: string;
-    epsgCode: number;
-    displayUnit: LengthUnit;
-    combinedScaleFactor: number;
-    siteOriginLat: number | null;
-    siteOriginLon: number | null;
-    createdAt: string;
-    updatedAt: string;
-  } | null;
-  gridAxes: Array<{
-    id: string;
-    projectId: string;
-    family: GridFamily;
-    label: string;
-    position: number;
-  }>;
-  controlPoints: Array<{
-    id: string;
-    projectId: string;
-    label: string;
-    northing: number;
-    easting: number;
-    elevation: number | null;
-    gridX: number | null;
-    gridY: number | null;
-    source: string;
-  }>;
-  transform: {
-    translationE: number;
-    translationN: number;
-    rotationDegrees: number;
-    scale: number;
-    rmsError: number;
-    pointCount: number;
-    residuals: Array<{
-      label: string;
-      deltaEasting: number;
-      deltaNorthing: number;
-      magnitude: number;
-    }>;
-  } | null;
-  categories: Array<{
-    id: string;
-    orgId: string;
-    name: string;
-    color: string;
-    icon: string;
-    isDefault: boolean;
-  }>;
-};
 
-export type ProjectsQueryVariables = Exact<{ [key: string]: never }>;
+export type WorkspaceQuery = { surveyPointCount: number, project: { id: string, orgId: string, name: string, description: string, epsgCode: number, displayUnit: LengthUnit, combinedScaleFactor: number, siteOriginLat: number | null, siteOriginLon: number | null, createdAt: string, updatedAt: string } | null, gridAxes: Array<{ id: string, projectId: string, family: GridFamily, label: string, position: number }>, controlPoints: Array<{ id: string, projectId: string, label: string, northing: number, easting: number, elevation: number | null, gridX: number | null, gridY: number | null, source: string }>, transform: { translationE: number, translationN: number, rotationDegrees: number, scale: number, rmsError: number, pointCount: number, residuals: Array<{ label: string, deltaEasting: number, deltaNorthing: number, magnitude: number }> } | null, categories: Array<{ id: string, orgId: string, name: string, color: string, icon: string, isDefault: boolean }>, cadOverlays: Array<{ id: string, projectId: string, originalFilename: string, offsetE: number, offsetN: number, rotationDeg: number, scale: number, assumeRealWorld: boolean, visible: boolean }> };
 
-export type ProjectsQuery = {
-  projects: Array<{
-    id: string;
-    orgId: string;
-    name: string;
-    description: string;
-    epsgCode: number;
-    displayUnit: LengthUnit;
-    combinedScaleFactor: number;
-    siteOriginLat: number | null;
-    siteOriginLon: number | null;
-    createdAt: string;
-    updatedAt: string;
-  }>;
-};
+export type ProjectsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ProjectsQuery = { projects: Array<{ id: string, orgId: string, name: string, description: string, epsgCode: number, displayUnit: LengthUnit, combinedScaleFactor: number, siteOriginLat: number | null, siteOriginLon: number | null, createdAt: string, updatedAt: string }> };
 
 export type DeleteProjectMutationVariables = Exact<{
   id: string;
 }>;
 
+
 export type DeleteProjectMutation = { deleteProject: boolean };
 
-export type SettingsMeQueryVariables = Exact<{ [key: string]: never }>;
+export type SettingsMeQueryVariables = Exact<{ [key: string]: never; }>;
 
-export type SettingsMeQuery = {
-  me: { id: string; orgId: string; email: string; role: Role; emailVerified: boolean } | null;
-};
+
+export type SettingsMeQuery = { me: { id: string, orgId: string, email: string, role: Role, emailVerified: boolean } | null };
 
 export type SignupMutationVariables = Exact<{
   e: string;
@@ -155,21 +104,23 @@ export type SignupMutationVariables = Exact<{
   o: string;
 }>;
 
+
 export type SignupMutation = { signup: { verificationToken: string } };
 
 export type VerifyEmailMutationVariables = Exact<{
   t: string;
 }>;
 
+
 export type VerifyEmailMutation = { verifyEmail: boolean };
 
-export type MeQueryVariables = Exact<{ [key: string]: never }>;
+export type MeQueryVariables = Exact<{ [key: string]: never; }>;
 
-export type MeQuery = {
-  me: { id: string; orgId: string; email: string; role: Role; emailVerified: boolean } | null;
-};
 
-export type LogoutMutationVariables = Exact<{ [key: string]: never }>;
+export type MeQuery = { me: { id: string, orgId: string, email: string, role: Role, emailVerified: boolean } | null };
+
+export type LogoutMutationVariables = Exact<{ [key: string]: never; }>;
+
 
 export type LogoutMutation = { logout: boolean };
 
@@ -178,6 +129,7 @@ export type LoginMutationVariables = Exact<{
   p: string;
 }>;
 
+
 export type LoginMutation = { login: { id: string } };
 
 export type UploadDxfMutationVariables = Exact<{
@@ -185,6 +137,7 @@ export type UploadDxfMutationVariables = Exact<{
   f: string;
   c: string;
 }>;
+
 
 export type UploadDxfMutation = { uploadDxf: { id: string } };
 
@@ -197,13 +150,38 @@ export type SetCadGeoreferenceMutationVariables = Exact<{
   vis?: boolean | null | undefined;
 }>;
 
+
 export type SetCadGeoreferenceMutation = { setCadGeoreference: { id: string } };
 
 export type DeleteCadOverlayMutationVariables = Exact<{
   id: string;
 }>;
 
+
 export type DeleteCadOverlayMutation = { deleteCadOverlay: boolean };
+
+export type SiteProjectedQueryVariables = Exact<{
+  id: string;
+  lon: number;
+  lat: number;
+}>;
+
+
+export type SiteProjectedQuery = { convertCoordinate: { projectedGridE: number | null, projectedGridN: number | null } };
+
+export type CadOverlayDxfQueryVariables = Exact<{
+  id: string;
+}>;
+
+
+export type CadOverlayDxfQuery = { cadOverlayContent: string };
+
+export type OverlayScenePointsQueryVariables = Exact<{
+  id: string;
+}>;
+
+
+export type OverlayScenePointsQuery = { sceneData: { controlPoints: Array<{ easting: number, northing: number }>, surveyPoints: Array<{ easting: number, northing: number }> } };
 
 export type CreateCategoryMutationVariables = Exact<{
   name: string;
@@ -211,11 +189,13 @@ export type CreateCategoryMutationVariables = Exact<{
   icon: string;
 }>;
 
+
 export type CreateCategoryMutation = { createCategory: { id: string } };
 
 export type DeleteCategoryMutationVariables = Exact<{
   id: string;
 }>;
+
 
 export type DeleteCategoryMutation = { deleteCategory: boolean };
 
@@ -231,11 +211,13 @@ export type AddControlPointMutationVariables = Exact<{
   src?: string | null | undefined;
 }>;
 
+
 export type AddControlPointMutation = { addControlPoint: { id: string } };
 
 export type DeleteControlPointMutationVariables = Exact<{
   id: string;
 }>;
+
 
 export type DeleteControlPointMutation = { deleteControlPoint: boolean };
 
@@ -247,18 +229,8 @@ export type StandaloneConvertQueryVariables = Exact<{
   unit: LengthUnit;
 }>;
 
-export type StandaloneConvertQuery = {
-  convertCoordinate: {
-    gridX: number | null;
-    gridY: number | null;
-    projectedGridE: number | null;
-    projectedGridN: number | null;
-    projectedGroundE: number | null;
-    projectedGroundN: number | null;
-    latitude: number | null;
-    longitude: number | null;
-  };
-};
+
+export type StandaloneConvertQuery = { convertCoordinate: { gridX: number | null, gridY: number | null, projectedGridE: number | null, projectedGridN: number | null, projectedGroundE: number | null, projectedGroundN: number | null, latitude: number | null, longitude: number | null } };
 
 export type ConvertCoordinateQueryVariables = Exact<{
   id: string;
@@ -266,18 +238,8 @@ export type ConvertCoordinateQueryVariables = Exact<{
   y: number;
 }>;
 
-export type ConvertCoordinateQuery = {
-  convertCoordinate: {
-    gridX: number | null;
-    gridY: number | null;
-    projectedGridE: number | null;
-    projectedGridN: number | null;
-    projectedGroundE: number | null;
-    projectedGroundN: number | null;
-    latitude: number | null;
-    longitude: number | null;
-  };
-};
+
+export type ConvertCoordinateQuery = { convertCoordinate: { gridX: number | null, gridY: number | null, projectedGridE: number | null, projectedGridN: number | null, projectedGroundE: number | null, projectedGroundN: number | null, latitude: number | null, longitude: number | null } };
 
 export type CreateProjectMutationVariables = Exact<{
   name: string;
@@ -288,6 +250,7 @@ export type CreateProjectMutationVariables = Exact<{
   lat?: number | null | undefined;
   lon?: number | null | undefined;
 }>;
+
 
 export type CreateProjectMutation = { createProject: { id: string } };
 
@@ -303,6 +266,7 @@ export type UpdateControlPointMutationVariables = Exact<{
   src?: string | null | undefined;
 }>;
 
+
 export type UpdateControlPointMutation = { updateControlPoint: { id: string } };
 
 export type UpdateProjectMutationVariables = Exact<{
@@ -316,6 +280,7 @@ export type UpdateProjectMutationVariables = Exact<{
   lon?: number | null | undefined;
 }>;
 
+
 export type UpdateProjectMutation = { updateProject: { id: string } };
 
 export type SearchEpsgQueryVariables = Exact<{
@@ -323,7 +288,8 @@ export type SearchEpsgQueryVariables = Exact<{
   limit?: number | null | undefined;
 }>;
 
-export type SearchEpsgQuery = { searchEpsg: Array<{ code: number; name: string }> };
+
+export type SearchEpsgQuery = { searchEpsg: Array<{ code: number, name: string }> };
 
 export type ExportPointsQueryVariables = Exact<{
   id: string;
@@ -335,6 +301,7 @@ export type ExportPointsQueryVariables = Exact<{
   categoryId?: string | null | undefined;
 }>;
 
+
 export type ExportPointsQuery = { exportPoints: string };
 
 export type SetGridAxesMutationVariables = Exact<{
@@ -343,7 +310,31 @@ export type SetGridAxesMutationVariables = Exact<{
   axes: Array<GridAxisInput> | GridAxisInput;
 }>;
 
+
 export type SetGridAxesMutation = { setGridAxes: Array<{ id: string }> };
+
+export type GroupManagerGroupsQueryVariables = Exact<{
+  id: string;
+}>;
+
+
+export type GroupManagerGroupsQuery = { pointGroups: Array<{ id: string, projectId: string, name: string, memberIds: Array<string> }> };
+
+export type GroupManagerCreateMutationVariables = Exact<{
+  id: string;
+  name: string;
+  ids: Array<string> | string;
+}>;
+
+
+export type GroupManagerCreateMutation = { createPointGroup: { id: string } };
+
+export type GroupManagerDeleteMutationVariables = Exact<{
+  id: string;
+}>;
+
+
+export type GroupManagerDeleteMutation = { deletePointGroup: boolean };
 
 export type ImportPointsMutationVariables = Exact<{
   id: string;
@@ -356,50 +347,36 @@ export type ImportPointsMutationVariables = Exact<{
   profile?: string | null | undefined;
 }>;
 
+
 export type ImportPointsMutation = { importPoints: { rowCount: number } };
 
 export type SceneQueryVariables = Exact<{
   id: string;
 }>;
 
-export type SceneQuery = {
-  sceneData: {
-    originProjectedE: number | null;
-    originProjectedN: number | null;
-    origin: { latitude: number; longitude: number; height: number } | null;
-    controlPoints: Array<{
-      id: string | null;
-      label: string;
-      latitude: number;
-      longitude: number;
-      height: number;
-      easting: number;
-      northing: number;
-      categoryId: string | null;
-    }>;
-    surveyPoints: Array<{
-      id: string | null;
-      label: string;
-      latitude: number;
-      longitude: number;
-      height: number;
-      easting: number;
-      northing: number;
-      categoryId: string | null;
-    }>;
-    gridLines: Array<{
-      label: string;
-      coordinates: Array<{ latitude: number; longitude: number; height: number }>;
-    }>;
-  };
-  projectTerrain: { demtype: string; fetchedAt: string } | null;
-};
+
+export type SceneQuery = { sceneData: { originProjectedE: number | null, originProjectedN: number | null, origin: { latitude: number, longitude: number, height: number } | null, controlPoints: Array<{ id: string | null, label: string, latitude: number, longitude: number, height: number, easting: number, northing: number, categoryId: string | null }>, surveyPoints: Array<{ id: string | null, label: string, latitude: number, longitude: number, height: number, easting: number, northing: number, categoryId: string | null }>, gridLines: Array<{ label: string, coordinates: Array<{ latitude: number, longitude: number, height: number }> }> }, projectTerrain: { demtype: string, fetchedAt: string } | null, projectBuildings: { count: number, fetchedAt: string } | null, cadOverlays: Array<{ id: string, offsetE: number, offsetN: number, rotationDeg: number, scale: number, visible: boolean }>, pointGroups: Array<{ id: string, name: string, memberIds: Array<string> }> };
 
 export type TerrainContentQueryVariables = Exact<{
   id: string;
 }>;
 
+
 export type TerrainContentQuery = { projectTerrainContent: string };
+
+export type BuildingsContentQueryVariables = Exact<{
+  id: string;
+}>;
+
+
+export type BuildingsContentQuery = { projectBuildingsContent: string };
+
+export type OverlayContentQueryVariables = Exact<{
+  id: string;
+}>;
+
+
+export type OverlayContentQuery = { cadOverlayContent: string };
 
 export type RefreshTerrainMutationVariables = Exact<{
   id: string;
@@ -410,37 +387,39 @@ export type RefreshTerrainMutationVariables = Exact<{
   force?: boolean | null | undefined;
 }>;
 
-export type RefreshTerrainMutation = { refreshTerrain: { demtype: string; fetchedAt: string } };
+
+export type RefreshTerrainMutation = { refreshTerrain: { demtype: string, fetchedAt: string } };
+
+export type RefreshBuildingsMutationVariables = Exact<{
+  id: string;
+  south: number;
+  north: number;
+  west: number;
+  east: number;
+  force?: boolean | null | undefined;
+}>;
+
+
+export type RefreshBuildingsMutation = { refreshBuildings: { count: number, fetchedAt: string } };
 
 export type SurveyPointsQueryVariables = Exact<{
   id: string;
   search?: string | null | undefined;
   cat?: string | null | undefined;
+  group?: string | null | undefined;
   limit?: number | null | undefined;
   offset?: number | null | undefined;
   sort?: string | null | undefined;
   descending?: boolean | null | undefined;
 }>;
 
-export type SurveyPointsQuery = {
-  surveyPointCount: number;
-  surveyPoints: Array<{
-    id: string;
-    projectId: string;
-    label: string;
-    northing: number;
-    easting: number;
-    elevation: number | null;
-    description: string;
-    categoryId: string | null;
-    tags: Array<string>;
-    importBatchId: string | null;
-  }>;
-};
+
+export type SurveyPointsQuery = { surveyPointCount: number, surveyPoints: Array<{ id: string, projectId: string, label: string, northing: number, easting: number, elevation: number | null, description: string, categoryId: string | null, tags: Array<string>, importBatchId: string | null }> };
 
 export type DeleteSurveyPointMutationVariables = Exact<{
   id: string;
 }>;
+
 
 export type DeleteSurveyPointMutation = { deleteSurveyPoint: boolean };
 
@@ -448,12 +427,14 @@ export type DeleteSurveyPointsMutationVariables = Exact<{
   ids: Array<string> | string;
 }>;
 
+
 export type DeleteSurveyPointsMutation = { deleteSurveyPoints: number };
 
 export type AssignCategoryMutationVariables = Exact<{
   ids: Array<string> | string;
   cat?: string | null | undefined;
 }>;
+
 
 export type AssignCategoryMutation = { assignCategory: number };
 
@@ -463,28 +444,30 @@ export type CreatePointGroupMutationVariables = Exact<{
   ids: Array<string> | string;
 }>;
 
+
 export type CreatePointGroupMutation = { createPointGroup: { id: string } };
+
+export type PointGroupsQueryVariables = Exact<{
+  id: string;
+}>;
+
+
+export type PointGroupsQuery = { pointGroups: Array<{ id: string, projectId: string, name: string, memberIds: Array<string> }> };
+
+export type AddPointsToGroupMutationVariables = Exact<{
+  groupId: string;
+  ids: Array<string> | string;
+}>;
+
+
+export type AddPointsToGroupMutation = { addPointsToGroup: { id: string, memberIds: Array<string> } };
 
 export type SolveTransformMutationVariables = Exact<{
   id: string;
 }>;
 
-export type SolveTransformMutation = {
-  solveTransform: {
-    translationE: number;
-    translationN: number;
-    rotationDegrees: number;
-    scale: number;
-    rmsError: number;
-    pointCount: number;
-    residuals: Array<{
-      label: string;
-      deltaEasting: number;
-      deltaNorthing: number;
-      magnitude: number;
-    }>;
-  };
-};
+
+export type SolveTransformMutation = { solveTransform: { translationE: number, translationN: number, rotationDegrees: number, scale: number, rmsError: number, pointCount: number, residuals: Array<{ label: string, deltaEasting: number, deltaNorthing: number, magnitude: number }> } };
 
 export class TypedDocumentString<TResult, TVariables>
   extends String
@@ -559,6 +542,17 @@ export const WorkspaceDocument = new TypedDocumentString(`
     color
     icon
     isDefault
+  }
+  cadOverlays(projectId: $id) {
+    id
+    projectId
+    originalFilename
+    offsetE
+    offsetN
+    rotationDeg
+    scale
+    assumeRealWorld
+    visible
   }
   surveyPointCount(projectId: $id)
 }
@@ -651,18 +645,45 @@ export const SetCadGeoreferenceDocument = new TypedDocumentString(`
     id
   }
 }
-    `) as unknown as TypedDocumentString<
-  SetCadGeoreferenceMutation,
-  SetCadGeoreferenceMutationVariables
->;
+    `) as unknown as TypedDocumentString<SetCadGeoreferenceMutation, SetCadGeoreferenceMutationVariables>;
 export const DeleteCadOverlayDocument = new TypedDocumentString(`
     mutation DeleteCadOverlay($id: UUID!) {
   deleteCadOverlay(id: $id)
 }
-    `) as unknown as TypedDocumentString<
-  DeleteCadOverlayMutation,
-  DeleteCadOverlayMutationVariables
->;
+    `) as unknown as TypedDocumentString<DeleteCadOverlayMutation, DeleteCadOverlayMutationVariables>;
+export const SiteProjectedDocument = new TypedDocumentString(`
+    query SiteProjected($id: UUID!, $lon: Float!, $lat: Float!) {
+  convertCoordinate(
+    projectId: $id
+    space: GEOGRAPHIC
+    x: $lon
+    y: $lat
+    unit: METER
+  ) {
+    projectedGridE
+    projectedGridN
+  }
+}
+    `) as unknown as TypedDocumentString<SiteProjectedQuery, SiteProjectedQueryVariables>;
+export const CadOverlayDxfDocument = new TypedDocumentString(`
+    query CadOverlayDxf($id: UUID!) {
+  cadOverlayContent(id: $id)
+}
+    `) as unknown as TypedDocumentString<CadOverlayDxfQuery, CadOverlayDxfQueryVariables>;
+export const OverlayScenePointsDocument = new TypedDocumentString(`
+    query OverlayScenePoints($id: UUID!) {
+  sceneData(projectId: $id) {
+    controlPoints {
+      easting
+      northing
+    }
+    surveyPoints {
+      easting
+      northing
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<OverlayScenePointsQuery, OverlayScenePointsQueryVariables>;
 export const CreateCategoryDocument = new TypedDocumentString(`
     mutation CreateCategory($name: String!, $color: String!, $icon: String!) {
   createCategory(name: $name, color: $color, icon: $icon) {
@@ -696,10 +717,7 @@ export const DeleteControlPointDocument = new TypedDocumentString(`
     mutation DeleteControlPoint($id: UUID!) {
   deleteControlPoint(id: $id)
 }
-    `) as unknown as TypedDocumentString<
-  DeleteControlPointMutation,
-  DeleteControlPointMutationVariables
->;
+    `) as unknown as TypedDocumentString<DeleteControlPointMutation, DeleteControlPointMutationVariables>;
 export const StandaloneConvertDocument = new TypedDocumentString(`
     query StandaloneConvert($id: UUID!, $space: CoordinateSpace!, $x: Float!, $y: Float!, $unit: LengthUnit!) {
   convertCoordinate(projectId: $id, space: $space, x: $x, y: $y, unit: $unit) {
@@ -759,10 +777,7 @@ export const UpdateControlPointDocument = new TypedDocumentString(`
     id
   }
 }
-    `) as unknown as TypedDocumentString<
-  UpdateControlPointMutation,
-  UpdateControlPointMutationVariables
->;
+    `) as unknown as TypedDocumentString<UpdateControlPointMutation, UpdateControlPointMutationVariables>;
 export const UpdateProjectDocument = new TypedDocumentString(`
     mutation UpdateProject($id: UUID!, $name: String, $desc: String, $epsg: Int, $unit: LengthUnit, $scale: Float, $lat: Float, $lon: Float) {
   updateProject(
@@ -807,6 +822,28 @@ export const SetGridAxesDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SetGridAxesMutation, SetGridAxesMutationVariables>;
+export const GroupManagerGroupsDocument = new TypedDocumentString(`
+    query GroupManagerGroups($id: UUID!) {
+  pointGroups(projectId: $id) {
+    id
+    projectId
+    name
+    memberIds
+  }
+}
+    `) as unknown as TypedDocumentString<GroupManagerGroupsQuery, GroupManagerGroupsQueryVariables>;
+export const GroupManagerCreateDocument = new TypedDocumentString(`
+    mutation GroupManagerCreate($id: UUID!, $name: String!, $ids: [UUID!]!) {
+  createPointGroup(projectId: $id, name: $name, memberIds: $ids) {
+    id
+  }
+}
+    `) as unknown as TypedDocumentString<GroupManagerCreateMutation, GroupManagerCreateMutationVariables>;
+export const GroupManagerDeleteDocument = new TypedDocumentString(`
+    mutation GroupManagerDelete($id: UUID!) {
+  deletePointGroup(id: $id)
+}
+    `) as unknown as TypedDocumentString<GroupManagerDeleteMutation, GroupManagerDeleteMutationVariables>;
 export const ImportPointsDocument = new TypedDocumentString(`
     mutation ImportPoints($id: UUID!, $format: ImportFormat!, $content: String!, $unit: LengthUnit!, $mapping: CsvMappingInput, $filename: String, $categoryId: UUID, $profile: String) {
   importPoints(
@@ -866,6 +903,23 @@ export const SceneDocument = new TypedDocumentString(`
     demtype
     fetchedAt
   }
+  projectBuildings(projectId: $id) {
+    count
+    fetchedAt
+  }
+  cadOverlays(projectId: $id) {
+    id
+    offsetE
+    offsetN
+    rotationDeg
+    scale
+    visible
+  }
+  pointGroups(projectId: $id) {
+    id
+    name
+    memberIds
+  }
 }
     `) as unknown as TypedDocumentString<SceneQuery, SceneQueryVariables>;
 export const TerrainContentDocument = new TypedDocumentString(`
@@ -873,6 +927,16 @@ export const TerrainContentDocument = new TypedDocumentString(`
   projectTerrainContent(projectId: $id)
 }
     `) as unknown as TypedDocumentString<TerrainContentQuery, TerrainContentQueryVariables>;
+export const BuildingsContentDocument = new TypedDocumentString(`
+    query BuildingsContent($id: UUID!) {
+  projectBuildingsContent(projectId: $id)
+}
+    `) as unknown as TypedDocumentString<BuildingsContentQuery, BuildingsContentQueryVariables>;
+export const OverlayContentDocument = new TypedDocumentString(`
+    query OverlayContent($id: UUID!) {
+  cadOverlayContent(id: $id)
+}
+    `) as unknown as TypedDocumentString<OverlayContentQuery, OverlayContentQueryVariables>;
 export const RefreshTerrainDocument = new TypedDocumentString(`
     mutation RefreshTerrain($id: UUID!, $south: Float!, $north: Float!, $west: Float!, $east: Float!, $force: Boolean) {
   refreshTerrain(
@@ -888,12 +952,28 @@ export const RefreshTerrainDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<RefreshTerrainMutation, RefreshTerrainMutationVariables>;
+export const RefreshBuildingsDocument = new TypedDocumentString(`
+    mutation RefreshBuildings($id: UUID!, $south: Float!, $north: Float!, $west: Float!, $east: Float!, $force: Boolean) {
+  refreshBuildings(
+    projectId: $id
+    south: $south
+    north: $north
+    west: $west
+    east: $east
+    force: $force
+  ) {
+    count
+    fetchedAt
+  }
+}
+    `) as unknown as TypedDocumentString<RefreshBuildingsMutation, RefreshBuildingsMutationVariables>;
 export const SurveyPointsDocument = new TypedDocumentString(`
-    query SurveyPoints($id: UUID!, $search: String, $cat: UUID, $limit: Int, $offset: Int, $sort: String, $descending: Boolean) {
+    query SurveyPoints($id: UUID!, $search: String, $cat: UUID, $group: UUID, $limit: Int, $offset: Int, $sort: String, $descending: Boolean) {
   surveyPoints(
     projectId: $id
     search: $search
     categoryId: $cat
+    groupId: $group
     limit: $limit
     offset: $offset
     sort: $sort
@@ -910,25 +990,24 @@ export const SurveyPointsDocument = new TypedDocumentString(`
     tags
     importBatchId
   }
-  surveyPointCount(projectId: $id, search: $search, categoryId: $cat)
+  surveyPointCount(
+    projectId: $id
+    search: $search
+    categoryId: $cat
+    groupId: $group
+  )
 }
     `) as unknown as TypedDocumentString<SurveyPointsQuery, SurveyPointsQueryVariables>;
 export const DeleteSurveyPointDocument = new TypedDocumentString(`
     mutation DeleteSurveyPoint($id: UUID!) {
   deleteSurveyPoint(id: $id)
 }
-    `) as unknown as TypedDocumentString<
-  DeleteSurveyPointMutation,
-  DeleteSurveyPointMutationVariables
->;
+    `) as unknown as TypedDocumentString<DeleteSurveyPointMutation, DeleteSurveyPointMutationVariables>;
 export const DeleteSurveyPointsDocument = new TypedDocumentString(`
     mutation DeleteSurveyPoints($ids: [UUID!]!) {
   deleteSurveyPoints(ids: $ids)
 }
-    `) as unknown as TypedDocumentString<
-  DeleteSurveyPointsMutation,
-  DeleteSurveyPointsMutationVariables
->;
+    `) as unknown as TypedDocumentString<DeleteSurveyPointsMutation, DeleteSurveyPointsMutationVariables>;
 export const AssignCategoryDocument = new TypedDocumentString(`
     mutation AssignCategory($ids: [UUID!]!, $cat: UUID) {
   assignCategory(ids: $ids, categoryId: $cat)
@@ -940,10 +1019,25 @@ export const CreatePointGroupDocument = new TypedDocumentString(`
     id
   }
 }
-    `) as unknown as TypedDocumentString<
-  CreatePointGroupMutation,
-  CreatePointGroupMutationVariables
->;
+    `) as unknown as TypedDocumentString<CreatePointGroupMutation, CreatePointGroupMutationVariables>;
+export const PointGroupsDocument = new TypedDocumentString(`
+    query PointGroups($id: UUID!) {
+  pointGroups(projectId: $id) {
+    id
+    projectId
+    name
+    memberIds
+  }
+}
+    `) as unknown as TypedDocumentString<PointGroupsQuery, PointGroupsQueryVariables>;
+export const AddPointsToGroupDocument = new TypedDocumentString(`
+    mutation AddPointsToGroup($groupId: UUID!, $ids: [UUID!]!) {
+  addPointsToGroup(groupId: $groupId, memberIds: $ids) {
+    id
+    memberIds
+  }
+}
+    `) as unknown as TypedDocumentString<AddPointsToGroupMutation, AddPointsToGroupMutationVariables>;
 export const SolveTransformDocument = new TypedDocumentString(`
     mutation SolveTransform($id: UUID!) {
   solveTransform(projectId: $id) {

@@ -303,6 +303,10 @@ type MutationRoot {
 	"""
 	deletePointGroup(id: UUID!): Boolean!
 	"""
+	Adds points to an existing group (union, de-duplicated). Editor role.
+	"""
+	addPointsToGroup(groupId: UUID!, memberIds: [UUID!]!): PointGroup!
+	"""
 	Uploads a DXF file: stores the raw text and creates an overlay record
 	(defaulting to real-world georeferencing). Editor role required.
 	"""
@@ -314,6 +318,11 @@ type MutationRoot {
 	The DEM is fetched server-side here; the API key never reaches the client.
 	"""
 	refreshTerrain(projectId: UUID!, south: Float!, north: Float!, west: Float!, east: Float!, demtype: String, force: Boolean): ProjectTerrain!
+	"""
+	Fetches (if needed) and caches OSM building footprints for the bbox from
+	the free Overpass API. Same 7-day cooldown as terrain. Visual context only.
+	"""
+	refreshBuildings(projectId: UUID!, south: Float!, north: Float!, west: Float!, east: Float!, force: Boolean): ProjectBuildings!
 	"""
 	Updates an overlay's georeference / visibility. Editor role required.
 	"""
@@ -370,6 +379,16 @@ type Project {
 	siteOriginLon: Float
 	createdAt: DateTime!
 	updatedAt: DateTime!
+}
+
+"""
+Cached OpenStreetMap building footprints for a project (the footprint JSON
+lives in storage; `storage_key` is intentionally not exposed via GraphQL).
+"""
+type ProjectBuildings {
+	projectId: UUID!
+	count: Int!
+	fetchedAt: DateTime!
 }
 
 """
@@ -449,12 +468,12 @@ type QueryRoot {
 	(label/description/tags) and/or category. Paginated: `limit` is clamped to
 	[1, 1000] (default 200) so the list query is always bounded.
 	"""
-	surveyPoints(projectId: UUID!, search: String, categoryId: UUID, limit: Int, offset: Int, sort: String, descending: Boolean): [SurveyPoint!]!
+	surveyPoints(projectId: UUID!, search: String, categoryId: UUID, groupId: UUID, limit: Int, offset: Int, sort: String, descending: Boolean): [SurveyPoint!]!
 	"""
 	Total count of surveyed points matching the same filters as `surveyPoints`.
 	Lets the UI paginate without fetching every row.
 	"""
-	surveyPointCount(projectId: UUID!, search: String, categoryId: UUID): Int!
+	surveyPointCount(projectId: UUID!, search: String, categoryId: UUID, groupId: UUID): Int!
 	"""
 	Import batches for a project.
 	"""
@@ -484,6 +503,15 @@ type QueryRoot {
 	Base64-encoded cached DEM GeoTIFF for the project's terrain.
 	"""
 	projectTerrainContent(projectId: UUID!): String!
+	"""
+	Cached OSM buildings metadata for a project (null when none fetched yet).
+	"""
+	projectBuildings(projectId: UUID!): ProjectBuildings
+	"""
+	The cached building footprints as a JSON string:
+	`[{"poly":[[lat,lon],...],"height":<m>}, ...]`.
+	"""
+	projectBuildingsContent(projectId: UUID!): String!
 	"""
 	Searches the EPSG coordinate-reference-system catalog by code or name.
 	"""
