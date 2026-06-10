@@ -13,7 +13,7 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
           stays adjacent to the reading column instead of drifting left. */}
       <div className="mx-auto flex min-h-full w-full max-w-5xl justify-center">
         <DocsNav items={items} />
-        <div className="flex min-w-0 w-full max-w-3xl flex-col">{children}</div>
+        <div className="flex w-full max-w-3xl min-w-0 flex-col">{children}</div>
       </div>
       <Toaster />
     </AppShell>

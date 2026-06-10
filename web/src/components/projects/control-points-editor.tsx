@@ -221,7 +221,12 @@ export function ControlPointsEditor({
           <div className="grid grid-cols-2 gap-4">
             <Field className="col-span-2">
               <FieldLabel htmlFor="cp-label">Label</FieldLabel>
-              <Input id="cp-label" value={label} onChange={(e) => setLabel(e.target.value)} required />
+              <Input
+                id="cp-label"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                required
+              />
             </Field>
             <Field>
               <FieldLabel htmlFor="cp-northing">Northing</FieldLabel>

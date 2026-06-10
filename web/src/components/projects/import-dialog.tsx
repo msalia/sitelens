@@ -284,7 +284,9 @@ export function ImportDialog({
               <Field>
                 <FieldLabel htmlFor="imp-profile" className="w-full">
                   Save as import profile
-                  <span className="text-muted-foreground ml-auto text-xs font-normal">Optional</span>
+                  <span className="text-muted-foreground ml-auto text-xs font-normal">
+                    Optional
+                  </span>
                 </FieldLabel>
                 <Input
                   id="imp-profile"

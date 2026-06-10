@@ -92,7 +92,7 @@ const WORKSPACE_QUERY = graphql(`
   }
 `);
 
-type Tab = 'setup' | 'grid' | 'points' | 'convert';
+type Tab = 'setup' | 'control' | 'grid' | 'points' | 'convert';
 
 export default function ProjectWorkspace() {
   const { id } = useParams<{ id: string }>();
@@ -115,6 +115,10 @@ export default function ProjectWorkspace() {
   const navigateTo = useCallback((target: string) => {
     if (target === 'panel-grid' || target === 'panel-transform') {
       setTab('grid');
+      return;
+    }
+    if (target === 'panel-control') {
+      setTab('control');
       return;
     }
     if (target === 'panel-points') {
@@ -190,6 +194,7 @@ export default function ProjectWorkspace() {
           {(
             [
               ['setup', 'Setup'],
+              ['control', 'Control'],
               ['grid', 'Grid'],
               ['points', 'Points'],
               ['convert', 'Converter'],
@@ -215,18 +220,18 @@ export default function ProjectWorkspace() {
             otherwise shrink and clip their overflow-hidden content). */}
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 [&>*]:shrink-0">
           {tab === 'setup' && (
-            <>
-              <SetupChecklist
-                axesCount={axes.length}
-                controlPointsWithGrid={tiedControlPoints}
-                transformSolved={transform !== null}
-                pointCount={pointCount}
-                onNavigate={navigateTo}
-              />
-              <section id="panel-control">
-                <ControlPointsEditor project={project} points={points} onChanged={load} />
-              </section>
-            </>
+            <SetupChecklist
+              axesCount={axes.length}
+              controlPointsWithGrid={tiedControlPoints}
+              transformSolved={transform !== null}
+              pointCount={pointCount}
+              onNavigate={navigateTo}
+            />
+          )}
+          {tab === 'control' && (
+            <section id="panel-control">
+              <ControlPointsEditor project={project} points={points} onChanged={load} />
+            </section>
           )}
           {tab === 'grid' && (
             <>
@@ -255,7 +260,11 @@ export default function ProjectWorkspace() {
       {/* Hero — persistent 3D scene + live stat pills */}
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center justify-end gap-2 px-4 pt-4">
-          <StatPill icon={<IconMapPin className="size-3.5" />} label="Control" value={points.length} />
+          <StatPill
+            icon={<IconMapPin className="size-3.5" />}
+            label="Control"
+            value={points.length}
+          />
           <StatPill icon={<IconPoint className="size-3.5" />} label="Points" value={pointCount} />
           <StatPill
             icon={

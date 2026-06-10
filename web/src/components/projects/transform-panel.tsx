@@ -90,7 +90,11 @@ export function TransformPanel({
           <>
             <div className="grid grid-cols-2 gap-3">
               <Stat label="Scale" sub="factor" value={transform.scale.toFixed(6)} />
-              <Stat label="Rotation" sub="clockwise" value={`${transform.rotationDegrees.toFixed(4)}°`} />
+              <Stat
+                label="Rotation"
+                sub="clockwise"
+                value={`${transform.rotationDegrees.toFixed(4)}°`}
+              />
               <Stat label="RMS" sub={unitLabel} value={inUnit(transform.rmsError)} />
               <Stat label="Points" sub="fitted" value={String(transform.pointCount)} />
             </div>

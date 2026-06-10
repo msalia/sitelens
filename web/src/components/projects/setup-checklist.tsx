@@ -1,21 +1,57 @@
 'use client';
 
-import { IconCircleCheckFilled, IconCircleDashed } from '@tabler/icons-react';
+import { IconFileImport, IconLayoutGrid, IconMapPin, IconTransform } from '@tabler/icons-react';
 
+import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 interface Step {
+  /** Label for the action button. */
   action: string;
+  description: string;
   done: boolean;
-  /** One-line guidance shown until the step is done. */
-  hint: string;
-  /** Stable key. */
+  icon: typeof IconLayoutGrid;
   key: string;
   label: string;
-  /** Element id to scroll to when the user acts on the step. */
+  /** Element id / tab target to navigate to. */
   target: string;
 }
+
+type Status = 'done' | 'next' | 'todo';
+
+/** Coordinated color tones per status — applied to the alert, icon, title,
+ *  badge, and button so each step reads as a single colored unit. */
+const TONE: Record<
+  Status,
+  { alert: string; icon: string; title: string; description: string; badge: string; button: string }
+> = {
+  done: {
+    alert: 'border-emerald-500/40 bg-emerald-500/5',
+    badge: 'border-emerald-500/30 text-emerald-600 dark:text-emerald-400',
+    button: '',
+    description: 'text-emerald-700/80 dark:text-emerald-400/80',
+    icon: 'text-emerald-600! dark:text-emerald-400!',
+    title: 'text-emerald-700 dark:text-emerald-400',
+  },
+  next: {
+    alert: 'border-amber-500/40 bg-amber-500/5',
+    badge: 'border-amber-500/30 text-amber-600 dark:text-amber-400',
+    button:
+      'bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:text-amber-400 dark:hover:bg-amber-500/25',
+    description: 'text-amber-700/80 dark:text-amber-400/80',
+    icon: 'text-amber-600! dark:text-amber-400!',
+    title: 'text-amber-700 dark:text-amber-400',
+  },
+  todo: {
+    alert: '',
+    badge: 'border-border text-muted-foreground',
+    button: '',
+    description: '',
+    icon: 'text-muted-foreground!',
+    title: '',
+  },
+};
 
 /** Scrolls a workspace section into view (sections set `scroll-mt` for offset). */
 function jumpTo(id: string) {
@@ -43,91 +79,89 @@ export function SetupChecklist({
 }) {
   const steps: Step[] = [
     {
-      action: 'Define grid',
-      done: axesCount > 0,
-      hint: 'Add the building grid axes (letters and numbers).',
-      key: 'grid',
-      label: 'Define the building grid',
-      target: 'panel-grid',
-    },
-    {
       action: 'Add control points',
+      description: 'Enter at least two city control points with their grid coordinates.',
       done: controlPointsWithGrid >= 2,
-      hint: 'Add at least two control points with grid coordinates.',
+      icon: IconMapPin,
       key: 'control',
       label: 'Add control points',
       target: 'panel-control',
     },
     {
+      action: 'Define grid',
+      description: 'Lay out the lettered and numbered gridlines that frame the site.',
+      done: axesCount > 0,
+      icon: IconLayoutGrid,
+      key: 'grid',
+      label: 'Define the building grid',
+      target: 'panel-grid',
+    },
+    {
       action: 'Solve transform',
+      description: 'Compute the Helmert tie from building grid to projected coordinates.',
       done: transformSolved,
-      hint: 'Solve the Helmert tie between grid and projected space.',
+      icon: IconTransform,
       key: 'transform',
       label: 'Solve the transform',
       target: 'panel-transform',
     },
     {
       action: 'Import points',
+      description: 'Bring in surveyed points from a CSV or LandXML machine export.',
       done: pointCount > 0,
-      hint: 'Import surveyed points from a CSV or LandXML file.',
+      icon: IconFileImport,
       key: 'import',
       label: 'Import surveyed points',
       target: 'panel-points',
     },
   ];
 
-  const doneCount = steps.filter((s) => s.done).length;
-  const allDone = doneCount === steps.length;
+  const firstPending = steps.find((s) => !s.done)?.key;
 
   return (
-    <Card className="lg:col-span-2">
-      <CardHeader className="flex-row items-center justify-between">
-        <CardTitle>Project setup</CardTitle>
-        <span className="text-muted-foreground text-sm">
-          {allDone ? 'All set' : `${doneCount} of ${steps.length} complete`}
-        </span>
-      </CardHeader>
-      <CardContent>
-        {allDone ? (
-          <p className="text-muted-foreground flex items-center gap-2 text-sm">
-            <IconCircleCheckFilled className="size-5 text-emerald-500" />
-            Setup complete — your grid is tied, the transform is solved, and points are loaded.
-          </p>
-        ) : (
-          <ol className="flex flex-col gap-2">
-            {steps.map((s) => (
-              <li
-                key={s.key}
-                className="flex items-center gap-3 rounded-lg border px-3 py-2"
-                data-done={s.done}
-              >
-                {s.done ? (
-                  <IconCircleCheckFilled className="size-5 shrink-0 text-emerald-500" />
-                ) : (
-                  <IconCircleDashed className="text-muted-foreground size-5 shrink-0" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <p
-                    className={`text-sm font-medium ${s.done ? 'text-muted-foreground line-through' : ''}`}
-                  >
-                    {s.label}
-                  </p>
-                  {!s.done && <p className="text-muted-foreground text-xs">{s.hint}</p>}
-                </div>
-                {!s.done && (
+    <div className="flex flex-col gap-3">
+      {steps.map((s) => {
+        const status: Status = s.done ? 'done' : s.key === firstPending ? 'next' : 'todo';
+        const Icon = s.icon;
+        return (
+          <Alert key={s.key} className={TONE[status].alert}>
+            <Icon className={TONE[status].icon} />
+            <AlertAction>
+              <StatusBadge status={status} />
+            </AlertAction>
+            <AlertTitle className={TONE[status].title}>{s.label}</AlertTitle>
+            <AlertDescription className={cn('block', TONE[status].description)}>
+              {s.description}
+              {!s.done && (
+                <div className="mt-2">
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="secondary"
+                    className={TONE[status].button}
                     onClick={() => (onNavigate ? onNavigate(s.target) : jumpTo(s.target))}
                   >
                     {s.action}
                   </Button>
-                )}
-              </li>
-            ))}
-          </ol>
-        )}
-      </CardContent>
-    </Card>
+                </div>
+              )}
+            </AlertDescription>
+          </Alert>
+        );
+      })}
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: Status }) {
+  const labels: Record<Status, string> = { done: 'Done', next: 'Next', todo: 'To do' };
+  return (
+    <span
+      className={cn(
+        'shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium',
+        TONE[status].badge,
+      )}
+    >
+      {labels[status]}
+    </span>
   );
 }

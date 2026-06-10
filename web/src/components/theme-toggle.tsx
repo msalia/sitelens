@@ -5,43 +5,40 @@ import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { ButtonGroup } from '@/components/ui/button-group';
 
-/** Theme switcher. Defaults to "system" (set on the provider); users can pin
- *  Light or Dark, or return to System. Renders a stable icon until mounted to
- *  avoid an SSR/client mismatch on the resolved theme. */
+const OPTIONS = [
+  { icon: IconSun, label: 'Light', value: 'light' },
+  { icon: IconMoon, label: 'Dark', value: 'dark' },
+  { icon: IconDeviceDesktop, label: 'System', value: 'system' },
+] as const;
+
+/** Theme switcher: one click to pick Light, Dark, or System (defaults to System
+ *  on the provider). Highlights the chosen setting once mounted (avoids an
+ *  SSR/client mismatch on `theme`). */
 export function ThemeToggle() {
-  const { resolvedTheme, setTheme } = useTheme();
+  const { setTheme, theme } = useTheme();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const isDark = mounted && resolvedTheme === 'dark';
-
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button variant="outline" size="icon" className="rounded-full" aria-label="Toggle theme">
-            {isDark ? <IconMoon className="size-4" /> : <IconSun className="size-4" />}
+    <ButtonGroup>
+      {OPTIONS.map(({ icon: Icon, label, value }) => {
+        const active = mounted && theme === value;
+        return (
+          <Button
+            key={value}
+            type="button"
+            size="icon"
+            variant={active ? 'default' : 'outline'}
+            aria-label={label}
+            aria-pressed={active}
+            onClick={() => setTheme(value)}
+          >
+            <Icon className="size-4" />
           </Button>
-        }
-      />
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => setTheme('light')}>
-          <IconSun className="size-4" /> Light
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme('dark')}>
-          <IconMoon className="size-4" /> Dark
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme('system')}>
-          <IconDeviceDesktop className="size-4" /> System
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+        );
+      })}
+    </ButtonGroup>
   );
 }

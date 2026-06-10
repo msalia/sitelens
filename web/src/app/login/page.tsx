@@ -34,9 +34,9 @@ export default function LoginPage() {
           }}
         />
         {/* A few "control point" ticks to evoke a survey tie. */}
-        <div className="bg-primary absolute left-[20%] top-[30%] size-2 rounded-full" />
-        <div className="bg-primary absolute left-[64%] top-[22%] size-2 rounded-full" />
-        <div className="bg-primary absolute left-[44%] top-[68%] size-2 rounded-full" />
+        <div className="bg-primary absolute top-[30%] left-[20%] size-2 rounded-full" />
+        <div className="bg-primary absolute top-[22%] left-[64%] size-2 rounded-full" />
+        <div className="bg-primary absolute top-[68%] left-[44%] size-2 rounded-full" />
         <div className="relative flex h-full flex-col items-center justify-center gap-3 p-10 text-center">
           <div className="bg-primary text-primary-foreground flex size-12 items-center justify-center rounded-xl">
             <IconCompass className="size-7" />

@@ -124,7 +124,12 @@ export function EditControlPointDialog({
         <form onSubmit={onSubmit} className="grid grid-cols-2 gap-4">
           <Field className="col-span-2">
             <FieldLabel htmlFor="ecp-label">Label</FieldLabel>
-            <Input id="ecp-label" value={label} onChange={(e) => setLabel(e.target.value)} required />
+            <Input
+              id="ecp-label"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              required
+            />
           </Field>
           <Field>
             <FieldLabel htmlFor="ecp-northing">Northing</FieldLabel>
@@ -150,8 +155,7 @@ export function EditControlPointDialog({
           </Field>
           <Field>
             <FieldLabel htmlFor="ecp-gridx" className="w-full">
-              Grid X
-              {optional}
+              Grid X{optional}
             </FieldLabel>
             <Input
               id="ecp-gridx"
@@ -162,8 +166,7 @@ export function EditControlPointDialog({
           </Field>
           <Field>
             <FieldLabel htmlFor="ecp-gridy" className="w-full">
-              Grid Y
-              {optional}
+              Grid Y{optional}
             </FieldLabel>
             <Input
               id="ecp-gridy"

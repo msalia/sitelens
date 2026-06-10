@@ -346,237 +346,254 @@ export function SurveyPointsPanel({
         <CardContent
           className={cn('flex flex-col gap-3', !showPagination && '-mb-(--card-spacing)')}
         >
-        <div className="flex gap-2">
-          <Input
-            placeholder="Search label, description, tags…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <Select value={categoryFilter} onValueChange={(v) => setCategoryFilter(v ?? ALL)}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="All categories" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectLabel>Filter by category</SelectLabel>
-                <SelectItem value={ALL}>All categories</SelectItem>
-                {categories.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {selected.size > 0 && (
-          <div className="bg-muted/40 flex flex-wrap items-center gap-2 rounded-lg border p-2 text-sm">
-            <span className="font-medium">{selected.size} selected</span>
-            <Select value="" onValueChange={(v) => v && bulkAssign(v)}>
-              <SelectTrigger className="h-8 w-44" disabled={busy}>
-                <SelectValue placeholder="Assign category…" />
+          <div className="flex gap-2">
+            <Input
+              placeholder="Search label, description, tags…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <Select value={categoryFilter} onValueChange={(v) => setCategoryFilter(v ?? ALL)}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="All categories" />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectLabel>Assign to</SelectLabel>
-                  <SelectItem value={NONE}>— Clear category —</SelectItem>
+                  <SelectLabel>Filter by category</SelectLabel>
+                  <SelectItem value={ALL}>All categories</SelectItem>
                   {categories.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
-                      {c.name}
+                      <span className="inline-flex items-center gap-2">
+                        <span
+                          className="size-2.5 rounded-full"
+                          style={{ backgroundColor: c.color }}
+                        />
+                        {c.name}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectGroup>
               </SelectContent>
             </Select>
-            <Button size="sm" variant="outline" disabled={busy} onClick={saveGroup}>
-              Save as group
-            </Button>
-            <ConfirmDialog
-              title={`Delete ${selected.size} point(s)?`}
-              description="The selected survey points will be removed. This can’t be undone."
-              onConfirm={bulkDelete}
-              trigger={
-                <Button size="sm" variant="destructive" disabled={busy}>
-                  Delete
-                </Button>
-              }
-            />
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={busy}
-              onClick={() => setSelected(new Set())}
-            >
-              Clear
-            </Button>
           </div>
-        )}
 
-        {/* Full-bleed table with sticky selector, label, and action columns. */}
-        <div
-          className={cn(
-            '-mx-(--card-spacing) border-t [&_[data-slot=table-container]]:overscroll-x-none',
-            showPagination && 'border-b',
-          )}
-        >
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted">
-                <TableHead className="w-12 pl-(--card-spacing)" />
-                <TableHead className="w-10">
-                  <input
-                    type="checkbox"
-                    checked={allOnPageSelected}
-                    onChange={toggleAllOnPage}
-                    aria-label="Select all on page"
-                  />
-                </TableHead>
-                <SortHeader
-                  label="Label"
-                  field="label"
-                  active={sortField}
-                  desc={sortDesc}
-                  onSort={setSort}
-                />
-                <SortHeader
-                  label="N"
-                  field="northing"
-                  active={sortField}
-                  desc={sortDesc}
-                  onSort={setSort}
-                />
-                <SortHeader
-                  label="E"
-                  field="easting"
-                  active={sortField}
-                  desc={sortDesc}
-                  onSort={setSort}
-                />
-                <SortHeader
-                  label="Z"
-                  field="elevation"
-                  active={sortField}
-                  desc={sortDesc}
-                  onSort={setSort}
-                />
-                <TableHead className="pr-(--card-spacing)">Category</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {points.map((p) => {
-                const cat = p.categoryId ? catById.get(p.categoryId) : undefined;
-                return (
-                  <TableRow key={p.id}>
-                    <TableCell className="w-12 pl-(--card-spacing)">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          render={
-                            <Button variant="ghost" size="icon-sm" aria-label="Point actions">
-                              <IconDotsVertical className="size-4" />
-                            </Button>
-                          }
-                        />
-                        <DropdownMenuContent align="start">
-                          {onLocate && (
-                            <DropdownMenuItem onClick={() => onLocate(p)}>
-                              <IconCurrentLocation className="size-4" /> Locate in 3D
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem onClick={() => setInspecting(p)}>
-                            <IconMapPin className="size-4" /> Inspect
-                          </DropdownMenuItem>
-                          <DropdownMenuItem variant="destructive" onClick={() => setPendingDelete(p)}>
-                            <IconTrash className="size-4" /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                    <TableCell>
-                      <input
-                        type="checkbox"
-                        checked={selected.has(p.id)}
-                        onChange={() => toggle(p.id)}
-                        aria-label={`Select ${p.label}`}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="font-medium">{p.label}</div>
-                      {p.description && (
-                        <div className="text-muted-foreground max-w-48 truncate text-xs">
-                          {p.description}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell>{fromMeters(p.northing, project.displayUnit).toFixed(3)}</TableCell>
-                    <TableCell>{fromMeters(p.easting, project.displayUnit).toFixed(3)}</TableCell>
-                    <TableCell>
-                      {p.elevation === null
-                        ? '—'
-                        : fromMeters(p.elevation, project.displayUnit).toFixed(3)}
-                    </TableCell>
-                    <TableCell className="pr-(--card-spacing)">
-                      {cat ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs">
+          {selected.size > 0 && (
+            <div className="bg-muted/40 flex flex-wrap items-center gap-2 rounded-lg border p-2 text-sm">
+              <span className="font-medium">{selected.size} selected</span>
+              <Select value="" onValueChange={(v) => v && bulkAssign(v)}>
+                <SelectTrigger className="h-8 w-44" disabled={busy}>
+                  <SelectValue placeholder="Assign category…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Assign to</SelectLabel>
+                    <SelectItem value={NONE}>— Clear category —</SelectItem>
+                    {categories.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        <span className="inline-flex items-center gap-2">
                           <span
                             className="size-2.5 rounded-full"
-                            style={{ backgroundColor: cat.color }}
+                            style={{ backgroundColor: c.color }}
                           />
-                          {cat.name}
+                          {c.name}
                         </span>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">—</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-              {points.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-muted-foreground text-center text-sm">
-                    No points. Import a CSV or LandXML file to get started.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-
-        {showPagination && (
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">
-              {rangeStart}–{rangeEnd} of {total}
-              {selected.size > 0 ? ` · ${selected.size} selected` : ''}
-            </span>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={page === 0}
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-              >
-                Previous
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <Button size="sm" variant="outline" disabled={busy} onClick={saveGroup}>
+                Save as group
               </Button>
-              <span className="text-muted-foreground">
-                Page {page + 1} / {pageCount}
-              </span>
+              <ConfirmDialog
+                title={`Delete ${selected.size} point(s)?`}
+                description="The selected survey points will be removed. This can’t be undone."
+                onConfirm={bulkDelete}
+                trigger={
+                  <Button size="sm" variant="destructive" disabled={busy}>
+                    Delete
+                  </Button>
+                }
+              />
               <Button
                 size="sm"
-                variant="outline"
-                disabled={page + 1 >= pageCount}
-                onClick={() => setPage((p) => p + 1)}
+                variant="ghost"
+                disabled={busy}
+                onClick={() => setSelected(new Set())}
               >
-                Next
+                Clear
               </Button>
             </div>
+          )}
+
+          {/* Full-bleed table with sticky selector, label, and action columns. */}
+          <div
+            className={cn(
+              '-mx-(--card-spacing) border-t [&_[data-slot=table-container]]:overscroll-x-none',
+              showPagination && 'border-b',
+            )}
+          >
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted">
+                  <TableHead className="w-12 pl-(--card-spacing)" />
+                  <TableHead className="w-10">
+                    <input
+                      type="checkbox"
+                      checked={allOnPageSelected}
+                      onChange={toggleAllOnPage}
+                      aria-label="Select all on page"
+                    />
+                  </TableHead>
+                  <SortHeader
+                    label="Label"
+                    field="label"
+                    active={sortField}
+                    desc={sortDesc}
+                    onSort={setSort}
+                  />
+                  <SortHeader
+                    label="N"
+                    field="northing"
+                    active={sortField}
+                    desc={sortDesc}
+                    onSort={setSort}
+                  />
+                  <SortHeader
+                    label="E"
+                    field="easting"
+                    active={sortField}
+                    desc={sortDesc}
+                    onSort={setSort}
+                  />
+                  <SortHeader
+                    label="Z"
+                    field="elevation"
+                    active={sortField}
+                    desc={sortDesc}
+                    onSort={setSort}
+                  />
+                  <TableHead className="pr-(--card-spacing)">Category</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {points.map((p) => {
+                  const cat = p.categoryId ? catById.get(p.categoryId) : undefined;
+                  return (
+                    <TableRow key={p.id}>
+                      <TableCell className="w-12 pl-(--card-spacing)">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            render={
+                              <Button variant="ghost" size="icon-sm" aria-label="Point actions">
+                                <IconDotsVertical className="size-4" />
+                              </Button>
+                            }
+                          />
+                          <DropdownMenuContent align="start">
+                            {onLocate && (
+                              <DropdownMenuItem onClick={() => onLocate(p)}>
+                                <IconCurrentLocation className="size-4" /> Locate in 3D
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={() => setInspecting(p)}>
+                              <IconMapPin className="size-4" /> Inspect
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={() => setPendingDelete(p)}
+                            >
+                              <IconTrash className="size-4" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(p.id)}
+                          onChange={() => toggle(p.id)}
+                          aria-label={`Select ${p.label}`}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">{p.label}</div>
+                        {p.description && (
+                          <div className="text-muted-foreground max-w-48 truncate text-xs">
+                            {p.description}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {fromMeters(p.northing, project.displayUnit).toFixed(3)}
+                      </TableCell>
+                      <TableCell>{fromMeters(p.easting, project.displayUnit).toFixed(3)}</TableCell>
+                      <TableCell>
+                        {p.elevation === null
+                          ? '—'
+                          : fromMeters(p.elevation, project.displayUnit).toFixed(3)}
+                      </TableCell>
+                      <TableCell className="pr-(--card-spacing)">
+                        {cat ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs">
+                            <span
+                              className="size-2.5 rounded-full"
+                              style={{ backgroundColor: cat.color }}
+                            />
+                            {cat.name}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {points.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-muted-foreground text-center text-sm">
+                      No points. Import a CSV or LandXML file to get started.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
           </div>
-        )}
-      </CardContent>
-      <CardFooter>
-        <p className="text-muted-foreground text-xs">
-          N (northing), E (easting), and Z (elevation) are shown in {unitLabel}.
-        </p>
-      </CardFooter>
+
+          {showPagination && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">
+                {rangeStart}–{rangeEnd} of {total}
+                {selected.size > 0 ? ` · ${selected.size} selected` : ''}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page === 0}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                >
+                  Previous
+                </Button>
+                <span className="text-muted-foreground">
+                  Page {page + 1} / {pageCount}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page + 1 >= pageCount}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+        <CardFooter>
+          <p className="text-muted-foreground text-xs">
+            N (northing), E (easting), and Z (elevation) are shown in {unitLabel}.
+          </p>
+        </CardFooter>
 
         <CoordinateInspectorDialog
           project={project}

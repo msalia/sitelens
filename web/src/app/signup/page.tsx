@@ -89,8 +89,7 @@ export default function SignupPage() {
               {token ? (
                 <div className="flex flex-col gap-4">
                   <div className="bg-muted text-muted-foreground rounded-md p-3 text-xs break-all">
-                    Verification token:{' '}
-                    <span className="text-foreground font-mono">{token}</span>
+                    Verification token: <span className="text-foreground font-mono">{token}</span>
                   </div>
                   <Button onClick={onVerify} disabled={busy} className="w-full">
                     {busy ? 'Verifying…' : 'Verify & continue'}

@@ -72,8 +72,7 @@ function ProjectsContent() {
     }
     return projects.filter(
       (p) =>
-        p.name.toLowerCase().includes(query) ||
-        (p.description ?? '').toLowerCase().includes(query),
+        p.name.toLowerCase().includes(query) || (p.description ?? '').toLowerCase().includes(query),
     );
   }, [projects, query]);
 

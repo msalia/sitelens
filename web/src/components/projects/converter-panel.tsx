@@ -166,7 +166,10 @@ export function ConverterPanel({ project }: { project: Project }) {
             <div className="-mx-(--card-spacing) border-t [&_td:first-child]:pl-(--card-spacing) [&_td:last-child]:pr-(--card-spacing)">
               <Table>
                 <TableBody>
-                  <ResultRow label="Building grid" value={pair('X', u(set.gridX), 'Y', u(set.gridY))} />
+                  <ResultRow
+                    label="Building grid"
+                    value={pair('X', u(set.gridX), 'Y', u(set.gridY))}
+                  />
                   <ResultRow
                     label="Projected (grid)"
                     value={pair('E', u(set.projectedGridE), 'N', u(set.projectedGridN))}

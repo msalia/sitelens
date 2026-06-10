@@ -54,11 +54,11 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="divide-border divide-y">
             <Row label="Email" value={me?.email ?? '—'} />
-            <Row label="Role" value={<span className="capitalize">{me?.role.toLowerCase() ?? '—'}</span>} />
             <Row
-              label="Email verified"
-              value={me ? (me.emailVerified ? 'Yes' : 'No') : '—'}
+              label="Role"
+              value={<span className="capitalize">{me?.role.toLowerCase() ?? '—'}</span>}
             />
+            <Row label="Email verified" value={me ? (me.emailVerified ? 'Yes' : 'No') : '—'} />
           </CardContent>
         </Card>
 
@@ -68,7 +68,10 @@ export default function SettingsPage() {
             <CardDescription>The tenant your data belongs to.</CardDescription>
           </CardHeader>
           <CardContent className="divide-border divide-y">
-            <Row label="Organization ID" value={<span className="font-mono text-xs">{me?.orgId ?? '—'}</span>} />
+            <Row
+              label="Organization ID"
+              value={<span className="font-mono text-xs">{me?.orgId ?? '—'}</span>}
+            />
           </CardContent>
         </Card>
 

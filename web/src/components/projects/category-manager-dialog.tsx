@@ -29,7 +29,14 @@ import {
 } from '@/components/ui/dialog';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
@@ -128,14 +135,19 @@ export function CategoryManagerDialog({
           <div className="flex items-end gap-2">
             <Field className="flex-1">
               <FieldLabel htmlFor="cat-name">New category</FieldLabel>
-              <Input id="cat-name" value={name} onChange={(e) => setName(e.target.value)} required />
+              <Input
+                id="cat-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
             </Field>
             <input
               type="color"
               value={color}
               onChange={(e) => setColor(e.target.value)}
               aria-label="Category color"
-              className="size-9 cursor-pointer rounded-full border p-0 [&::-moz-color-swatch]:rounded-full [&::-moz-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-full [&::-webkit-color-swatch]:border-0"
+              className="size-9 cursor-pointer rounded-full border p-0 [&::-moz-color-swatch]:rounded-full [&::-moz-color-swatch]:border-0 [&::-webkit-color-swatch]:rounded-full [&::-webkit-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0"
             />
           </div>
           <DialogFooter>
