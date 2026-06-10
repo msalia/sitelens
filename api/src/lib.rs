@@ -6,6 +6,7 @@ pub mod export;
 pub mod geo;
 pub mod import;
 pub mod models;
+pub mod ratelimit;
 pub mod schema;
 pub mod storage;
 pub mod units;
@@ -26,17 +27,39 @@ use serde_json::json;
 use sqlx::PgPool;
 
 use crate::auth::{auth_context_from_token, session_token_from_cookie_header, AuthConfig};
+use crate::ratelimit::{ClientIp, RateLimiter};
 use crate::schema::{MutationRoot, QueryRoot};
 use crate::storage::{LocalStorage, Storage};
 
 pub type ApiSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
 
-/// Builds the GraphQL schema with the pool, auth config, and storage in its data.
+/// Auth rate-limit policy: 10 login/signup attempts per IP per minute.
+const RL_MAX: u64 = 10;
+const RL_WINDOW_SECS: u64 = 60;
+
+/// Builds the GraphQL schema with an in-process auth rate limiter. Used by tests,
+/// the schema printer, and as the fallback when Redis is unconfigured.
 pub fn build_schema(pool: PgPool, config: AuthConfig, storage: Arc<dyn Storage>) -> ApiSchema {
+    build_schema_with(
+        pool,
+        config,
+        storage,
+        RateLimiter::memory(RL_MAX as usize, Duration::from_secs(RL_WINDOW_SECS)),
+    )
+}
+
+/// Builds the GraphQL schema with an explicit rate limiter (e.g. Redis-backed).
+pub fn build_schema_with(
+    pool: PgPool,
+    config: AuthConfig,
+    storage: Arc<dyn Storage>,
+    limiter: RateLimiter,
+) -> ApiSchema {
     Schema::build(QueryRoot, MutationRoot, EmptySubscription)
         .data(pool)
         .data(config)
         .data(storage)
+        .data(limiter)
         .finish()
 }
 
@@ -60,6 +83,15 @@ async fn graphql_handler(
             }
         }
     }
+    // Client IP for rate limiting. Behind Traefik the real IP is the first hop
+    // of X-Forwarded-For; fall back to a constant so the limiter still applies.
+    let ip = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    request = request.data(ClientIp(ip));
     state.schema.execute(request).await.into()
 }
 
@@ -121,7 +153,27 @@ pub async fn run() {
         cesium_ion_token,
     };
     let storage: Arc<dyn Storage> = Arc::new(LocalStorage::new(storage_dir));
-    let schema = build_schema(pool.clone(), config.clone(), storage);
+
+    // Prefer a shared Redis-backed rate limiter (so the limit holds across API
+    // instances); fall back to in-process if REDIS_URL is unset or unreachable.
+    let limiter = match std::env::var("REDIS_URL") {
+        Ok(url) if !url.is_empty() => {
+            match RateLimiter::connect_redis(&url, RL_MAX, RL_WINDOW_SECS).await {
+                Ok(rl) => {
+                    println!("auth rate limiter: redis ({url})");
+                    rl
+                }
+                Err(e) => {
+                    eprintln!(
+                        "WARNING: REDIS_URL set but unreachable ({e}); using in-process rate limiter"
+                    );
+                    RateLimiter::memory(RL_MAX as usize, Duration::from_secs(RL_WINDOW_SECS))
+                }
+            }
+        }
+        _ => RateLimiter::memory(RL_MAX as usize, Duration::from_secs(RL_WINDOW_SECS)),
+    };
+    let schema = build_schema_with(pool.clone(), config.clone(), storage, limiter);
     let state = AppState {
         schema,
         config,

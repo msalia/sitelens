@@ -6,6 +6,9 @@ COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 # Required at compile time by the sqlx::migrate! macro.
 COPY migrations ./migrations
+# Declared as a [[bench]] target in Cargo.toml; cargo validates its path at parse
+# time, so it must be present even though the release build doesn't compile it.
+COPY benches ./benches
 RUN cargo build --release
 
 FROM rust:1.93-slim AS runner

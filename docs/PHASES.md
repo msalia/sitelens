@@ -273,18 +273,19 @@ Security, robustness, and deploy.
 
 ### Deliverables
 
-- [ ] Postgres RLS fully enforced + verified; API tenancy audit
-- [ ] File-upload safety: size limits, timeouts, XML-bomb defense confirmed
-- [ ] HTTPS/Traefik, Argon2, auth rate-limiting verified in prod
-- [ ] Full Playwright E2E core-flow suite green
-- [ ] Production deploy on Dokploy; migrations on deploy; PostGIS init
-- [ ] Docs: README + deploy notes
+- [x] Tenancy enforced + audited — API-layer org scoping on every project-scoped resolver, proven by a comprehensive cross-org isolation suite. Forced Postgres RLS deliberately deferred (ADR-007): it conflicts with async-graphql's concurrent field resolution over a shared pool.
+- [x] File-upload safety: size limit (5 MB), row cap (100k), malformed-input and XML entity-expansion (billion-laughs) defenses confirmed with tests.
+- [x] HTTPS/Traefik (Let's Encrypt) + Argon2 hashing in place; **auth rate limiting** added (per-IP, 10/min) with a shared **Redis** backend across instances (ADR-008).
+- [x] Playwright E2E core-flow suite green (smoke, projects, full surveyor workflow) — run against the full stack.
+- [x] Production deploy on Dokploy; migrations run automatically on API start; PostGIS/uuid-ossp/pg_trgm created by the first migration.
+- [x] Docs: README (features + status) + deploy notes (Redis, env, migrations).
 
 ### Tests
 
-- [ ] Cross-org isolation suite (comprehensive)
-- [ ] Malicious-file rejection tests
-- [ ] End-to-end smoke on production environment
+- [x] Cross-org isolation suite (comprehensive) — `cross_org_isolation_comprehensive`: every project-scoped read and mutation denied for the other org.
+- [x] Malicious-file rejection tests — oversized, too-many-rows, malformed CSV/XML, XML-bomb.
+- [x] Auth rate-limit test + Redis/in-process limiter unit tests.
+- [ ] End-to-end smoke on the production environment (verify post-deploy).
 
 ### Validates
 

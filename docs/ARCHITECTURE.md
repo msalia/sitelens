@@ -79,3 +79,51 @@ See [SPEC.md](./SPEC.md) for the full product & architecture specification and
 - **Consequences:** Tenant isolation is enforced and tested (org A cannot read
   org B) without blocking auth flows. A clear, low-risk path to full RLS later.
   Rate-limiting and real email delivery are tracked as follow-ups.
+
+## ADR-007: Tenancy enforced at the API layer; forced RLS deliberately deferred (Phase 10)
+
+- **Date:** 2026-06-09
+- **Status:** Supersedes the "Phase 10 will FORCE RLS" intent in ADR-006.
+- **Context:** ADR-006 anticipated *forcing* Postgres RLS in Phase 10 as
+  defense-in-depth. Implementing it correctly requires setting
+  `app.current_org` per request via `SET LOCAL` inside a transaction, and having
+  every resolver run its queries on that one pinned connection. But
+  `async-graphql` resolves sibling fields **concurrently**, and the resolvers
+  intentionally use the shared `PgPool` (a different connection per query) so
+  those concurrent fields don't contend on a single connection. Pinning one
+  GUC-scoped connection per request is fundamentally at odds with that model and
+  would require a significant architecture change (request-scoped transaction +
+  serialized field execution), with real latency cost — for a backstop behind a
+  control we already enforce and test.
+- **Decision:** Keep **API-layer org_id scoping as the enforced tenancy control**.
+  Every project-scoped resolver validates ownership (`ensure_project_in_org`, or a
+  JOIN to `projects` on `org_id`) before reading or writing. This is proven by a
+  comprehensive cross-org isolation suite (`cross_org_isolation_comprehensive`)
+  that asserts Org B is denied on every project-scoped read and mutation and
+  cannot even see Org A's project. The RLS policy scaffolding is retained as
+  documentation of the future model but is **not forced**. Revisit forced RLS if
+  we move to a dedicated-connection-per-request architecture or add direct DB
+  access paths outside the API.
+- **Consequences:** Strong, tested isolation without the latency and complexity of
+  connection pinning. The trade-off is explicit: a SQL-injection or a logic bug
+  in a resolver's scoping is not caught by a second DB-level net — so the
+  isolation test suite is the guardrail and must grow with every new
+  project-scoped resolver.
+
+## ADR-008: Per-IP rate limiting on auth endpoints
+
+- **Date:** 2026-06-09
+- **Context:** `login` and `signup` are abuse targets (credential brute-force,
+  mass org creation). There was no throttle.
+- **Decision:** A rate limiter (`api/src/ratelimit.rs`) caps each client IP at 10
+  login/signup attempts per minute. The client IP comes from `X-Forwarded-For`
+  (the API runs behind Traefik); the limiter is injected into the GraphQL context
+  and checked at the top of both resolvers. Two backends share one interface: an
+  **in-process** sliding window (default; used by tests) and a **Redis** fixed
+  window (`INCR`+`EXPIRE`) selected via `REDIS_URL`, so the limit holds across
+  multiple API instances. The Redis path **fails open** on any cache error so an
+  outage never locks users out.
+- **Consequences:** Cheap brute-force / abuse defense. With Redis (a small
+  container in the compose stack), the limit is enforced globally even when the
+  API is scaled horizontally; without `REDIS_URL` it degrades gracefully to
+  per-process. Redis stores only ephemeral counters (no persistence configured).

@@ -124,6 +124,130 @@ async fn signup_verify_login_me(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn login_is_rate_limited(pool: PgPool) {
+    let schema = schema(pool);
+    // A real account so attempts reach the credential check, not a missing user.
+    let (_id, _org, token) = signup(&schema, "a@example.com", "Org").await;
+    let verify_q = format!(r#"mutation {{ verifyEmail(token: "{token}") }}"#);
+    exec_ok(&schema, &verify_q, None).await;
+
+    // The limiter is 10 attempts/min/IP. Tests carry no ClientIp, so all share
+    // the "unknown" bucket. Ten wrong-password attempts are allowed (each an
+    // "invalid credentials" error)...
+    let wrong = r#"mutation { login(email: "a@example.com", password: "wrong-password") { id } }"#;
+    for _ in 0..10 {
+        let msg = exec_err(&schema, wrong, None).await;
+        assert!(msg.contains("invalid credentials"), "got: {msg}");
+    }
+    // ...the 11th is refused by the rate limiter regardless of credentials.
+    let msg = exec_err(&schema, wrong, None).await;
+    assert!(msg.contains("too many attempts"), "got: {msg}");
+
+    // Even a correct password is blocked once the limit is hit.
+    let right = r#"mutation { login(email: "a@example.com", password: "password123") { id } }"#;
+    let msg = exec_err(&schema, right, None).await;
+    assert!(msg.contains("too many attempts"), "got: {msg}");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn cross_org_isolation_comprehensive(pool: PgPool) {
+    let schema = schema(pool);
+    let (a_admin, a_org, _) = signup(&schema, "a@example.com", "Org A").await;
+    let (b_admin, b_org, _) = signup(&schema, "b@example.com", "Org B").await;
+    let a = admin_ctx(a_admin, a_org);
+    let b = admin_ctx(b_admin, b_org);
+
+    // Org A builds a project with a control point and an imported survey point.
+    let pid = create_project(&schema, a.clone(), "A Site").await;
+    let cp_q = format!(
+        r#"mutation {{ addControlPoint(projectId: "{pid}", label: "CP1", northing: 1000.0, easting: 2000.0, gridX: 0.0, gridY: 0.0, unit: METER) {{ id }} }}"#
+    );
+    exec_ok(&schema, &cp_q, Some(a.clone())).await;
+    let imp = r#"mutation ($id: UUID!, $c: String!, $m: CsvMappingInput!) {
+        importPoints(projectId: $id, format: CSV, content: $c, unit: METER, mapping: $m) { rowCount } }"#;
+    let imp_vars = serde_json::json!({
+        "id": pid, "c": "P,N,E\nPT1,1,1\n",
+        "m": { "hasHeader": true, "labelCol": 0, "northingCol": 1, "eastingCol": 2 }
+    });
+    exec_ok_vars(&schema, imp, imp_vars, a.clone()).await;
+    let pts = exec_ok(
+        &schema,
+        &format!(r#"{{ surveyPoints(projectId: "{pid}") {{ id }} }}"#),
+        Some(a.clone()),
+    )
+    .await;
+    let a_point_id = uuid_at(&pts["surveyPoints"][0], &["id"]);
+
+    // Every project-scoped read is denied for Org B.
+    let reads = [
+        format!(r#"{{ gridAxes(projectId: "{pid}") {{ id }} }}"#),
+        format!(r#"{{ controlPoints(projectId: "{pid}") {{ id }} }}"#),
+        format!(r#"{{ surveyPoints(projectId: "{pid}") {{ id }} }}"#),
+        format!(r#"{{ surveyPointCount(projectId: "{pid}") }}"#),
+        format!(r#"{{ transform(projectId: "{pid}") {{ scale }} }}"#),
+        format!(r#"{{ cadOverlays(projectId: "{pid}") {{ id }} }}"#),
+        format!(r#"{{ importBatches(projectId: "{pid}") {{ id }} }}"#),
+        format!(r#"{{ importProfiles(projectId: "{pid}") {{ id }} }}"#),
+        format!(r#"{{ pointGroups(projectId: "{pid}") {{ id }} }}"#),
+        format!(r#"{{ sceneData(projectId: "{pid}") {{ origin {{ latitude }} }} }}"#),
+        format!(
+            r#"{{ convertCoordinate(projectId: "{pid}", space: PROJECTED, x: 1.0, y: 2.0, unit: METER) {{ latitude }} }}"#
+        ),
+        format!(
+            r#"{{ exportPoints(projectId: "{pid}", format: CSV, space: PROJECTED_GRID, unit: METER) }}"#
+        ),
+    ];
+    for q in &reads {
+        let msg = exec_err(&schema, q, Some(b.clone())).await;
+        assert!(
+            msg.contains("not found"),
+            "read leaked across orgs: {q}\n=> {msg}"
+        );
+    }
+
+    // Every project-scoped mutation is denied for Org B.
+    let mutations = [
+        format!(r#"mutation {{ updateProject(id: "{pid}", name: "hijacked") {{ id }} }}"#),
+        format!(
+            r#"mutation {{ setGridAxes(projectId: "{pid}", unit: METER, axes: [{{ family: LETTERED, label: "A", position: 0.0 }}]) {{ id }} }}"#
+        ),
+        format!(
+            r#"mutation {{ addControlPoint(projectId: "{pid}", label: "X", northing: 1.0, easting: 1.0, unit: METER) {{ id }} }}"#
+        ),
+        format!(r#"mutation {{ solveTransform(projectId: "{pid}") {{ scale }} }}"#),
+        format!(
+            r#"mutation {{ createPointGroup(projectId: "{pid}", name: "g", memberIds: []) {{ id }} }}"#
+        ),
+        format!(r#"mutation {{ deleteSurveyPoint(id: "{a_point_id}") }}"#),
+    ];
+    for q in &mutations {
+        let msg = exec_err(&schema, q, Some(b.clone())).await;
+        assert!(
+            msg.contains("not found"),
+            "mutation crossed orgs: {q}\n=> {msg}"
+        );
+    }
+
+    // The project itself is invisible to Org B (null, not an error).
+    let proj = exec_ok(
+        &schema,
+        &format!(r#"{{ project(id: "{pid}") {{ id }} }}"#),
+        Some(b.clone()),
+    )
+    .await;
+    assert!(proj["project"].is_null(), "Org B can see Org A's project");
+
+    // Org A's own data is still intact and accessible.
+    let still = exec_ok(
+        &schema,
+        &format!(r#"{{ surveyPointCount(projectId: "{pid}") }}"#),
+        Some(a),
+    )
+    .await;
+    assert_eq!(still["surveyPointCount"].as_i64().unwrap(), 1);
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn tenancy_isolation_between_orgs(pool: PgPool) {
     let schema = schema(pool);
     let (a_admin, a_org, _) = signup(&schema, "admin-a@example.com", "Org A").await;

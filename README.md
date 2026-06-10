@@ -11,10 +11,13 @@ and geographic systems.
 ## Stack
 
 - **Web** — Next.js (App Router, TypeScript, Tailwind, shadcn/ui), CesiumJS for
-  the 3D scene, client-side DXF parsing. Includes an in-app documentation site.
+  the 3D scene (clustered points, ellipsoid/Ion terrain), client-side DXF
+  parsing. Includes an in-app documentation site.
 - **API** — Rust GraphQL (async-graphql + axum) housing the precision geo-core
   (Helmert least-squares, EPSG projections, grid/ground, unit conversion).
-- **Database** — PostgreSQL + PostGIS.
+  Argon2 + JWT auth, per-org tenancy scoping, and auth rate limiting.
+- **Database** — PostgreSQL + PostGIS (migrations run automatically on API start).
+- **Cache** — Redis, backing the shared auth rate limiter.
 - **Deploy** — Docker Compose on Dokploy, HTTPS via Traefik/Let's Encrypt.
 
 ## Quick start
@@ -30,9 +33,30 @@ See [docs/SETUP.md](./docs/SETUP.md) for hybrid dev and tests,
 [docs/SPEC.md](./docs/SPEC.md) for the full specification, and
 [docs/PHASES.md](./docs/PHASES.md) for the implementation roadmap.
 
+## Features
+
+- **Auth & tenancy** — self-service signup creates an org + admin; Argon2 + JWT;
+  Admin/Surveyor/Viewer roles; every query scoped by org (proven by a cross-org
+  isolation suite); per-IP auth rate limiting.
+- **Projects, grid & control points** — define an architect's building grid and
+  the city control points that tie it to the real world.
+- **The transform** — Helmert (4-param similarity) least-squares solve with
+  per-point residuals and RMS.
+- **Conversion** — any coordinate ↔ grid / projected (grid & ground) / geographic,
+  across US-survey-foot, international-foot, and meter, with a standalone
+  converter and a per-point inspector.
+- **Import** — survey-machine CSV (configurable column mapping + saved profiles)
+  and LandXML, with size/row/XML-bomb guards.
+- **3D visualization** — CesiumJS scene of control/survey points and grid lines
+  over terrain, clustered for dense sites, with georeferenced DXF overlays.
+- **Export** — CSV (configurable columns/space/unit) and LandXML; PNG snapshot of
+  the 3D view.
+
 ## Project status
 
-Phase 1 (foundation) — stack boots, services health-check, DB connected, in-app
-docs live. Subsequent phases (auth/tenancy, projects/grid/control, the transform,
-conversion, import, 3D, DXF, export) are tracked in
-[docs/PHASES.md](./docs/PHASES.md).
+**v1 feature-complete** (Phases 1–10): foundation, auth/tenancy, projects/grid/
+control, the transform, conversion, import, 3D + DXF, export, performance, and
+hardening. Per-phase detail and remaining follow-ups are in
+[docs/PHASES.md](./docs/PHASES.md); performance baselines and budgets in
+[docs/PERFORMANCE.md](./docs/PERFORMANCE.md); key decisions in
+[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).

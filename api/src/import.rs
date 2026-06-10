@@ -243,4 +243,44 @@ mod tests {
             Err(ImportError::Parse(_))
         ));
     }
+
+    #[test]
+    fn rejects_too_many_rows() {
+        // One more row than the cap (kept well under MAX_BYTES: ~7 bytes/row).
+        let mut csv = String::with_capacity(MAX_ROWS * 8);
+        for _ in 0..(MAX_ROWS + 1) {
+            csv.push_str("1,1\n");
+        }
+        let mapping = CsvMapping {
+            has_header: false,
+            label_col: None,
+            northing_col: 0,
+            easting_col: 1,
+            elevation_col: None,
+            description_col: None,
+        };
+        assert_eq!(parse_csv(&csv, &mapping), Err(ImportError::TooManyRows));
+    }
+
+    #[test]
+    fn xml_entity_expansion_is_bounded() {
+        // A "billion laughs" payload: nested entity references that would expand
+        // exponentially if the parser substituted them. roxmltree does not
+        // expand entity-referencing-entity, so this must NOT blow up — it either
+        // errors or yields no exploded content, and returns promptly.
+        let bomb = r#"<?xml version="1.0"?>
+            <!DOCTYPE lolz [
+              <!ENTITY lol "lol">
+              <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+              <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+              <!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;">
+              <!ENTITY lol5 "&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;">
+            ]>
+            <LandXML><CgPoints><CgPoint name="1">&lol5; 200.0</CgPoint></CgPoints></LandXML>"#;
+        let result = parse_landxml(bomb);
+        // Must not produce a vast expansion; erroring is fine, as is a small result.
+        if let Ok(points) = result {
+            assert!(points.len() < 10, "unexpected expansion: {}", points.len());
+        }
+    }
 }

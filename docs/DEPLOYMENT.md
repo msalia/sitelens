@@ -3,13 +3,22 @@
 ## How It Works
 
 SiteLens deploys to Dokploy at https://dok.msalia.org as a **compose** resource.
-Dokploy pulls from GitHub, builds the `docker-compose.yml` stack (web + api + db),
-and Traefik routes HTTPS traffic to the `web` service on port 3000 at
-https://sitelens.msalia.org.
+Dokploy pulls from GitHub, builds the `docker-compose.yml` stack
+(web + api + db + redis), and Traefik routes HTTPS traffic to the `web` service on
+port 3000 at https://sitelens.msalia.org.
 
 The `db` service uses `postgis/postgis:16-3.4`; the `pgdata` volume persists data
-across redeploys. The API reaches the DB at host `db`, and the web tier reaches
-the API at `http://api:4000` — both on the compose-internal network.
+across redeploys. PostGIS + `uuid-ossp` + `pg_trgm` extensions are created by the
+first migration, so they're present in fresh and ephemeral databases alike. The
+API reaches the DB at host `db`, Redis at `redis://redis:6379`, and the web tier
+reaches the API at `http://api:4000` — all on the compose-internal network. The
+`redis` service is an ephemeral cache (no persistence) backing the auth rate
+limiter.
+
+**Migrations run automatically** on API startup (`db::run_migrations`), so a
+deploy applies any new migrations before serving. Never edit an
+already-applied migration file — sqlx validates checksums and a changed file
+fails startup with `VersionMismatch`; always add a new migration instead.
 
 ## Ship Code
 
@@ -52,9 +61,17 @@ POSTGRES_PASSWORD=<strong generated value>
 POSTGRES_DB=sitelens
 DATABASE_URL=postgresql://postgres:<password>@db:5432/sitelens
 API_INTERNAL_URL=http://api:4000
+REDIS_URL=redis://redis:6379
+JWT_SECRET=<strong generated value>
+COOKIE_SECURE=true
+STORAGE_DIR=/data/uploads
+CESIUM_ION_TOKEN=<cesium ion token>     # optional; enables Ion World Terrain
 ```
 
-The committed root `.env` holds only safe local-dev defaults.
+Secrets (`POSTGRES_PASSWORD`, `JWT_SECRET`, `CESIUM_ION_TOKEN`) live **only** in
+the Dokploy env, never in git. The committed root `.env` holds only safe
+local-dev defaults (and leaves the secrets empty/insecure). `COOKIE_SECURE=true`
+is required in production so the session cookie is only sent over HTTPS.
 
 ## Monitoring a Deploy
 

@@ -40,6 +40,10 @@ proj4rs = "0.1"
 crs-definitions = { version = "0.3", features = ["proj4", "wkt"] }
 csv = "1"
 roxmltree = "0.20"
+redis = { version = "0.27", default-features = false, features = [
+    "tokio-comp",
+    "connection-manager",
+] }
 
 [dev-dependencies]
 criterion = "0.5"

@@ -25,6 +25,7 @@ use crate::models::{
     PointGroup, Project, ProjectRow, PublicConfig, SceneData, SceneLine, ScenePoint, SignupResult,
     SurveyPoint, Transform, TransformResidual, User, UserRow,
 };
+use crate::ratelimit::{ClientIp, RateLimiter};
 use crate::storage::Storage;
 
 const CAD_OVERLAY_COLUMNS: &str = "id, project_id, original_filename, offset_e, offset_n, \
@@ -88,6 +89,23 @@ fn pool<'a>(ctx: &'a Context) -> Result<&'a PgPool> {
 
 fn config<'a>(ctx: &'a Context) -> Result<&'a AuthConfig> {
     ctx.data::<AuthConfig>()
+}
+
+/// Enforces the per-IP auth rate limit for `action` (e.g. "login", "signup").
+/// A no-op if no limiter is present in context; errors when the limit is hit.
+async fn enforce_rate_limit(ctx: &Context<'_>, action: &str) -> Result<()> {
+    if let Some(limiter) = ctx.data_opt::<RateLimiter>() {
+        let ip = ctx
+            .data_opt::<ClientIp>()
+            .map(|c| c.0.as_str())
+            .unwrap_or("unknown");
+        if !limiter.check(&format!("{action}:{ip}")).await {
+            return Err(async_graphql::Error::new(
+                "too many attempts; please wait a minute and try again",
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// The authenticated principal, or an error if the request is unauthenticated.
@@ -792,6 +810,7 @@ impl MutationRoot {
         password: String,
         org_name: String,
     ) -> Result<SignupResult> {
+        enforce_rate_limit(ctx, "signup").await?;
         let email = normalize_email(&email);
         if email.is_empty() || !email.contains('@') {
             return Err(async_graphql::Error::new("a valid email is required"));
@@ -875,6 +894,7 @@ impl MutationRoot {
 
     /// Logs in with email + password. Sets an HTTP-only session cookie.
     async fn login(&self, ctx: &Context<'_>, email: String, password: String) -> Result<User> {
+        enforce_rate_limit(ctx, "login").await?;
         let email = normalize_email(&email);
         let pool = pool(ctx)?;
         let row: Option<LoginRow> = sqlx::query_as(
