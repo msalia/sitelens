@@ -21,6 +21,7 @@ import {
   type GridAxis,
   type PointCategory,
   type Project,
+  type SurveyPoint,
   type Transform,
   UNIT_LABELS,
 } from '@/lib/types';
@@ -92,7 +93,14 @@ export default function ProjectWorkspace() {
   const [transform, setTransform] = useState<Transform | null>(null);
   const [categories, setCategories] = useState<PointCategory[]>([]);
   const [pointCount, setPointCount] = useState(0);
+  const [focus, setFocus] = useState<{ id: string; nonce: number } | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Fly the 3D view to a point picked from the table, scrolling it into view.
+  const locate = useCallback((p: SurveyPoint) => {
+    setFocus({ id: p.id, nonce: performance.now() });
+    document.getElementById('panel-scene')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -168,9 +176,16 @@ export default function ProjectWorkspace() {
         </section>
         <ConverterPanel project={project} />
         <section id="panel-points" className="scroll-mt-6 lg:col-span-2">
-          <SurveyPointsPanel project={project} categories={categories} onCategoriesChanged={load} />
+          <SurveyPointsPanel
+            project={project}
+            categories={categories}
+            onCategoriesChanged={load}
+            onLocate={locate}
+          />
         </section>
-        <SceneView project={project} categories={categories} />
+        <section id="panel-scene" className="scroll-mt-6 lg:col-span-2">
+          <SceneView project={project} categories={categories} focus={focus} />
+        </section>
       </div>
     </div>
   );

@@ -1,6 +1,12 @@
 'use client';
 
-import { IconArrowDown, IconArrowUp, IconMapPin, IconTrash } from '@tabler/icons-react';
+import {
+  IconArrowDown,
+  IconArrowUp,
+  IconCurrentLocation,
+  IconMapPin,
+  IconTrash,
+} from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -97,11 +103,14 @@ const CREATE_POINT_GROUP = graphql(`
 export function SurveyPointsPanel({
   categories,
   onCategoriesChanged,
+  onLocate,
   project,
 }: {
   project: Project;
   categories: PointCategory[];
   onCategoriesChanged: () => void;
+  /** Ask the 3D view to fly to a point. */
+  onLocate?: (point: SurveyPoint) => void;
 }) {
   const unitLabel = UNIT_LABELS[project.displayUnit];
   const [points, setPoints] = useState<SurveyPoint[]>([]);
@@ -393,6 +402,16 @@ export function SurveyPointsPanel({
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
+                      {onLocate && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Locate in 3D"
+                          onClick={() => onLocate(p)}
+                        >
+                          <IconCurrentLocation className="size-4" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon-sm"

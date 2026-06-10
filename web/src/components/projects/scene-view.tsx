@@ -1,8 +1,8 @@
 'use client';
 
-import { IconCamera, IconCube } from '@tabler/icons-react';
+import { IconCamera, IconCube, IconMountain } from '@tabler/icons-react';
 import dynamic from 'next/dynamic';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { RenderableOverlay } from '@/components/projects/cesium-viewer';
@@ -89,10 +89,13 @@ const OVERLAY_CONTENT = graphql(`
 
 export function SceneView({
   categories,
+  focus,
   project,
 }: {
   project: Project;
   categories: PointCategory[];
+  /** Request from the table to fly to a point; `nonce` re-triggers. */
+  focus?: { id: string; nonce: number } | null;
 }) {
   const [scene, setScene] = useState<SceneData | null>(null);
   const [overlayMeta, setOverlayMeta] = useState<CadOverlay[]>([]);
@@ -101,6 +104,7 @@ export function SceneView({
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [inspecting, setInspecting] = useState<InspectablePoint | null>(null);
   const [ionToken, setIonToken] = useState<string | undefined>(undefined);
+  const [worldTerrain, setWorldTerrain] = useState(false);
   const captureRef = useRef<(() => void) | null>(null);
 
   const visibleCategoryIds = useMemo(
@@ -108,12 +112,35 @@ export function SceneView({
     [categories, hidden],
   );
 
+  // Translate a table "locate" request into a viewer focus (lon/lat/height).
+  const viewerFocus = useMemo(() => {
+    if (!focus || !scene) {
+      return undefined;
+    }
+    const p =
+      scene.surveyPoints.find((s) => s.id === focus.id) ??
+      scene.controlPoints.find((s) => s.id === focus.id);
+    if (!p) {
+      return undefined;
+    }
+    return {
+      height: p.height,
+      id: focus.id,
+      lat: p.latitude,
+      lon: p.longitude,
+      nonce: focus.nonce,
+    };
+  }, [focus, scene]);
+
   const load = useCallback(async () => {
     try {
       const data = await gql(SCENE_QUERY, { id: project.id });
       setScene(data.sceneData);
       setOverlayMeta(data.cadOverlays);
-      setIonToken(data.publicConfig.cesiumIonToken || undefined);
+      const token = data.publicConfig.cesiumIonToken || undefined;
+      setIonToken(token);
+      // Default to World Terrain when a token is available.
+      setWorldTerrain(Boolean(token));
       setShown(true);
 
       // Fetch + parse DXF content for visible overlays.
@@ -153,6 +180,15 @@ export function SceneView({
     [scene],
   );
 
+  // A locate request for a not-yet-loaded scene loads it first; the viewer then
+  // flies to the point once it mounts (it reads the focus target on creation).
+  useEffect(() => {
+    if (focus && !shown) {
+      void load();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus?.nonce]);
+
   function toggleCategory(id: string) {
     setHidden((h) => {
       const next = new Set(h);
@@ -171,10 +207,22 @@ export function SceneView({
         <CardTitle>3D view</CardTitle>
         <div className="flex items-center gap-2">
           {shown && scene ? (
-            <Button size="sm" variant="outline" onClick={() => captureRef.current?.()}>
-              <IconCamera className="mr-1 size-4" />
-              Snapshot
-            </Button>
+            <>
+              <Button
+                size="sm"
+                variant={worldTerrain ? 'default' : 'outline'}
+                disabled={!ionToken}
+                title={ionToken ? 'Toggle 3D world terrain' : 'Terrain needs a Cesium Ion token'}
+                onClick={() => setWorldTerrain((t) => !t)}
+              >
+                <IconMountain className="mr-1 size-4" />
+                Terrain
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => captureRef.current?.()}>
+                <IconCamera className="mr-1 size-4" />
+                Snapshot
+              </Button>
+            </>
           ) : null}
           <Button size="sm" variant="outline" onClick={load}>
             <IconCube className="mr-1 size-4" />
@@ -215,6 +263,8 @@ export function SceneView({
               onSelectPoint={onSelectPoint}
               overlays={renderables}
               ionToken={ionToken}
+              worldTerrain={worldTerrain}
+              focus={viewerFocus}
               captureRef={captureRef}
             />
             <CadOverlayPanel project={project} overlays={overlayMeta} onChanged={load} />

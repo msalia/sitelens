@@ -57,6 +57,8 @@ export interface CesiumViewerProps {
   /** When set, the viewer assigns a function that downloads the canvas as a PNG. */
   captureRef?: React.MutableRefObject<(() => void) | null>;
   categories: PointCategory[];
+  /** Fly the camera to a point and select it. `nonce` re-triggers the fly. */
+  focus?: { lon: number; lat: number; height: number; id: string; nonce: number };
   ionToken?: string;
   /** Called with a survey point id (the entity id) when picked in 3D. */
   onSelectPoint?: (id: string) => void;
@@ -64,6 +66,25 @@ export interface CesiumViewerProps {
   scene: SceneData;
   /** Category ids to show; null shows all. Points without a category always show. */
   visibleCategoryIds: Set<string> | null;
+  /** When true (and an Ion token is present), use Ion World Terrain. */
+  worldTerrain?: boolean;
+}
+
+/** Flies the camera to a focused point and selects its entity if present. */
+function flyToFocus(
+  Cesium: any,
+  viewer: any,
+  pointSource: any,
+  focus: NonNullable<CesiumViewerProps['focus']>,
+) {
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(focus.lon, focus.lat, (focus.height || 0) + 300),
+    duration: 1.2,
+  });
+  const entity = pointSource?.entities.getById(focus.id);
+  if (entity) {
+    viewer.selectedEntity = entity;
+  }
 }
 
 function populate(Cesium: any, viewer: any, pointSource: any, props: CesiumViewerProps) {
@@ -290,7 +311,7 @@ export function CesiumViewer(props: CesiumViewerProps) {
       });
 
       const token = propsRef.current.ionToken;
-      if (token) {
+      if (token && propsRef.current.worldTerrain) {
         Cesium.Ion.defaultAccessToken = token;
         try {
           viewer.terrainProvider = await Cesium.createWorldTerrainAsync();
@@ -299,6 +320,10 @@ export function CesiumViewer(props: CesiumViewerProps) {
         }
       }
       populate(Cesium, viewer, pointSource, propsRef.current);
+      // If a focus target was set before the viewer mounted, fly to it now.
+      if (propsRef.current.focus) {
+        flyToFocus(Cesium, viewer, pointSource, propsRef.current.focus);
+      }
     })();
 
     const captureRef = propsRef.current.captureRef;
@@ -331,6 +356,50 @@ export function CesiumViewer(props: CesiumViewerProps) {
       cancelled = true;
     };
   }, [props.scene, props.visibleCategoryIds, props.categories, props.overlays]);
+
+  // Fly to a focused point when requested (nonce changes on each request).
+  useEffect(() => {
+    if (!props.focus) {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const Cesium: any = await loadCesium();
+      const viewer = viewerRef.current;
+      if (!cancelled && viewer && !viewer.isDestroyed() && props.focus) {
+        flyToFocus(Cesium, viewer, pointSourceRef.current, props.focus);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.focus?.nonce]);
+
+  // Swap terrain when the world-terrain toggle changes.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const Cesium: any = await loadCesium();
+      const viewer = viewerRef.current;
+      if (cancelled || !viewer || viewer.isDestroyed()) {
+        return;
+      }
+      if (props.worldTerrain && propsRef.current.ionToken) {
+        Cesium.Ion.defaultAccessToken = propsRef.current.ionToken;
+        try {
+          viewer.terrainProvider = await Cesium.createWorldTerrainAsync();
+        } catch {
+          /* keep current terrain */
+        }
+      } else {
+        viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [props.worldTerrain]);
 
   return <div ref={containerRef} className="h-[70vh] w-full overflow-hidden rounded-lg border" />;
 }
