@@ -406,3 +406,14 @@ pub struct SceneData {
     pub survey_points: Vec<ScenePoint>,
     pub grid_lines: Vec<SceneLine>,
 }
+
+// ---------------------------------------------------------------------------
+// Phase 2 completion: EPSG search
+// ---------------------------------------------------------------------------
+
+/// An EPSG coordinate-reference-system entry for the picker.
+#[derive(SimpleObject)]
+pub struct EpsgEntry {
+    pub code: i32,
+    pub name: String,
+}

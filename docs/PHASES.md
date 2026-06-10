@@ -10,7 +10,7 @@
 | Phase | Focus                                               | Depends On      | Status      |
 | ----- | --------------------------------------------------- | --------------- | ----------- |
 | 1     | Foundation: stack boots, DB, auth, tenancy          | —               | Complete\*  |
-| 2     | Projects, grid, control points (data + forms)       | 1               | Complete\*  |
+| 2     | Projects, grid, control points (data + forms)       | 1               | Complete    |
 | 3     | Geo-core: Helmert transform + residuals (Rust)      | 2               | Complete    |
 | 4     | Coordinate conversion + units (Rust + UI)           | 3               | Complete    |
 | 5     | Point import (CSV/LandXML) + categories/groups      | 2, 4            | Complete    |
@@ -21,7 +21,6 @@
 | 10    | Hardening: security, file-safety, E2E, deploy       | all             | Not started |
 
 \* Phase 1: rate-limiting, real email delivery, and forcing RLS are intentionally deferred to Phase 10.
-Phase 2: a searchable EPSG picker is deferred (EPSG is a free integer field with a US default for now).
 
 ```
 1 ──> 2 ──> 3 ──> 4 ──┐
@@ -69,7 +68,7 @@ The data backbone: create a project, define its grid, enter control points.
 ### Deliverables
 
 - [x] Project CRUD (name, EPSG code, display unit, site origin lat/lon, scale factor)
-- [~] EPSG code is a free integer field with a US default (2229); a searchable EPSG picker is deferred
+- [x] EPSG library integration: searchable picker (`searchEpsg` over crs-definitions, by code or name; US default 2229)
 - [x] GridSystem entry (lettered + numbered axes with offsets) — `setGridAxes`
 - [x] ControlPoint CRUD (label, N, E, Z) — stored canonical meters
 - [x] Project list + workspace shell (panels, no 3D yet)

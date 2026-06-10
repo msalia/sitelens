@@ -16,10 +16,10 @@ use crate::crs;
 use crate::geo::{solve_helmert, Correspondence, HelmertParams};
 use crate::import::{self, CsvMapping};
 use crate::models::{
-    ControlPoint, CoordinateSet, CoordinateSpace, CsvMappingInput, GridAxis, GridAxisInput,
-    GridAxisRow, ImportBatch, ImportFormat, ImportProfile, ImportProfileRow, InviteResult,
-    LoginRow, Org, PointCategory, PointGroup, Project, ProjectRow, SceneData, SceneLine,
-    ScenePoint, SignupResult, SurveyPoint, Transform, TransformResidual, User, UserRow,
+    ControlPoint, CoordinateSet, CoordinateSpace, CsvMappingInput, EpsgEntry, GridAxis,
+    GridAxisInput, GridAxisRow, ImportBatch, ImportFormat, ImportProfile, ImportProfileRow,
+    InviteResult, LoginRow, Org, PointCategory, PointGroup, Project, ProjectRow, SceneData,
+    SceneLine, ScenePoint, SignupResult, SurveyPoint, Transform, TransformResidual, User, UserRow,
 };
 use crate::units::LengthUnit;
 
@@ -369,6 +369,21 @@ impl QueryRoot {
         .fetch_all(pool)
         .await?;
         Ok(rows)
+    }
+
+    /// Searches the EPSG coordinate-reference-system catalog by code or name.
+    async fn search_epsg(
+        &self,
+        ctx: &Context<'_>,
+        query: String,
+        limit: Option<i32>,
+    ) -> Result<Vec<EpsgEntry>> {
+        require_auth(ctx)?;
+        let limit = limit.unwrap_or(25).clamp(1, 100) as usize;
+        Ok(crs::search_epsg(&query, limit)
+            .into_iter()
+            .map(|(code, name)| EpsgEntry { code, name })
+            .collect())
     }
 
     /// Everything the 3D viewer needs, pre-projected to geographic coordinates.

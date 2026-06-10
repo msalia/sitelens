@@ -5,6 +5,8 @@
 //! we convert to/from the CRS's native unit (e.g. US survey feet for State
 //! Plane zones) using the `+units`/`+to_meter` token in its proj4 string.
 
+use std::sync::OnceLock;
+
 use proj4rs::adaptors::transform_xy;
 use proj4rs::Proj;
 
@@ -60,6 +62,38 @@ pub fn geographic_to_projected(epsg: i32, latitude: f64, longitude: f64) -> Opti
     Some((e * m_per_unit, n * m_per_unit))
 }
 
+/// Extracts the CRS name from a WKT string (its first quoted token).
+fn wkt_name(wkt: &str) -> String {
+    wkt.split('"').nth(1).unwrap_or("").to_string()
+}
+
+/// All EPSG entries (code, name) the crate knows, built once by scanning codes.
+fn all_crs() -> &'static Vec<(i32, String)> {
+    static CACHE: OnceLock<Vec<(i32, String)>> = OnceLock::new();
+    CACHE.get_or_init(|| {
+        let mut v = Vec::new();
+        for code in 1024u16..=32767 {
+            if let Some(def) = crs_definitions::from_code(code) {
+                v.push((code as i32, wkt_name(def.wkt)));
+            }
+        }
+        v
+    })
+}
+
+/// Searches EPSG definitions by code or name (case-insensitive), capped at `limit`.
+pub fn search_epsg(query: &str, limit: usize) -> Vec<(i32, String)> {
+    let q = query.trim().to_lowercase();
+    all_crs()
+        .iter()
+        .filter(|(code, name)| {
+            q.is_empty() || name.to_lowercase().contains(&q) || code.to_string().contains(&q)
+        })
+        .take(limit)
+        .cloned()
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -89,6 +123,21 @@ mod tests {
         let (e, n) = geographic_to_projected(CA5, 34.0537, -118.2428).expect("project");
         assert!((1.5e6..2.5e6).contains(&e), "easting {e} m out of range");
         assert!((4.0e5..8.0e5).contains(&n), "northing {n} m out of range");
+    }
+
+    #[test]
+    fn search_epsg_finds_by_code_and_name() {
+        let by_code = search_epsg("2229", 10);
+        assert!(by_code.iter().any(|(c, _)| *c == 2229));
+
+        let by_name = search_epsg("california zone 5", 20);
+        assert!(
+            by_name.iter().any(|(c, _)| *c == 2229),
+            "expected 2229 in: {by_name:?}"
+        );
+
+        // Limit is respected.
+        assert!(search_epsg("", 5).len() <= 5);
     }
 
     #[test]

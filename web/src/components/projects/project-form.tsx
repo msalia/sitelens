@@ -1,3 +1,4 @@
+import { EpsgPicker } from '@/components/projects/epsg-picker';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -78,32 +79,28 @@ export function ProjectFormFields({ idPrefix, onChange, values }: ProjectFormFie
           onChange={(e) => onChange({ description: e.target.value })}
         />
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor={`${idPrefix}-epsg`}>EPSG code</Label>
-          <Input
-            id={`${idPrefix}-epsg`}
-            type="number"
-            value={values.epsgCode}
-            onChange={(e) => onChange({ epsgCode: e.target.value })}
-            required
-          />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor={`${idPrefix}-unit`}>Display unit</Label>
-          <NativeSelect
-            id={`${idPrefix}-unit`}
-            className="w-full"
-            value={values.displayUnit}
-            onChange={(e) => onChange({ displayUnit: e.target.value as LengthUnit })}
-          >
-            {UNIT_OPTIONS.map((u) => (
-              <NativeSelectOption key={u.value} value={u.value}>
-                {u.label}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor={`${idPrefix}-epsg`}>Coordinate system (EPSG)</Label>
+        <EpsgPicker
+          idPrefix={idPrefix}
+          value={values.epsgCode}
+          onChange={(code) => onChange({ epsgCode: code })}
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor={`${idPrefix}-unit`}>Display unit</Label>
+        <NativeSelect
+          id={`${idPrefix}-unit`}
+          className="w-full"
+          value={values.displayUnit}
+          onChange={(e) => onChange({ displayUnit: e.target.value as LengthUnit })}
+        >
+          {UNIT_OPTIONS.map((u) => (
+            <NativeSelectOption key={u.value} value={u.value}>
+              {u.label}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
       </div>
       <div className="grid grid-cols-3 gap-4">
         <div className="flex flex-col gap-2">

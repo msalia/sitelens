@@ -101,6 +101,11 @@ export interface SceneData {
   surveyPoints: ScenePoint[];
 }
 
+export interface EpsgEntry {
+  code: number;
+  name: string;
+}
+
 /** Minimal shape the coordinate inspector needs. */
 export interface InspectablePoint {
   easting: number;
