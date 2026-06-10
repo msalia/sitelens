@@ -19,13 +19,32 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 
-const CREATE_PROJECT = `
-  mutation ($name: String!, $desc: String, $epsg: Int!, $unit: LengthUnit!, $scale: Float, $lat: Float, $lon: Float) {
-    createProject(name: $name, description: $desc, epsgCode: $epsg, displayUnit: $unit,
-      combinedScaleFactor: $scale, siteOriginLat: $lat, siteOriginLon: $lon) { id }
-  }`;
+const CREATE_PROJECT = graphql(`
+  mutation CreateProject(
+    $name: String!
+    $desc: String
+    $epsg: Int!
+    $unit: LengthUnit!
+    $scale: Float
+    $lat: Float
+    $lon: Float
+  ) {
+    createProject(
+      name: $name
+      description: $desc
+      epsgCode: $epsg
+      displayUnit: $unit
+      combinedScaleFactor: $scale
+      siteOriginLat: $lat
+      siteOriginLon: $lon
+    ) {
+      id
+    }
+  }
+`);
 
 export function CreateProjectDialog({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false);

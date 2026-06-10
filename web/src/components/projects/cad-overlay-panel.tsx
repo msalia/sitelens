@@ -9,17 +9,44 @@ import type { CadOverlay, Project } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 
-const UPLOAD = `
-  mutation ($id: UUID!, $f: String!, $c: String!) {
-    uploadDxf(projectId: $id, filename: $f, content: $c) { id }
-  }`;
+const UPLOAD = graphql(`
+  mutation UploadDxf($id: UUID!, $f: String!, $c: String!) {
+    uploadDxf(projectId: $id, filename: $f, content: $c) {
+      id
+    }
+  }
+`);
 
-const SET_GEO = `
-  mutation ($id: UUID!, $oe: Float, $on: Float, $rot: Float, $sc: Float, $vis: Boolean) {
-    setCadGeoreference(id: $id, offsetE: $oe, offsetN: $on, rotationDeg: $rot, scale: $sc, visible: $vis) { id }
-  }`;
+const SET_GEO = graphql(`
+  mutation SetCadGeoreference(
+    $id: UUID!
+    $oe: Float
+    $on: Float
+    $rot: Float
+    $sc: Float
+    $vis: Boolean
+  ) {
+    setCadGeoreference(
+      id: $id
+      offsetE: $oe
+      offsetN: $on
+      rotationDeg: $rot
+      scale: $sc
+      visible: $vis
+    ) {
+      id
+    }
+  }
+`);
+
+const DELETE_CAD_OVERLAY = graphql(`
+  mutation DeleteCadOverlay($id: UUID!) {
+    deleteCadOverlay(id: $id)
+  }
+`);
 
 export function CadOverlayPanel({
   onChanged,
@@ -52,7 +79,7 @@ export function CadOverlayPanel({
 
   async function remove(id: string) {
     try {
-      await gql('mutation ($id: UUID!) { deleteCadOverlay(id: $id) }', { id });
+      await gql(DELETE_CAD_OVERLAY, { id });
       onChanged();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Delete failed');

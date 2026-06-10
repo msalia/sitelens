@@ -9,7 +9,16 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
+
+const LOGIN = graphql(`
+  mutation Login($e: String!, $p: String!) {
+    login(email: $e, password: $p) {
+      id
+    }
+  }
+`);
 
 export default function LoginPage() {
   const router = useRouter();
@@ -21,10 +30,7 @@ export default function LoginPage() {
     e.preventDefault();
     setBusy(true);
     try {
-      await gql('mutation ($e: String!, $p: String!) { login(email: $e, password: $p) { id } }', {
-        e: email,
-        p: password,
-      });
+      await gql(LOGIN, { e: email, p: password });
       router.replace('/projects');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Login failed');

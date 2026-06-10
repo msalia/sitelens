@@ -5,12 +5,17 @@ import { useEffect, useRef, useState } from 'react';
 import type { EpsgEntry } from '@/lib/types';
 
 import { Input } from '@/components/ui/input';
+import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 
-const SEARCH = `
-  query ($q: String!, $limit: Int) {
-    searchEpsg(query: $q, limit: $limit) { code name }
-  }`;
+const SEARCH = graphql(`
+  query SearchEpsg($q: String!, $limit: Int) {
+    searchEpsg(query: $q, limit: $limit) {
+      code
+      name
+    }
+  }
+`);
 
 /** A searchable EPSG coordinate-reference-system picker. */
 export function EpsgPicker({
@@ -35,7 +40,7 @@ export function EpsgPicker({
       return;
     }
     let cancelled = false;
-    gql<{ searchEpsg: EpsgEntry[] }>(SEARCH, { limit: 5, q: value })
+    gql(SEARCH, { limit: 5, q: value })
       .then(({ searchEpsg }) => {
         const hit = searchEpsg.find((e) => String(e.code) === value);
         if (!cancelled) {
@@ -54,7 +59,7 @@ export function EpsgPicker({
       return;
     }
     const handle = setTimeout(() => {
-      gql<{ searchEpsg: EpsgEntry[] }>(SEARCH, { limit: 25, q: query })
+      gql(SEARCH, { limit: 25, q: query })
         .then(({ searchEpsg }) => setResults(searchEpsg))
         .catch(() => setResults([]));
     }, 200);

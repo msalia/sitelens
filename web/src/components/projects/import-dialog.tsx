@@ -18,17 +18,35 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
+import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 import { type LengthUnit, type PointCategory, type Project, UNIT_OPTIONS } from '@/lib/types';
 
-const IMPORT = `
-  mutation ($id: UUID!, $format: ImportFormat!, $content: String!, $unit: LengthUnit!,
-            $mapping: CsvMappingInput, $filename: String, $categoryId: UUID, $profile: String) {
-    importPoints(projectId: $id, format: $format, content: $content, unit: $unit,
-      mapping: $mapping, sourceFilename: $filename, categoryId: $categoryId, saveProfileName: $profile) {
+const IMPORT = graphql(`
+  mutation ImportPoints(
+    $id: UUID!
+    $format: ImportFormat!
+    $content: String!
+    $unit: LengthUnit!
+    $mapping: CsvMappingInput
+    $filename: String
+    $categoryId: UUID
+    $profile: String
+  ) {
+    importPoints(
+      projectId: $id
+      format: $format
+      content: $content
+      unit: $unit
+      mapping: $mapping
+      sourceFilename: $filename
+      categoryId: $categoryId
+      saveProfileName: $profile
+    ) {
       rowCount
     }
-  }`;
+  }
+`);
 
 type Format = 'CSV' | 'LANDXML';
 type ColField = 'labelCol' | 'northingCol' | 'eastingCol' | 'elevationCol' | 'descriptionCol';
@@ -109,7 +127,7 @@ export function ImportDialog({
               northingCol: parseInt(cols.northingCol, 10),
             }
           : null;
-      const data = await gql<{ importPoints: { rowCount: number } }>(IMPORT, {
+      const data = await gql(IMPORT, {
         categoryId: categoryId === NONE ? null : categoryId,
         content,
         filename: filename || null,

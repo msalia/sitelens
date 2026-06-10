@@ -1,0 +1,539 @@
+"""
+A georeferenced DXF overlay. The raw file lives in storage (key not exposed).
+"""
+type CadOverlay {
+	id: UUID!
+	projectId: UUID!
+	originalFilename: String!
+	offsetE: Float!
+	offsetN: Float!
+	rotationDeg: Float!
+	scale: Float!
+	assumeRealWorld: Boolean!
+	visible: Boolean!
+}
+
+"""
+A city-published control point. Coordinates are meters. `grid_x`/`grid_y` are
+the point's location in building-grid space, used to solve the transform.
+"""
+type ControlPoint {
+	id: UUID!
+	projectId: UUID!
+	label: String!
+	northing: Float!
+	easting: Float!
+	elevation: Float
+	gridX: Float
+	gridY: Float
+	source: String!
+}
+
+"""
+All derivable representations of a coordinate. Linear fields are meters;
+latitude/longitude are degrees. `None` where a representation isn't derivable.
+"""
+type CoordinateSet {
+	gridX: Float
+	gridY: Float
+	projectedGridE: Float
+	projectedGridN: Float
+	projectedGroundE: Float
+	projectedGroundN: Float
+	latitude: Float
+	longitude: Float
+}
+
+"""
+The space an input coordinate is expressed in (GraphQL enum).
+"""
+enum CoordinateSpace {
+	GRID
+	PROJECTED
+}
+
+"""
+CSV column mapping (0-based indices).
+"""
+input CsvMappingInput {
+	hasHeader: Boolean!
+	labelCol: Int
+	northingCol: Int!
+	eastingCol: Int!
+	elevationCol: Int
+	descriptionCol: Int
+}
+
+"""
+Implement the DateTime<Utc> scalar
+
+The input/output is a string in RFC3339 format.
+"""
+scalar DateTime
+
+"""
+An EPSG coordinate-reference-system entry for the picker.
+"""
+type EpsgEntry {
+	code: Int!
+	name: String!
+}
+
+"""
+A single grid axis. `position` is in meters (grid space).
+"""
+type GridAxis {
+	id: UUID!
+	projectId: UUID!
+	family: GridFamily!
+	label: String!
+	position: Float!
+}
+
+"""
+Input for replacing the grid. `position` is expressed in `unit`.
+"""
+input GridAxisInput {
+	family: GridFamily!
+	label: String!
+	position: Float!
+}
+
+"""
+Which family a grid axis belongs to.
+"""
+enum GridFamily {
+	LETTERED
+	NUMBERED
+}
+
+"""
+A record of one import.
+"""
+type ImportBatch {
+	id: UUID!
+	projectId: UUID!
+	sourceFilename: String!
+	format: String!
+	rowCount: Int!
+}
+
+"""
+Import file format.
+"""
+enum ImportFormat {
+	CSV
+	LANDXML
+}
+
+"""
+A reusable CSV import column mapping. `mapping_json` is the serialized mapping.
+"""
+type ImportProfile {
+	id: UUID!
+	projectId: UUID!
+	name: String!
+	unit: LengthUnit!
+	mappingJson: String!
+}
+
+"""
+Result returned from inviting a user. The invite token is surfaced for the
+same reason as above (no email provider yet).
+"""
+type InviteResult {
+	user: User!
+	inviteToken: String!
+}
+
+"""
+A geographic position (degrees) with height in meters.
+"""
+type LatLng {
+	latitude: Float!
+	longitude: Float!
+	height: Float!
+}
+
+"""
+A length unit used at I/O boundaries. The canonical internal unit is meters.
+"""
+enum LengthUnit {
+	US_SURVEY_FOOT
+	INTERNATIONAL_FOOT
+	METER
+}
+
+type MutationRoot {
+	"""
+	Self-service signup: creates a new organization and its first Admin user
+	(unverified). Returns the verification token (delivered by email later).
+	"""
+	signup(email: String!, password: String!, orgName: String!): SignupResult!
+	"""
+	Verifies an email address using the token issued at signup.
+	"""
+	verifyEmail(token: String!): Boolean!
+	"""
+	Logs in with email + password. Sets an HTTP-only session cookie.
+	"""
+	login(email: String!, password: String!): User!
+	"""
+	Clears the session cookie.
+	"""
+	logout: Boolean!
+	"""
+	Invites a user into the caller's organization. Admin only. Returns the
+	invite token (delivered by email later).
+	"""
+	inviteUser(email: String!, role: Role!): InviteResult!
+	"""
+	Accepts an invite: sets the password, verifies the email, and logs in.
+	"""
+	acceptInvite(token: String!, password: String!): User!
+	"""
+	Changes a user's role within the caller's organization. Admin only.
+	"""
+	updateUserRole(userId: UUID!, role: Role!): User!
+	"""
+	Creates a project in the caller's organization. Editor role required.
+	"""
+	createProject(name: String!, description: String, epsgCode: Int!, displayUnit: LengthUnit!, combinedScaleFactor: Float, siteOriginLat: Float, siteOriginLon: Float): Project!
+	"""
+	Updates mutable project fields. Editor role required.
+	"""
+	updateProject(id: UUID!, name: String, description: String, epsgCode: Int, displayUnit: LengthUnit, combinedScaleFactor: Float, siteOriginLat: Float, siteOriginLon: Float): Project!
+	"""
+	Deletes a project (cascades to its grid and control points). Editor role required.
+	"""
+	deleteProject(id: UUID!): Boolean!
+	"""
+	Replaces a project's entire grid. Axis positions are given in `unit`.
+	"""
+	setGridAxes(projectId: UUID!, unit: LengthUnit!, axes: [GridAxisInput!]!): [GridAxis!]!
+	"""
+	Adds a control point. Coordinates are given in `unit` and stored as meters.
+	"""
+	addControlPoint(projectId: UUID!, label: String!, northing: Float!, easting: Float!, elevation: Float, gridX: Float, gridY: Float, unit: LengthUnit!, source: String): ControlPoint!
+	"""
+	Updates a control point. Coordinate fields, when provided, are in `unit`.
+	"""
+	updateControlPoint(id: UUID!, label: String, northing: Float, easting: Float, elevation: Float, gridX: Float, gridY: Float, unit: LengthUnit!, source: String): ControlPoint!
+	"""
+	Deletes a control point in the caller's organization. Editor role required.
+	"""
+	deleteControlPoint(id: UUID!): Boolean!
+	"""
+	Solves the Helmert transform from the project's control points (those with
+	grid coordinates) and persists it. Editor role required.
+	"""
+	solveTransform(projectId: UUID!): Transform!
+	"""
+	Creates a custom point category for the caller's organization.
+	"""
+	createCategory(name: String!, color: String!, icon: String!): PointCategory!
+	"""
+	Imports points from CSV or LandXML content. Coordinates in `unit` are
+	stored as meters. Optionally tags all points with a category and saves
+	the CSV mapping as a reusable profile.
+	"""
+	importPoints(projectId: UUID!, format: ImportFormat!, content: String!, unit: LengthUnit!, mapping: CsvMappingInput, sourceFilename: String, categoryId: UUID, saveProfileName: String): ImportBatch!
+	"""
+	Updates a surveyed point's organizational fields (label, description,
+	category, tags). Editor role required.
+	"""
+	updateSurveyPoint(id: UUID!, label: String, description: String, categoryId: UUID, tags: [String!]): SurveyPoint!
+	"""
+	Deletes a surveyed point. Editor role required.
+	"""
+	deleteSurveyPoint(id: UUID!): Boolean!
+	"""
+	Saves a named selection of points. Editor role required.
+	"""
+	createPointGroup(projectId: UUID!, name: String!, memberIds: [UUID!]!): PointGroup!
+	"""
+	Deletes a point group. Editor role required.
+	"""
+	deletePointGroup(id: UUID!): Boolean!
+	"""
+	Uploads a DXF file: stores the raw text and creates an overlay record
+	(defaulting to real-world georeferencing). Editor role required.
+	"""
+	uploadDxf(projectId: UUID!, filename: String!, content: String!): CadOverlay!
+	"""
+	Updates an overlay's georeference / visibility. Editor role required.
+	"""
+	setCadGeoreference(id: UUID!, offsetE: Float, offsetN: Float, rotationDeg: Float, scale: Float, assumeRealWorld: Boolean, visible: Boolean): CadOverlay!
+	"""
+	Deletes an overlay and its stored file. Editor role required.
+	"""
+	deleteCadOverlay(id: UUID!): Boolean!
+}
+
+"""
+An organization as exposed over GraphQL.
+"""
+type Org {
+	id: UUID!
+	name: String!
+	createdAt: DateTime!
+}
+
+"""
+A point category (color/icon). Default set is seeded per org; orgs add custom.
+"""
+type PointCategory {
+	id: UUID!
+	orgId: UUID!
+	name: String!
+	color: String!
+	icon: String!
+	isDefault: Boolean!
+}
+
+"""
+A saved named selection of points.
+"""
+type PointGroup {
+	id: UUID!
+	projectId: UUID!
+	name: String!
+	memberIds: [UUID!]!
+}
+
+"""
+A building site. All stored coordinates are canonical meters.
+"""
+type Project {
+	id: UUID!
+	orgId: UUID!
+	name: String!
+	description: String!
+	epsgCode: Int!
+	displayUnit: LengthUnit!
+	combinedScaleFactor: Float!
+	siteOriginLat: Float
+	siteOriginLon: Float
+	createdAt: DateTime!
+	updatedAt: DateTime!
+}
+
+type QueryRoot {
+	"""
+	Liveness check.
+	"""
+	health: String!
+	"""
+	Database connectivity check.
+	"""
+	dbStatus: String!
+	"""
+	The currently authenticated user, or null if not logged in.
+	"""
+	me: User
+	"""
+	All users in the caller's organization. Admin only.
+	"""
+	users: [User!]!
+	"""
+	All projects in the caller's organization.
+	"""
+	projects: [Project!]!
+	"""
+	A single project by id, scoped to the caller's organization.
+	"""
+	project(id: UUID!): Project
+	"""
+	The grid axes for a project, ordered by family then position.
+	"""
+	gridAxes(projectId: UUID!): [GridAxis!]!
+	"""
+	The control points for a project.
+	"""
+	controlPoints(projectId: UUID!): [ControlPoint!]!
+	"""
+	The persisted Helmert transform for a project, if one has been solved.
+	"""
+	transform(projectId: UUID!): Transform
+	"""
+	Converts a coordinate (given in `unit`, in the named `space`) into every
+	derivable representation: grid, projected (grid + ground), and geographic.
+	"""
+	convertCoordinate(projectId: UUID!, space: CoordinateSpace!, x: Float!, y: Float!, unit: LengthUnit!): CoordinateSet!
+	"""
+	The caller organization's point categories (defaults + custom).
+	"""
+	categories: [PointCategory!]!
+	"""
+	Surveyed points for a project, optionally filtered by free-text search
+	(label/description/tags) and/or category.
+	"""
+	surveyPoints(projectId: UUID!, search: String, categoryId: UUID): [SurveyPoint!]!
+	"""
+	Import batches for a project.
+	"""
+	importBatches(projectId: UUID!): [ImportBatch!]!
+	"""
+	Saved CSV import profiles for a project.
+	"""
+	importProfiles(projectId: UUID!): [ImportProfile!]!
+	"""
+	Saved point groups (named selections) for a project.
+	"""
+	pointGroups(projectId: UUID!): [PointGroup!]!
+	"""
+	DXF overlays for a project.
+	"""
+	cadOverlays(projectId: UUID!): [CadOverlay!]!
+	"""
+	The raw DXF text of an overlay (for client-side parsing/rendering).
+	"""
+	cadOverlayContent(id: UUID!): String!
+	"""
+	Searches the EPSG coordinate-reference-system catalog by code or name.
+	"""
+	searchEpsg(query: String!, limit: Int): [EpsgEntry!]!
+	"""
+	Everything the 3D viewer needs, pre-projected to geographic coordinates.
+	"""
+	sceneData(projectId: UUID!): SceneData!
+}
+
+"""
+In-org role. The string values match the `users.role` CHECK constraint.
+"""
+enum Role {
+	ADMIN
+	SURVEYOR
+	VIEWER
+}
+
+"""
+Everything the 3D viewer needs, pre-projected to geographic coordinates.
+"""
+type SceneData {
+	origin: LatLng
+	"""
+	The origin's projected easting/northing (meters) — lets the client place
+	DXF overlays in a local east-north frame anchored at the origin.
+	"""
+	originProjectedE: Float
+	originProjectedN: Float
+	controlPoints: [ScenePoint!]!
+	surveyPoints: [ScenePoint!]!
+	gridLines: [SceneLine!]!
+}
+
+"""
+A renderable polyline (e.g. a grid axis) in geographic coordinates.
+"""
+type SceneLine {
+	label: String!
+	coordinates: [LatLng!]!
+}
+
+"""
+A renderable point in geographic coordinates. `easting`/`northing` (meters)
+are carried so the client can open the coordinate inspector from a 3D pick.
+"""
+type ScenePoint {
+	id: UUID
+	label: String!
+	latitude: Float!
+	longitude: Float!
+	height: Float!
+	easting: Float!
+	northing: Float!
+	categoryId: UUID
+}
+
+"""
+Result returned from signup. The verification token is surfaced here only
+because no email provider is wired yet (deferred); it will be delivered by
+email in a later phase.
+"""
+type SignupResult {
+	user: User!
+	org: Org!
+	verificationToken: String!
+}
+
+"""
+A surveyed point. Coordinates are meters; one category + free-text tags.
+"""
+type SurveyPoint {
+	id: UUID!
+	projectId: UUID!
+	label: String!
+	northing: Float!
+	easting: Float!
+	elevation: Float
+	description: String!
+	categoryId: UUID
+	tags: [String!]!
+	importBatchId: UUID
+}
+
+"""
+A solved Helmert transform. Translations/RMS are meters; rotation in degrees.
+"""
+type Transform {
+	translationE: Float!
+	translationN: Float!
+	rotationDegrees: Float!
+	scale: Float!
+	rmsError: Float!
+	pointCount: Int!
+	residuals: [TransformResidual!]!
+}
+
+"""
+Per-point transform residual (observed − computed), in meters.
+"""
+type TransformResidual {
+	label: String!
+	deltaEasting: Float!
+	deltaNorthing: Float!
+	magnitude: Float!
+}
+
+"""
+A UUID is a unique 128-bit number, stored as 16 octets. UUIDs are parsed as
+Strings within GraphQL. UUIDs are used to assign unique identifiers to
+entities without requiring a central allocating authority.
+
+# References
+
+* [Wikipedia: Universally Unique Identifier](http://en.wikipedia.org/wiki/Universally_unique_identifier)
+* [RFC4122: A Universally Unique Identifier (UUID) URN Namespace](http://tools.ietf.org/html/rfc4122)
+"""
+scalar UUID
+
+"""
+A user as exposed over GraphQL. Never carries the password hash or tokens.
+"""
+type User {
+	id: UUID!
+	orgId: UUID!
+	email: String!
+	role: Role!
+	emailVerified: Boolean!
+	createdAt: DateTime!
+}
+
+"""
+Directs the executor to include this field or fragment only when the `if` argument is true.
+"""
+directive @include(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+"""
+Directs the executor to skip this field or fragment when the `if` argument is true.
+"""
+directive @skip(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+"""
+Provides a scalar specification URL for specifying the behavior of custom scalar types.
+"""
+directive @specifiedBy(url: String!) on SCALAR
+schema {
+	query: QueryRoot
+	mutation: MutationRoot
+}

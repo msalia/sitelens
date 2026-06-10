@@ -12,6 +12,7 @@ import { GridEditor } from '@/components/projects/grid-editor';
 import { SceneView } from '@/components/projects/scene-view';
 import { SurveyPointsPanel } from '@/components/projects/survey-points-panel';
 import { TransformPanel } from '@/components/projects/transform-panel';
+import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 import {
   type ControlPoint,
@@ -22,17 +23,63 @@ import {
   UNIT_LABELS,
 } from '@/lib/types';
 
-const WORKSPACE_QUERY = `
-  query ($id: UUID!) {
-    project(id: $id) { id name description epsgCode displayUnit combinedScaleFactor siteOriginLat siteOriginLon }
-    gridAxes(projectId: $id) { id family label position }
-    controlPoints(projectId: $id) { id label northing easting elevation gridX gridY source }
-    transform(projectId: $id) {
-      translationE translationN rotationDegrees scale rmsError pointCount
-      residuals { label deltaEasting deltaNorthing magnitude }
+const WORKSPACE_QUERY = graphql(`
+  query Workspace($id: UUID!) {
+    project(id: $id) {
+      id
+      orgId
+      name
+      description
+      epsgCode
+      displayUnit
+      combinedScaleFactor
+      siteOriginLat
+      siteOriginLon
+      createdAt
+      updatedAt
     }
-    categories { id orgId name color icon isDefault }
-  }`;
+    gridAxes(projectId: $id) {
+      id
+      projectId
+      family
+      label
+      position
+    }
+    controlPoints(projectId: $id) {
+      id
+      projectId
+      label
+      northing
+      easting
+      elevation
+      gridX
+      gridY
+      source
+    }
+    transform(projectId: $id) {
+      translationE
+      translationN
+      rotationDegrees
+      scale
+      rmsError
+      pointCount
+      residuals {
+        label
+        deltaEasting
+        deltaNorthing
+        magnitude
+      }
+    }
+    categories {
+      id
+      orgId
+      name
+      color
+      icon
+      isDefault
+    }
+  }
+`);
 
 export default function ProjectWorkspace() {
   const { id } = useParams<{ id: string }>();
@@ -45,13 +92,7 @@ export default function ProjectWorkspace() {
 
   const load = useCallback(async () => {
     try {
-      const data = await gql<{
-        project: Project | null;
-        gridAxes: GridAxis[];
-        controlPoints: ControlPoint[];
-        transform: Transform | null;
-        categories: PointCategory[];
-      }>(WORKSPACE_QUERY, { id });
+      const data = await gql(WORKSPACE_QUERY, { id });
       setProject(data.project);
       setAxes(data.gridAxes);
       setPoints(data.controlPoints);

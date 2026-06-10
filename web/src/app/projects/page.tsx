@@ -8,10 +8,31 @@ import type { Project } from '@/lib/types';
 import { CreateProjectDialog } from '@/components/projects/create-project-dialog';
 import { ProjectCard } from '@/components/projects/project-card';
 import { Card, CardContent } from '@/components/ui/card';
+import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 
-const PROJECTS_QUERY = `
-  { projects { id name description epsgCode displayUnit combinedScaleFactor createdAt } }`;
+const PROJECTS_QUERY = graphql(`
+  query Projects {
+    projects {
+      id
+      orgId
+      name
+      description
+      epsgCode
+      displayUnit
+      combinedScaleFactor
+      siteOriginLat
+      siteOriginLon
+      createdAt
+      updatedAt
+    }
+  }
+`);
+const DELETE_PROJECT = graphql(`
+  mutation DeleteProject($id: UUID!) {
+    deleteProject(id: $id)
+  }
+`);
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -19,7 +40,7 @@ export default function ProjectsPage() {
 
   const load = useCallback(async () => {
     try {
-      const data = await gql<{ projects: Project[] }>(PROJECTS_QUERY);
+      const data = await gql(PROJECTS_QUERY);
       setProjects(data.projects);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load projects');
@@ -37,7 +58,7 @@ export default function ProjectsPage() {
       return;
     }
     try {
-      await gql('mutation ($id: UUID!) { deleteProject(id: $id) }', { id });
+      await gql(DELETE_PROJECT, { id });
       toast.success('Project deleted');
       void load();
     } catch (err) {

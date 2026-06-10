@@ -14,17 +14,29 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 import { type Project, type Transform, UNIT_LABELS } from '@/lib/types';
 import { fromMeters } from '@/lib/units';
 
-const SOLVE_TRANSFORM = `
-  mutation ($id: UUID!) {
+const SOLVE_TRANSFORM = graphql(`
+  mutation SolveTransform($id: UUID!) {
     solveTransform(projectId: $id) {
-      translationE translationN rotationDegrees scale rmsError pointCount
-      residuals { label deltaEasting deltaNorthing magnitude }
+      translationE
+      translationN
+      rotationDegrees
+      scale
+      rmsError
+      pointCount
+      residuals {
+        label
+        deltaEasting
+        deltaNorthing
+        magnitude
+      }
     }
-  }`;
+  }
+`);
 
 export function TransformPanel({
   initialTransform,
@@ -42,7 +54,7 @@ export function TransformPanel({
   async function solve() {
     setBusy(true);
     try {
-      const data = await gql<{ solveTransform: Transform }>(SOLVE_TRANSFORM, { id: project.id });
+      const data = await gql(SOLVE_TRANSFORM, { id: project.id });
       setTransform(data.solveTransform);
       toast.success('Transform solved');
     } catch (err) {

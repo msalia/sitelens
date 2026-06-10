@@ -21,13 +21,34 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 
-const UPDATE_PROJECT = `
-  mutation ($id: UUID!, $name: String, $desc: String, $epsg: Int, $unit: LengthUnit, $scale: Float, $lat: Float, $lon: Float) {
-    updateProject(id: $id, name: $name, description: $desc, epsgCode: $epsg, displayUnit: $unit,
-      combinedScaleFactor: $scale, siteOriginLat: $lat, siteOriginLon: $lon) { id }
-  }`;
+const UPDATE_PROJECT = graphql(`
+  mutation UpdateProject(
+    $id: UUID!
+    $name: String
+    $desc: String
+    $epsg: Int
+    $unit: LengthUnit
+    $scale: Float
+    $lat: Float
+    $lon: Float
+  ) {
+    updateProject(
+      id: $id
+      name: $name
+      description: $desc
+      epsgCode: $epsg
+      displayUnit: $unit
+      combinedScaleFactor: $scale
+      siteOriginLat: $lat
+      siteOriginLon: $lon
+    ) {
+      id
+    }
+  }
+`);
 
 export function EditProjectDialog({ onSaved, project }: { project: Project; onSaved: () => void }) {
   const [open, setOpen] = useState(false);

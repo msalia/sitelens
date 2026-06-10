@@ -7,7 +7,25 @@ import { useEffect, useState } from 'react';
 import type { Me } from '@/lib/types';
 
 import { Button } from '@/components/ui/button';
+import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
+
+const ME = graphql(`
+  query Me {
+    me {
+      id
+      orgId
+      email
+      role
+      emailVerified
+    }
+  }
+`);
+const LOGOUT = graphql(`
+  mutation Logout {
+    logout
+  }
+`);
 
 /** Guards a route: redirects unauthenticated users to /login and shows a header. */
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -16,7 +34,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    gql<{ me: Me | null }>('{ me { id orgId email role emailVerified } }')
+    gql(ME)
       .then(({ me }) => {
         if (!me) {
           router.replace('/login');
@@ -30,7 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   async function logout() {
     try {
-      await gql('mutation { logout }');
+      await gql(LOGOUT);
     } finally {
       router.replace('/login');
     }

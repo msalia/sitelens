@@ -10,16 +10,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 import { type CoordinateSet, type InspectablePoint, type Project, UNIT_LABELS } from '@/lib/types';
 import { fromMeters } from '@/lib/units';
 
-const CONVERT = `
-  query ($id: UUID!, $x: Float!, $y: Float!) {
+const CONVERT = graphql(`
+  query ConvertCoordinate($id: UUID!, $x: Float!, $y: Float!) {
     convertCoordinate(projectId: $id, space: PROJECTED, x: $x, y: $y, unit: METER) {
-      gridX gridY projectedGridE projectedGridN projectedGroundE projectedGroundN latitude longitude
+      gridX
+      gridY
+      projectedGridE
+      projectedGridN
+      projectedGroundE
+      projectedGroundN
+      latitude
+      longitude
     }
-  }`;
+  }
+`);
 
 /** Shows every representation of a control point's coordinate, live. */
 export function CoordinateInspectorDialog({
@@ -42,7 +51,7 @@ export function CoordinateInspectorDialog({
     setSet(null);
     setLoading(true);
     // Pass the stored (meters) projected coordinate; the API derives the rest.
-    gql<{ convertCoordinate: CoordinateSet }>(CONVERT, {
+    gql(CONVERT, {
       id: project.id,
       x: point.easting,
       y: point.northing,

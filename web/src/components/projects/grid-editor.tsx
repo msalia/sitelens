@@ -16,14 +16,18 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 import { type GridAxis, type GridFamily, type Project, UNIT_LABELS } from '@/lib/types';
 import { fromMeters } from '@/lib/units';
 
-const SET_GRID_AXES = `
-  mutation ($id: UUID!, $unit: LengthUnit!, $axes: [GridAxisInput!]!) {
-    setGridAxes(projectId: $id, unit: $unit, axes: $axes) { id }
-  }`;
+const SET_GRID_AXES = graphql(`
+  mutation SetGridAxes($id: UUID!, $unit: LengthUnit!, $axes: [GridAxisInput!]!) {
+    setGridAxes(projectId: $id, unit: $unit, axes: $axes) {
+      id
+    }
+  }
+`);
 
 type AxisDraft = { family: GridFamily; label: string; position: string };
 

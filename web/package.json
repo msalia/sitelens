@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "copy-cesium": "node scripts/copy-cesium.mjs",
+    "codegen:schema": "cargo run --quiet --manifest-path ../api/Cargo.toml --bin print_schema > ../api/schema.graphql",
+    "codegen": "graphql-codegen --config codegen.ts",
     "predev": "node scripts/copy-cesium.mjs",
     "prebuild": "node scripts/copy-cesium.mjs",
     "dev": "next dev",

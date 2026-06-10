@@ -13,6 +13,7 @@ import { CoordinateInspectorDialog } from '@/components/projects/coordinate-insp
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { parseDxf } from '@/lib/dxf';
+import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 
 // Cesium is heavy and browser-only; load it lazily and never on the server.
@@ -24,22 +25,64 @@ const CesiumViewer = dynamic(
   },
 );
 
-const SCENE_QUERY = `
-  query ($id: UUID!) {
+const SCENE_QUERY = graphql(`
+  query SceneAndOverlays($id: UUID!) {
     sceneData(projectId: $id) {
-      origin { latitude longitude height }
+      origin {
+        latitude
+        longitude
+        height
+      }
       originProjectedE
       originProjectedN
-      controlPoints { id label latitude longitude height easting northing categoryId }
-      surveyPoints { id label latitude longitude height easting northing categoryId }
-      gridLines { label coordinates { latitude longitude height } }
+      controlPoints {
+        id
+        label
+        latitude
+        longitude
+        height
+        easting
+        northing
+        categoryId
+      }
+      surveyPoints {
+        id
+        label
+        latitude
+        longitude
+        height
+        easting
+        northing
+        categoryId
+      }
+      gridLines {
+        label
+        coordinates {
+          latitude
+          longitude
+          height
+        }
+      }
     }
     cadOverlays(projectId: $id) {
-      id projectId originalFilename offsetE offsetN rotationDeg scale assumeRealWorld visible
+      id
+      projectId
+      originalFilename
+      offsetE
+      offsetN
+      rotationDeg
+      scale
+      assumeRealWorld
+      visible
     }
-  }`;
+  }
+`);
 
-const OVERLAY_CONTENT = `query ($id: UUID!) { cadOverlayContent(id: $id) }`;
+const OVERLAY_CONTENT = graphql(`
+  query OverlayContent($id: UUID!) {
+    cadOverlayContent(id: $id)
+  }
+`);
 
 export function SceneView({
   categories,
@@ -62,9 +105,7 @@ export function SceneView({
 
   const load = useCallback(async () => {
     try {
-      const data = await gql<{ sceneData: SceneData; cadOverlays: CadOverlay[] }>(SCENE_QUERY, {
-        id: project.id,
-      });
+      const data = await gql(SCENE_QUERY, { id: project.id });
       setScene(data.sceneData);
       setOverlayMeta(data.cadOverlays);
       setShown(true);
@@ -74,12 +115,7 @@ export function SceneView({
       const parsed = await Promise.all(
         visible.map(async (o) => {
           try {
-            const { cadOverlayContent } = await gql<{ cadOverlayContent: string }>(
-              OVERLAY_CONTENT,
-              {
-                id: o.id,
-              },
-            );
+            const { cadOverlayContent } = await gql(OVERLAY_CONTENT, { id: o.id });
             const { polylines } = parseDxf(cadOverlayContent);
             return {
               hiddenLayers: [] as string[],

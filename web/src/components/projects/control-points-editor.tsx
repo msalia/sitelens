@@ -18,14 +18,43 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 import { type ControlPoint, type Project, UNIT_LABELS } from '@/lib/types';
 import { fromMeters } from '@/lib/units';
 
-const ADD_CONTROL_POINT = `
-  mutation ($id: UUID!, $label: String!, $n: Float!, $e: Float!, $z: Float, $gx: Float, $gy: Float, $unit: LengthUnit!, $src: String) {
-    addControlPoint(projectId: $id, label: $label, northing: $n, easting: $e, elevation: $z, gridX: $gx, gridY: $gy, unit: $unit, source: $src) { id }
-  }`;
+const ADD_CONTROL_POINT = graphql(`
+  mutation AddControlPoint(
+    $id: UUID!
+    $label: String!
+    $n: Float!
+    $e: Float!
+    $z: Float
+    $gx: Float
+    $gy: Float
+    $unit: LengthUnit!
+    $src: String
+  ) {
+    addControlPoint(
+      projectId: $id
+      label: $label
+      northing: $n
+      easting: $e
+      elevation: $z
+      gridX: $gx
+      gridY: $gy
+      unit: $unit
+      source: $src
+    ) {
+      id
+    }
+  }
+`);
+const DELETE_CONTROL_POINT = graphql(`
+  mutation DeleteControlPoint($id: UUID!) {
+    deleteControlPoint(id: $id)
+  }
+`);
 
 export function ControlPointsEditor({
   onChanged,
@@ -81,7 +110,7 @@ export function ControlPointsEditor({
 
   async function remove(id: string) {
     try {
-      await gql('mutation ($id: UUID!) { deleteControlPoint(id: $id) }', { id });
+      await gql(DELETE_CONTROL_POINT, { id });
       toast.success('Control point deleted');
       onChanged();
     } catch (err) {

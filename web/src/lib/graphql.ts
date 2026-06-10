@@ -1,22 +1,25 @@
 'use client';
 
+import type { TypedDocumentString } from '@/lib/gql/graphql';
+
 /**
- * Minimal GraphQL client for the browser. Posts to the same-origin proxy
- * (`/api/graphql`), which forwards to the private API and relays the session
+ * Type-safe GraphQL client. Pass a `graphql(...)` document from `@/lib/gql`;
+ * the result and variable types are inferred from the API schema (via codegen).
+ * Posts to the same-origin proxy (`/api/graphql`), which forwards the session
  * cookie. Throws on GraphQL or network errors.
  */
-export async function gql<T = unknown>(
-  query: string,
-  variables?: Record<string, unknown>,
-): Promise<T> {
+export async function gql<TResult, TVariables>(
+  document: TypedDocumentString<TResult, TVariables>,
+  ...[variables]: TVariables extends Record<string, never> ? [] : [TVariables]
+): Promise<TResult> {
   const res = await fetch('/api/graphql', {
-    body: JSON.stringify({ query, variables }),
+    body: JSON.stringify({ query: document.toString(), variables }),
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     method: 'POST',
   });
 
-  let payload: { data?: T; errors?: Array<{ message: string }> };
+  let payload: { data?: TResult; errors?: Array<{ message: string }> };
   try {
     payload = await res.json();
   } catch {

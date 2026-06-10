@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 import {
   type InspectablePoint,
@@ -30,6 +31,35 @@ import {
 import { fromMeters } from '@/lib/units';
 
 const ALL = 'all';
+
+const SURVEY_POINTS = graphql(`
+  query SurveyPoints($id: UUID!, $search: String, $cat: UUID) {
+    surveyPoints(projectId: $id, search: $search, categoryId: $cat) {
+      id
+      projectId
+      label
+      northing
+      easting
+      elevation
+      description
+      categoryId
+      tags
+      importBatchId
+    }
+  }
+`);
+const DELETE_SURVEY_POINT = graphql(`
+  mutation DeleteSurveyPoint($id: UUID!) {
+    deleteSurveyPoint(id: $id)
+  }
+`);
+const CREATE_POINT_GROUP = graphql(`
+  mutation CreatePointGroup($id: UUID!, $name: String!, $ids: [UUID!]!) {
+    createPointGroup(projectId: $id, name: $name, memberIds: $ids) {
+      id
+    }
+  }
+`);
 
 export function SurveyPointsPanel({
   categories,
@@ -51,18 +81,11 @@ export function SurveyPointsPanel({
 
   const load = useCallback(async () => {
     try {
-      const data = await gql<{ surveyPoints: SurveyPoint[] }>(
-        `query ($id: UUID!, $search: String, $cat: UUID) {
-          surveyPoints(projectId: $id, search: $search, categoryId: $cat) {
-            id projectId label northing easting elevation description categoryId tags importBatchId
-          }
-        }`,
-        {
-          cat: categoryFilter === ALL ? null : categoryFilter,
-          id: project.id,
-          search: search || null,
-        },
-      );
+      const data = await gql(SURVEY_POINTS, {
+        cat: categoryFilter === ALL ? null : categoryFilter,
+        id: project.id,
+        search: search || null,
+      });
       setPoints(data.surveyPoints);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load points');
@@ -87,7 +110,7 @@ export function SurveyPointsPanel({
 
   async function remove(id: string) {
     try {
-      await gql('mutation ($id: UUID!) { deleteSurveyPoint(id: $id) }', { id });
+      await gql(DELETE_SURVEY_POINT, { id });
       void load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Delete failed');
@@ -100,12 +123,7 @@ export function SurveyPointsPanel({
       return;
     }
     try {
-      await gql(
-        `mutation ($id: UUID!, $name: String!, $ids: [UUID!]!) {
-          createPointGroup(projectId: $id, name: $name, memberIds: $ids) { id }
-        }`,
-        { id: project.id, ids: [...selected], name: name.trim() },
-      );
+      await gql(CREATE_POINT_GROUP, { id: project.id, ids: [...selected], name: name.trim() });
       toast.success('Group saved');
       setSelected(new Set());
     } catch (err) {

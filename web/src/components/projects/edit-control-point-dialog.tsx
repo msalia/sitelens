@@ -14,14 +14,38 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 import { type ControlPoint, type Project, UNIT_LABELS } from '@/lib/types';
 import { fromMeters } from '@/lib/units';
 
-const UPDATE_CONTROL_POINT = `
-  mutation ($id: UUID!, $label: String, $n: Float, $e: Float, $z: Float, $gx: Float, $gy: Float, $unit: LengthUnit!, $src: String) {
-    updateControlPoint(id: $id, label: $label, northing: $n, easting: $e, elevation: $z, gridX: $gx, gridY: $gy, unit: $unit, source: $src) { id }
-  }`;
+const UPDATE_CONTROL_POINT = graphql(`
+  mutation UpdateControlPoint(
+    $id: UUID!
+    $label: String
+    $n: Float
+    $e: Float
+    $z: Float
+    $gx: Float
+    $gy: Float
+    $unit: LengthUnit!
+    $src: String
+  ) {
+    updateControlPoint(
+      id: $id
+      label: $label
+      northing: $n
+      easting: $e
+      elevation: $z
+      gridX: $gx
+      gridY: $gy
+      unit: $unit
+      source: $src
+    ) {
+      id
+    }
+  }
+`);
 
 export function EditControlPointDialog({
   onClose,

@@ -9,7 +9,21 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
+
+const SIGNUP = graphql(`
+  mutation Signup($e: String!, $p: String!, $o: String!) {
+    signup(email: $e, password: $p, orgName: $o) {
+      verificationToken
+    }
+  }
+`);
+const VERIFY_EMAIL = graphql(`
+  mutation VerifyEmail($t: String!) {
+    verifyEmail(token: $t)
+  }
+`);
 
 export default function SignupPage() {
   const router = useRouter();
@@ -24,12 +38,7 @@ export default function SignupPage() {
     e.preventDefault();
     setBusy(true);
     try {
-      const data = await gql<{ signup: { verificationToken: string } }>(
-        `mutation ($e: String!, $p: String!, $o: String!) {
-          signup(email: $e, password: $p, orgName: $o) { verificationToken }
-        }`,
-        { e: email, o: orgName, p: password },
-      );
+      const data = await gql(SIGNUP, { e: email, o: orgName, p: password });
       setToken(data.signup.verificationToken);
       toast.success('Account created. Verify to continue.');
     } catch (err) {
@@ -45,7 +54,7 @@ export default function SignupPage() {
     }
     setBusy(true);
     try {
-      await gql('mutation ($t: String!) { verifyEmail(token: $t) }', { t: token });
+      await gql(VERIFY_EMAIL, { t: token });
       toast.success('Email verified. Please log in.');
       router.replace('/login');
     } catch (err) {

@@ -17,7 +17,16 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
+
+const CREATE_CATEGORY = graphql(`
+  mutation CreateCategory($name: String!, $color: String!, $icon: String!) {
+    createCategory(name: $name, color: $color, icon: $icon) {
+      id
+    }
+  }
+`);
 
 export function CategoryManagerDialog({
   categories,
@@ -35,12 +44,7 @@ export function CategoryManagerDialog({
     e.preventDefault();
     setBusy(true);
     try {
-      await gql(
-        `mutation ($name: String!, $color: String!, $icon: String!) {
-          createCategory(name: $name, color: $color, icon: $icon) { id }
-        }`,
-        { color, icon: 'point', name },
-      );
+      await gql(CREATE_CATEGORY, { color, icon: 'point', name });
       toast.success('Category created');
       setName('');
       onChanged();
