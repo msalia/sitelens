@@ -349,6 +349,8 @@ impl QueryRoot {
         category_id: Option<Uuid>,
         limit: Option<i64>,
         offset: Option<i64>,
+        sort: Option<String>,
+        descending: Option<bool>,
     ) -> Result<Vec<SurveyPoint>> {
         let auth = require_auth(ctx)?;
         let pool = pool(ctx)?;
@@ -356,12 +358,25 @@ impl QueryRoot {
         let search = search.filter(|s| !s.trim().is_empty());
         let limit = limit.unwrap_or(200).clamp(1, 1000);
         let offset = offset.unwrap_or(0).max(0);
+        // Whitelist the sort column (never interpolate user input directly).
+        let sort_col = match sort.as_deref() {
+            Some("label") => "label",
+            Some("northing") => "northing",
+            Some("easting") => "easting",
+            Some("elevation") => "elevation",
+            _ => "seq",
+        };
+        let dir = if descending.unwrap_or(false) {
+            "DESC"
+        } else {
+            "ASC"
+        };
         let rows: Vec<SurveyPoint> = sqlx::query_as(&format!(
             "SELECT {SURVEY_POINT_COLUMNS} FROM survey_points WHERE project_id = $1 \
              AND ($2::text IS NULL OR label ILIKE '%'||$2||'%' OR description ILIKE '%'||$2||'%' \
                   OR array_to_string(tags, ' ') ILIKE '%'||$2||'%') \
              AND ($3::uuid IS NULL OR category_id = $3) \
-             ORDER BY seq LIMIT $4 OFFSET $5"
+             ORDER BY {sort_col} {dir} NULLS LAST, seq ASC LIMIT $4 OFFSET $5"
         ))
         .bind(project_id)
         .bind(search)
@@ -1529,6 +1544,42 @@ impl MutationRoot {
             ));
         }
         Ok(true)
+    }
+
+    /// Bulk-deletes surveyed points (org-scoped). Returns how many were deleted.
+    /// Editor role required.
+    async fn delete_survey_points(&self, ctx: &Context<'_>, ids: Vec<Uuid>) -> Result<i64> {
+        let auth = require_editor(ctx)?;
+        let result = sqlx::query(
+            "DELETE FROM survey_points sp USING projects p \
+             WHERE sp.id = ANY($1) AND sp.project_id = p.id AND p.org_id = $2",
+        )
+        .bind(&ids)
+        .bind(auth.org_id)
+        .execute(pool(ctx)?)
+        .await?;
+        Ok(result.rows_affected() as i64)
+    }
+
+    /// Bulk-assigns (or clears, when `categoryId` is null) the category of
+    /// surveyed points (org-scoped). Returns how many were updated. Editor role.
+    async fn assign_category(
+        &self,
+        ctx: &Context<'_>,
+        ids: Vec<Uuid>,
+        category_id: Option<Uuid>,
+    ) -> Result<i64> {
+        let auth = require_editor(ctx)?;
+        let result = sqlx::query(
+            "UPDATE survey_points sp SET category_id = $3 FROM projects p \
+             WHERE sp.id = ANY($1) AND sp.project_id = p.id AND p.org_id = $2",
+        )
+        .bind(&ids)
+        .bind(auth.org_id)
+        .bind(category_id)
+        .execute(pool(ctx)?)
+        .await?;
+        Ok(result.rows_affected() as i64)
     }
 
     // ----- Point groups -----

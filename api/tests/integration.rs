@@ -1574,3 +1574,130 @@ async fn export_respects_columns_space_and_category_filter(pool: PgPool) {
     assert_eq!(filtered.lines().filter(|l| !l.trim().is_empty()).count(), 1);
     assert!(!filtered.contains(",1000,") && !filtered.contains('A'));
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn survey_points_sort_and_bulk_actions(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let (b_admin, b_org, _) = signup(&schema, "b@example.com", "Org B").await;
+    let a = admin_ctx(admin, org);
+    let pid = create_project(&schema, a.clone(), "Site").await;
+
+    // Import three points with out-of-order northings.
+    let imp = r#"mutation ($id: UUID!, $c: String!, $m: CsvMappingInput!) {
+        importPoints(projectId: $id, format: CSV, content: $c, unit: METER, mapping: $m) { rowCount } }"#;
+    exec_ok_vars(
+        &schema,
+        imp,
+        serde_json::json!({
+            "id": pid, "c": "P,N,E\nA,300,1\nB,100,2\nC,200,3\n",
+            "m": { "hasHeader": true, "labelCol": 0, "northingCol": 1, "eastingCol": 2 }
+        }),
+        a.clone(),
+    )
+    .await;
+
+    // Sort by northing ascending → B(100), C(200), A(300).
+    let asc = exec_ok(
+        &schema,
+        &format!(r#"{{ surveyPoints(projectId: "{pid}", sort: "northing") {{ label }} }}"#),
+        Some(a.clone()),
+    )
+    .await;
+    let labels: Vec<&str> = asc["surveyPoints"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["label"].as_str().unwrap())
+        .collect();
+    assert_eq!(labels, vec!["B", "C", "A"]);
+
+    // Descending flips it.
+    let desc = exec_ok(
+        &schema,
+        &format!(
+            r#"{{ surveyPoints(projectId: "{pid}", sort: "northing", descending: true) {{ label }} }}"#
+        ),
+        Some(a.clone()),
+    )
+    .await;
+    let dlabels: Vec<&str> = desc["surveyPoints"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["label"].as_str().unwrap())
+        .collect();
+    assert_eq!(dlabels, vec!["A", "C", "B"]);
+
+    // Collect ids by label.
+    let all = exec_ok(
+        &schema,
+        &format!(r#"{{ surveyPoints(projectId: "{pid}") {{ id label }} }}"#),
+        Some(a.clone()),
+    )
+    .await;
+    let id_of = |label: &str| -> Uuid {
+        let p = all["surveyPoints"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["label"].as_str() == Some(label))
+            .unwrap();
+        uuid_at(p, &["id"])
+    };
+    let (ia, ib, ic) = (id_of("A"), id_of("B"), id_of("C"));
+
+    // Bulk-assign a category to A and B.
+    let cat = exec_ok(
+        &schema,
+        r##"mutation { createCategory(name: "Set", color: "#abc", icon: "s") { id } }"##,
+        Some(a.clone()),
+    )
+    .await;
+    let cat_id = uuid_at(&cat, &["createCategory", "id"]);
+    let assigned = exec_ok(
+        &schema,
+        &format!(r#"mutation {{ assignCategory(ids: ["{ia}", "{ib}"], categoryId: "{cat_id}") }}"#),
+        Some(a.clone()),
+    )
+    .await;
+    assert_eq!(assigned["assignCategory"].as_i64().unwrap(), 2);
+    let in_cat = exec_ok(
+        &schema,
+        &format!(r#"{{ surveyPointCount(projectId: "{pid}", categoryId: "{cat_id}") }}"#),
+        Some(a.clone()),
+    )
+    .await;
+    assert_eq!(in_cat["surveyPointCount"].as_i64().unwrap(), 2);
+
+    // Another org cannot bulk-delete this org's points (returns 0, leaves them).
+    let cross = exec_ok(
+        &schema,
+        &format!(r#"mutation {{ deleteSurveyPoints(ids: ["{ia}", "{ib}", "{ic}"]) }}"#),
+        Some(admin_ctx(b_admin, b_org)),
+    )
+    .await;
+    assert_eq!(cross["deleteSurveyPoints"].as_i64().unwrap(), 0);
+
+    // Owner bulk-deletes A and B; only C remains.
+    let del = exec_ok(
+        &schema,
+        &format!(r#"mutation {{ deleteSurveyPoints(ids: ["{ia}", "{ib}"]) }}"#),
+        Some(a.clone()),
+    )
+    .await;
+    assert_eq!(del["deleteSurveyPoints"].as_i64().unwrap(), 2);
+    let left = exec_ok(
+        &schema,
+        &format!(r#"{{ surveyPoints(projectId: "{pid}") {{ label }} }}"#),
+        Some(a),
+    )
+    .await;
+    let remaining: Vec<&str> = left["surveyPoints"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["label"].as_str().unwrap())
+        .collect();
+    assert_eq!(remaining, vec!["C"]);
+}

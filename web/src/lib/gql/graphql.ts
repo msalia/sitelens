@@ -307,6 +307,8 @@ export type SurveyPointsQueryVariables = Exact<{
   cat?: string | null | undefined;
   limit?: number | null | undefined;
   offset?: number | null | undefined;
+  sort?: string | null | undefined;
+  descending?: boolean | null | undefined;
 }>;
 
 
@@ -318,6 +320,21 @@ export type DeleteSurveyPointMutationVariables = Exact<{
 
 
 export type DeleteSurveyPointMutation = { deleteSurveyPoint: boolean };
+
+export type DeleteSurveyPointsMutationVariables = Exact<{
+  ids: Array<string> | string;
+}>;
+
+
+export type DeleteSurveyPointsMutation = { deleteSurveyPoints: number };
+
+export type AssignCategoryMutationVariables = Exact<{
+  ids: Array<string> | string;
+  cat?: string | null | undefined;
+}>;
+
+
+export type AssignCategoryMutation = { assignCategory: number };
 
 export type CreatePointGroupMutationVariables = Exact<{
   id: string;
@@ -705,13 +722,15 @@ export const OverlayContentDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<OverlayContentQuery, OverlayContentQueryVariables>;
 export const SurveyPointsDocument = new TypedDocumentString(`
-    query SurveyPoints($id: UUID!, $search: String, $cat: UUID, $limit: Int, $offset: Int) {
+    query SurveyPoints($id: UUID!, $search: String, $cat: UUID, $limit: Int, $offset: Int, $sort: String, $descending: Boolean) {
   surveyPoints(
     projectId: $id
     search: $search
     categoryId: $cat
     limit: $limit
     offset: $offset
+    sort: $sort
+    descending: $descending
   ) {
     id
     projectId
@@ -732,6 +751,16 @@ export const DeleteSurveyPointDocument = new TypedDocumentString(`
   deleteSurveyPoint(id: $id)
 }
     `) as unknown as TypedDocumentString<DeleteSurveyPointMutation, DeleteSurveyPointMutationVariables>;
+export const DeleteSurveyPointsDocument = new TypedDocumentString(`
+    mutation DeleteSurveyPoints($ids: [UUID!]!) {
+  deleteSurveyPoints(ids: $ids)
+}
+    `) as unknown as TypedDocumentString<DeleteSurveyPointsMutation, DeleteSurveyPointsMutationVariables>;
+export const AssignCategoryDocument = new TypedDocumentString(`
+    mutation AssignCategory($ids: [UUID!]!, $cat: UUID) {
+  assignCategory(ids: $ids, categoryId: $cat)
+}
+    `) as unknown as TypedDocumentString<AssignCategoryMutation, AssignCategoryMutationVariables>;
 export const CreatePointGroupDocument = new TypedDocumentString(`
     mutation CreatePointGroup($id: UUID!, $name: String!, $ids: [UUID!]!) {
   createPointGroup(projectId: $id, name: $name, memberIds: $ids) {

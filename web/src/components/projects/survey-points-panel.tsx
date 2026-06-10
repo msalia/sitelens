@@ -1,6 +1,6 @@
 'use client';
 
-import { IconMapPin, IconTrash } from '@tabler/icons-react';
+import { IconArrowDown, IconArrowUp, IconMapPin, IconTrash } from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -32,17 +32,30 @@ import {
 import { fromMeters } from '@/lib/units';
 
 const ALL = 'all';
-
+const NONE = 'none';
 const PAGE_SIZE = 50;
 
+/** Sortable columns, mapped to the API's `sort` argument. */
+type SortField = 'label' | 'northing' | 'easting' | 'elevation';
+
 const SURVEY_POINTS = graphql(`
-  query SurveyPoints($id: UUID!, $search: String, $cat: UUID, $limit: Int, $offset: Int) {
+  query SurveyPoints(
+    $id: UUID!
+    $search: String
+    $cat: UUID
+    $limit: Int
+    $offset: Int
+    $sort: String
+    $descending: Boolean
+  ) {
     surveyPoints(
       projectId: $id
       search: $search
       categoryId: $cat
       limit: $limit
       offset: $offset
+      sort: $sort
+      descending: $descending
     ) {
       id
       projectId
@@ -61,6 +74,16 @@ const SURVEY_POINTS = graphql(`
 const DELETE_SURVEY_POINT = graphql(`
   mutation DeleteSurveyPoint($id: UUID!) {
     deleteSurveyPoint(id: $id)
+  }
+`);
+const BULK_DELETE = graphql(`
+  mutation DeleteSurveyPoints($ids: [UUID!]!) {
+    deleteSurveyPoints(ids: $ids)
+  }
+`);
+const ASSIGN_CATEGORY = graphql(`
+  mutation AssignCategory($ids: [UUID!]!, $cat: UUID) {
+    assignCategory(ids: $ids, categoryId: $cat)
   }
 `);
 const CREATE_POINT_GROUP = graphql(`
@@ -86,8 +109,11 @@ export function SurveyPointsPanel({
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL);
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDesc, setSortDesc] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [inspecting, setInspecting] = useState<InspectablePoint | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
 
@@ -95,30 +121,35 @@ export function SurveyPointsPanel({
     try {
       const data = await gql(SURVEY_POINTS, {
         cat: categoryFilter === ALL ? null : categoryFilter,
+        descending: sortDesc,
         id: project.id,
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
         search: search || null,
+        sort: sortField,
       });
       setPoints(data.surveyPoints);
       setTotal(data.surveyPointCount);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load points');
     }
-  }, [project.id, search, categoryFilter, page]);
+  }, [project.id, search, categoryFilter, page, sortField, sortDesc]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  // Reset to the first page whenever the filters change.
+  // Reset to the first page whenever the filters or sort change.
   useEffect(() => {
     setPage(0);
-  }, [search, categoryFilter]);
+  }, [search, categoryFilter, sortField, sortDesc]);
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const rangeStart = total === 0 ? 0 : page * PAGE_SIZE + 1;
   const rangeEnd = Math.min(total, (page + 1) * PAGE_SIZE);
+
+  const pageIds = points.map((p) => p.id);
+  const allOnPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
 
   function toggle(id: string) {
     setSelected((s) => {
@@ -132,12 +163,67 @@ export function SurveyPointsPanel({
     });
   }
 
+  function toggleAllOnPage() {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (allOnPageSelected) {
+        pageIds.forEach((id) => next.delete(id));
+      } else {
+        pageIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  }
+
+  function setSort(field: SortField) {
+    if (sortField === field) {
+      setSortDesc((d) => !d);
+    } else {
+      setSortField(field);
+      setSortDesc(false);
+    }
+  }
+
   async function remove(id: string) {
     try {
       await gql(DELETE_SURVEY_POINT, { id });
       void load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Delete failed');
+    }
+  }
+
+  async function bulkDelete() {
+    if (!window.confirm(`Delete ${selected.size} point(s)? This cannot be undone.`)) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const { deleteSurveyPoints } = await gql(BULK_DELETE, { ids: [...selected] });
+      toast.success(`Deleted ${deleteSurveyPoints} point(s)`);
+      setSelected(new Set());
+      void load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Bulk delete failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function bulkAssign(value: string) {
+    setBusy(true);
+    try {
+      const { assignCategory } = await gql(ASSIGN_CATEGORY, {
+        cat: value === NONE ? null : value,
+        ids: [...selected],
+      });
+      toast.success(`Updated ${assignCategory} point(s)`);
+      setSelected(new Set());
+      void load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Assign failed');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -160,11 +246,6 @@ export function SurveyPointsPanel({
       <CardHeader className="flex-row items-center justify-between gap-2">
         <CardTitle>Survey points</CardTitle>
         <div className="flex items-center gap-2">
-          {selected.size > 0 && (
-            <Button size="sm" variant="outline" onClick={saveGroup}>
-              Save group ({selected.size})
-            </Button>
-          )}
           <CategoryManagerDialog categories={categories} onChanged={onCategoriesChanged} />
           <ExportDialog
             project={project}
@@ -195,14 +276,79 @@ export function SurveyPointsPanel({
           </NativeSelect>
         </div>
 
+        {selected.size > 0 && (
+          <div className="bg-muted/40 flex flex-wrap items-center gap-2 rounded-lg border p-2 text-sm">
+            <span className="font-medium">{selected.size} selected</span>
+            <NativeSelect
+              className="h-8 w-44"
+              value=""
+              disabled={busy}
+              onChange={(e) => e.target.value && bulkAssign(e.target.value)}
+            >
+              <NativeSelectOption value="">Assign category…</NativeSelectOption>
+              <NativeSelectOption value={NONE}>— Clear category —</NativeSelectOption>
+              {categories.map((c) => (
+                <NativeSelectOption key={c.id} value={c.id}>
+                  {c.name}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+            <Button size="sm" variant="outline" disabled={busy} onClick={saveGroup}>
+              Save as group
+            </Button>
+            <Button size="sm" variant="destructive" disabled={busy} onClick={bulkDelete}>
+              Delete
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => setSelected(new Set())}
+            >
+              Clear
+            </Button>
+          </div>
+        )}
+
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-8" />
-              <TableHead>Label</TableHead>
-              <TableHead>N ({unitLabel})</TableHead>
-              <TableHead>E ({unitLabel})</TableHead>
-              <TableHead>Z ({unitLabel})</TableHead>
+              <TableHead className="w-8">
+                <input
+                  type="checkbox"
+                  checked={allOnPageSelected}
+                  onChange={toggleAllOnPage}
+                  aria-label="Select all on page"
+                />
+              </TableHead>
+              <SortHeader
+                label="Label"
+                field="label"
+                active={sortField}
+                desc={sortDesc}
+                onSort={setSort}
+              />
+              <SortHeader
+                label={`N (${unitLabel})`}
+                field="northing"
+                active={sortField}
+                desc={sortDesc}
+                onSort={setSort}
+              />
+              <SortHeader
+                label={`E (${unitLabel})`}
+                field="easting"
+                active={sortField}
+                desc={sortDesc}
+                onSort={setSort}
+              />
+              <SortHeader
+                label={`Z (${unitLabel})`}
+                field="elevation"
+                active={sortField}
+                desc={sortDesc}
+                onSort={setSort}
+              />
               <TableHead>Category</TableHead>
               <TableHead>Description</TableHead>
               <TableHead />
@@ -315,5 +461,35 @@ export function SurveyPointsPanel({
         onClose={() => setInspecting(null)}
       />
     </Card>
+  );
+}
+
+/** A clickable, sort-indicating column header. */
+function SortHeader({
+  active,
+  desc,
+  field,
+  label,
+  onSort,
+}: {
+  label: string;
+  field: SortField;
+  active: SortField | null;
+  desc: boolean;
+  onSort: (f: SortField) => void;
+}) {
+  const isActive = active === field;
+  return (
+    <TableHead>
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        className="inline-flex items-center gap-1 hover:underline"
+      >
+        {label}
+        {isActive &&
+          (desc ? <IconArrowDown className="size-3.5" /> : <IconArrowUp className="size-3.5" />)}
+      </button>
+    </TableHead>
   );
 }

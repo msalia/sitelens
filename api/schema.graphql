@@ -276,6 +276,16 @@ type MutationRoot {
 	"""
 	deleteSurveyPoint(id: UUID!): Boolean!
 	"""
+	Bulk-deletes surveyed points (org-scoped). Returns how many were deleted.
+	Editor role required.
+	"""
+	deleteSurveyPoints(ids: [UUID!]!): Int!
+	"""
+	Bulk-assigns (or clears, when `categoryId` is null) the category of
+	surveyed points (org-scoped). Returns how many were updated. Editor role.
+	"""
+	assignCategory(ids: [UUID!]!, categoryId: UUID): Int!
+	"""
 	Saves a named selection of points. Editor role required.
 	"""
 	createPointGroup(projectId: UUID!, name: String!, memberIds: [UUID!]!): PointGroup!
@@ -409,7 +419,7 @@ type QueryRoot {
 	(label/description/tags) and/or category. Paginated: `limit` is clamped to
 	[1, 1000] (default 200) so the list query is always bounded.
 	"""
-	surveyPoints(projectId: UUID!, search: String, categoryId: UUID, limit: Int, offset: Int): [SurveyPoint!]!
+	surveyPoints(projectId: UUID!, search: String, categoryId: UUID, limit: Int, offset: Int, sort: String, descending: Boolean): [SurveyPoint!]!
 	"""
 	Total count of surveyed points matching the same filters as `surveyPoints`.
 	Lets the UI paginate without fetching every row.
