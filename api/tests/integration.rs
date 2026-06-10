@@ -1079,3 +1079,498 @@ async fn export_points_csv_and_landxml(pool: PgPool) {
     assert!(xml.contains("<CgPoint"));
     assert!(xml.contains("1000 2000 5"));
 }
+
+// ---------------------------------------------------------------------------
+// Phase 10: RBAC, auth validation, and CRUD gap coverage
+// ---------------------------------------------------------------------------
+
+fn role_ctx(user_id: Uuid, org_id: Uuid, role: Role) -> AuthContext {
+    AuthContext {
+        user_id,
+        org_id,
+        role,
+    }
+}
+
+/// Invites a user with the given role (enum literal e.g. "SURVEYOR") and returns
+/// their new user id.
+async fn invite(schema: &ApiSchema, admin: AuthContext, email: &str, role: &str) -> Uuid {
+    let q =
+        format!(r#"mutation {{ inviteUser(email: "{email}", role: {role}) {{ user {{ id }} }} }}"#);
+    let d = exec_ok(schema, &q, Some(admin)).await;
+    uuid_at(&d, &["inviteUser", "user", "id"])
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn surveyor_can_edit_but_not_administer(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "admin@example.com", "Org").await;
+    let surveyor_id = invite(&schema, admin_ctx(admin, org), "s@example.com", "SURVEYOR").await;
+    let surveyor = role_ctx(surveyor_id, org, Role::Surveyor);
+
+    // A surveyor is an editor: project + control point + category all succeed.
+    let pid = create_project(&schema, surveyor.clone(), "S Site").await;
+    add_cp(&schema, surveyor.clone(), pid, "CP1", 1.0, 1.0, 0.0, 0.0).await;
+    let cat = exec_ok(
+        &schema,
+        r##"mutation { createCategory(name: "Utilities", color: "#fff", icon: "u") { id isDefault } }"##,
+        Some(surveyor.clone()),
+    )
+    .await;
+    assert_eq!(cat["createCategory"]["isDefault"], Json::Bool(false));
+
+    // But not admin actions.
+    let msg = exec_err(&schema, "{ users { id } }", Some(surveyor.clone())).await;
+    assert!(msg.contains("forbidden"), "got: {msg}");
+    let inv = r#"mutation { inviteUser(email: "x@example.com", role: VIEWER) { inviteToken } }"#;
+    let msg = exec_err(&schema, inv, Some(surveyor)).await;
+    assert!(msg.contains("forbidden"), "got: {msg}");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn viewer_cannot_mutate_data(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "admin@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+    let viewer_id = invite(&schema, admin_ctx(admin, org), "v@example.com", "VIEWER").await;
+    let viewer = role_ctx(viewer_id, org, Role::Viewer);
+
+    // A viewer can read...
+    let read = exec_ok(
+        &schema,
+        &format!(r#"{{ controlPoints(projectId: "{pid}") {{ id }} }}"#),
+        Some(viewer.clone()),
+    )
+    .await;
+    assert_eq!(read["controlPoints"].as_array().unwrap().len(), 0);
+
+    // ...but every write is rejected with an editor-role error.
+    let writes = [
+        format!(
+            r#"mutation {{ addControlPoint(projectId: "{pid}", label: "X", northing: 1.0, easting: 1.0, unit: METER) {{ id }} }}"#
+        ),
+        format!(
+            r#"mutation {{ importPoints(projectId: "{pid}", format: CSV, content: "N,E\n1,1\n", unit: METER, mapping: {{ hasHeader: true, northingCol: 0, eastingCol: 1 }}) {{ rowCount }} }}"#
+        ),
+        r##"mutation { createCategory(name: "C", color: "#fff", icon: "c") { id } }"##.to_string(),
+        format!(
+            r#"mutation {{ uploadDxf(projectId: "{pid}", filename: "a.dxf", content: "x") {{ id }} }}"#
+        ),
+    ];
+    for q in &writes {
+        let msg = exec_err(&schema, q, Some(viewer.clone())).await;
+        assert!(
+            msg.contains("editor role required"),
+            "viewer wrote: {q}\n=> {msg}"
+        );
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn unauthenticated_requests_are_denied(pool: PgPool) {
+    let schema = schema(pool);
+    let msg = exec_err(&schema, "{ projects { id } }", None).await;
+    assert!(msg.contains("not authenticated"), "got: {msg}");
+    let m = r#"mutation { createProject(name: "X", epsgCode: 2229, displayUnit: METER) { id } }"#;
+    let msg = exec_err(&schema, m, None).await;
+    assert!(msg.contains("not authenticated"), "got: {msg}");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn signup_validation_errors(pool: PgPool) {
+    let schema = schema(pool);
+
+    let short = r#"mutation { signup(email: "a@example.com", password: "short12", orgName: "O") { user { id } } }"#;
+    assert!(exec_err(&schema, short, None).await.contains("at least 8"));
+
+    let bad_email = r#"mutation { signup(email: "nope", password: "password123", orgName: "O") { user { id } } }"#;
+    assert!(exec_err(&schema, bad_email, None)
+        .await
+        .contains("valid email"));
+
+    let empty_org = r#"mutation { signup(email: "b@example.com", password: "password123", orgName: "  ") { user { id } } }"#;
+    assert!(exec_err(&schema, empty_org, None)
+        .await
+        .contains("organization name"));
+
+    // Duplicate email is rejected.
+    signup(&schema, "dup@example.com", "Org").await;
+    let dup = r#"mutation { signup(email: "dup@example.com", password: "password123", orgName: "Org2") { user { id } } }"#;
+    assert!(exec_err(&schema, dup, None)
+        .await
+        .contains("already registered"));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn token_and_invite_errors(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "admin@example.com", "Org").await;
+
+    let bad_verify = r#"mutation { verifyEmail(token: "nope") }"#;
+    assert!(exec_err(&schema, bad_verify, None)
+        .await
+        .contains("invalid or expired"));
+
+    let bad_accept = r#"mutation { acceptInvite(token: "nope", password: "password123") { id } }"#;
+    assert!(exec_err(&schema, bad_accept, None)
+        .await
+        .contains("invalid or expired invite"));
+
+    let short_pw = r#"mutation { acceptInvite(token: "whatever", password: "short12") { id } }"#;
+    assert!(exec_err(&schema, short_pw, None)
+        .await
+        .contains("at least 8"));
+
+    // Inviting an already-registered email fails.
+    let dup =
+        r#"mutation { inviteUser(email: "admin@example.com", role: VIEWER) { inviteToken } }"#;
+    assert!(exec_err(&schema, dup, Some(admin_ctx(admin, org)))
+        .await
+        .contains("already registered"));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn admin_updates_user_role(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "admin@example.com", "Org").await;
+    let viewer_id = invite(&schema, admin_ctx(admin, org), "v@example.com", "VIEWER").await;
+
+    let promote = format!(
+        r#"mutation {{ updateUserRole(userId: "{viewer_id}", role: SURVEYOR) {{ role }} }}"#
+    );
+    let d = exec_ok(&schema, &promote, Some(admin_ctx(admin, org))).await;
+    assert_eq!(d["updateUserRole"]["role"], Json::String("SURVEYOR".into()));
+
+    // Reflected in the org user list.
+    let users = exec_ok(
+        &schema,
+        "{ users { id role } }",
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    let found = users["users"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|u| uuid_at(u, &["id"]) == viewer_id)
+        .unwrap();
+    assert_eq!(found["role"], Json::String("SURVEYOR".into()));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn logout_clears_session_cookie(pool: PgPool) {
+    let schema = schema(pool);
+    let resp = schema.execute(Request::new("mutation { logout }")).await;
+    assert!(resp.errors.is_empty());
+    let cookie = resp
+        .http_headers
+        .get("set-cookie")
+        .expect("logout sets a clearing cookie")
+        .to_str()
+        .unwrap();
+    // Clears the session: empty value + immediate expiry.
+    assert!(cookie.contains("session="), "got: {cookie}");
+    assert!(cookie.contains("Max-Age=0"), "got: {cookie}");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn update_and_delete_control_point(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let (b_admin, b_org, _) = signup(&schema, "b@example.com", "Org B").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+
+    let add = format!(
+        r#"mutation {{ addControlPoint(projectId: "{pid}", label: "CP1", northing: 1.0, easting: 2.0, unit: METER) {{ id }} }}"#
+    );
+    let cpid = uuid_at(
+        &exec_ok(&schema, &add, Some(admin_ctx(admin, org))).await,
+        &["addControlPoint", "id"],
+    );
+
+    // Update relabels and re-coordinates (feet → meters).
+    let upd = format!(
+        r#"mutation {{ updateControlPoint(id: "{cpid}", label: "CP1b", northing: 1000.0, unit: US_SURVEY_FOOT) {{ label northing }} }}"#
+    );
+    let d = exec_ok(&schema, &upd, Some(admin_ctx(admin, org))).await;
+    assert_eq!(
+        d["updateControlPoint"]["label"],
+        Json::String("CP1b".into())
+    );
+    let us_ft_m = 1200.0_f64 / 3937.0;
+    assert!(
+        (d["updateControlPoint"]["northing"].as_f64().unwrap() - 1000.0 * us_ft_m).abs() < 1e-6
+    );
+
+    // Cross-org cannot touch it.
+    let cross = format!(r#"mutation {{ deleteControlPoint(id: "{cpid}") }}"#);
+    assert!(exec_err(&schema, &cross, Some(admin_ctx(b_admin, b_org)))
+        .await
+        .contains("not found"));
+
+    // Owner deletes it.
+    let del = format!(r#"mutation {{ deleteControlPoint(id: "{cpid}") }}"#);
+    assert_eq!(
+        exec_ok(&schema, &del, Some(admin_ctx(admin, org))).await["deleteControlPoint"],
+        Json::Bool(true)
+    );
+    let left = exec_ok(
+        &schema,
+        &format!(r#"{{ controlPoints(projectId: "{pid}") {{ id }} }}"#),
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    assert_eq!(left["controlPoints"].as_array().unwrap().len(), 0);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn update_survey_point_and_assign_category(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+
+    // A custom category and one imported point.
+    let cat = exec_ok(
+        &schema,
+        r##"mutation { createCategory(name: "Manholes", color: "#0af", icon: "m") { id } }"##,
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    let cat_id = uuid_at(&cat, &["createCategory", "id"]);
+
+    let imp = r#"mutation ($id: UUID!, $c: String!, $m: CsvMappingInput!) {
+        importPoints(projectId: $id, format: CSV, content: $c, unit: METER, mapping: $m) { rowCount } }"#;
+    exec_ok_vars(
+        &schema,
+        imp,
+        serde_json::json!({
+            "id": pid, "c": "P,N,E\nMH1,1,1\n",
+            "m": { "hasHeader": true, "labelCol": 0, "northingCol": 1, "eastingCol": 2 }
+        }),
+        admin_ctx(admin, org),
+    )
+    .await;
+    let pts = exec_ok(
+        &schema,
+        &format!(r#"{{ surveyPoints(projectId: "{pid}") {{ id }} }}"#),
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    let sp_id = uuid_at(&pts["surveyPoints"][0], &["id"]);
+
+    let upd = format!(
+        r#"mutation {{ updateSurveyPoint(id: "{sp_id}", label: "MH-renamed", description: "north basin", categoryId: "{cat_id}", tags: ["storm","verified"]) {{ label description categoryId tags }} }}"#
+    );
+    let d = exec_ok(&schema, &upd, Some(admin_ctx(admin, org))).await;
+    let p = &d["updateSurveyPoint"];
+    assert_eq!(p["label"], Json::String("MH-renamed".into()));
+    assert_eq!(p["description"], Json::String("north basin".into()));
+    assert_eq!(uuid_at(p, &["categoryId"]), cat_id);
+    assert_eq!(
+        p["tags"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t.as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["storm", "verified"]
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn import_with_category_and_saved_profile(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+    let cat = exec_ok(
+        &schema,
+        r##"mutation { createCategory(name: "Trees", color: "#0a0", icon: "t") { id } }"##,
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    let cat_id = uuid_at(&cat, &["createCategory", "id"]);
+
+    // Import tags every row with the category AND saves the mapping as a profile.
+    let imp = r#"mutation ($id: UUID!, $c: String!, $m: CsvMappingInput!, $cat: UUID!, $name: String!) {
+        importPoints(projectId: $id, format: CSV, content: $c, unit: METER, mapping: $m, categoryId: $cat, saveProfileName: $name) { rowCount } }"#;
+    let d = exec_ok_vars(
+        &schema,
+        imp,
+        serde_json::json!({
+            "id": pid, "c": "P,N,E\nT1,1,1\nT2,2,2\n", "cat": cat_id, "name": "PNE meters",
+            "m": { "hasHeader": true, "labelCol": 0, "northingCol": 1, "eastingCol": 2 }
+        }),
+        admin_ctx(admin, org),
+    )
+    .await;
+    assert_eq!(d["importPoints"]["rowCount"].as_i64().unwrap(), 2);
+
+    // Both points carry the category.
+    let by_cat = exec_ok(
+        &schema,
+        &format!(r#"{{ surveyPointCount(projectId: "{pid}", categoryId: "{cat_id}") }}"#),
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    assert_eq!(by_cat["surveyPointCount"].as_i64().unwrap(), 2);
+
+    // The profile was saved and is listed.
+    let profiles = exec_ok(
+        &schema,
+        &format!(r#"{{ importProfiles(projectId: "{pid}") {{ name unit }} }}"#),
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    let arr = profiles["importProfiles"].as_array().unwrap();
+    assert_eq!(arr.len(), 1);
+    assert_eq!(arr[0]["name"], Json::String("PNE meters".into()));
+    assert_eq!(arr[0]["unit"], Json::String("METER".into()));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn delete_point_group(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+    let g = exec_ok(
+        &schema,
+        &format!(r#"mutation {{ createPointGroup(projectId: "{pid}", name: "Set A", memberIds: []) {{ id }} }}"#),
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    let gid = uuid_at(&g, &["createPointGroup", "id"]);
+    assert_eq!(
+        exec_ok(
+            &schema,
+            &format!(r#"mutation {{ deletePointGroup(id: "{gid}") }}"#),
+            Some(admin_ctx(admin, org)),
+        )
+        .await["deletePointGroup"],
+        Json::Bool(true)
+    );
+    let left = exec_ok(
+        &schema,
+        &format!(r#"{{ pointGroups(projectId: "{pid}") {{ id }} }}"#),
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    assert_eq!(left["pointGroups"].as_array().unwrap().len(), 0);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn search_epsg_finds_known_code(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    // Searching by code returns that CRS.
+    let d = exec_ok(
+        &schema,
+        r#"{ searchEpsg(query: "2229", limit: 5) { code name } }"#,
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    let arr = d["searchEpsg"].as_array().unwrap();
+    assert!(arr.iter().any(|e| e["code"].as_i64() == Some(2229)));
+    assert!(arr.iter().all(|e| !e["name"].as_str().unwrap().is_empty()));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn public_config_returns_configured_token(pool: PgPool) {
+    let schema = schema(pool);
+    // The test AuthConfig uses an empty Ion token.
+    let d = exec_ok(&schema, "{ publicConfig { cesiumIonToken } }", None).await;
+    assert_eq!(
+        d["publicConfig"]["cesiumIonToken"],
+        Json::String(String::new())
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn convert_ground_uses_combined_scale_factor(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    // CSF = 2 → ground = projected-grid / 2.
+    let create = r#"mutation { createProject(name: "S", epsgCode: 2229, displayUnit: METER, combinedScaleFactor: 2.0) { id } }"#;
+    let pid = uuid_at(
+        &exec_ok(&schema, create, Some(admin_ctx(admin, org))).await,
+        &["createProject", "id"],
+    );
+    let q = format!(
+        r#"{{ convertCoordinate(projectId: "{pid}", space: PROJECTED, x: 100.0, y: 200.0, unit: METER) {{ projectedGridE projectedGroundE projectedGroundN }} }}"#
+    );
+    let c = &exec_ok(&schema, &q, Some(admin_ctx(admin, org))).await["convertCoordinate"];
+    assert!((c["projectedGridE"].as_f64().unwrap() - 100.0).abs() < 1e-9);
+    assert!((c["projectedGroundE"].as_f64().unwrap() - 50.0).abs() < 1e-9);
+    assert!((c["projectedGroundN"].as_f64().unwrap() - 100.0).abs() < 1e-9);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn export_respects_columns_space_and_category_filter(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+    let imp = r#"mutation ($id: UUID!, $c: String!, $m: CsvMappingInput!) {
+        importPoints(projectId: $id, format: CSV, content: $c, unit: METER, mapping: $m) { rowCount } }"#;
+    exec_ok_vars(
+        &schema,
+        imp,
+        serde_json::json!({
+            "id": pid, "c": "P,N,E\nA,1000,2000\nB,1001,2001\n",
+            "m": { "hasHeader": true, "labelCol": 0, "northingCol": 1, "eastingCol": 2 }
+        }),
+        admin_ctx(admin, org),
+    )
+    .await;
+
+    // A chosen column subset/order — no Elevation/Description columns.
+    let subset = exec_ok(
+        &schema,
+        &format!(
+            r#"{{ exportPoints(projectId: "{pid}", format: CSV, space: PROJECTED_GRID, unit: METER, columns: [POINT, EASTING, NORTHING]) }}"#
+        ),
+        Some(admin_ctx(admin, org)),
+    )
+    .await["exportPoints"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let header = subset.lines().next().unwrap();
+    assert_eq!(header, "Point,Easting,Northing");
+    assert!(!subset.contains("Elevation"));
+
+    // Geographic space emits lat/long columns with real values.
+    let geo = exec_ok(
+        &schema,
+        &format!(
+            r#"{{ exportPoints(projectId: "{pid}", format: CSV, space: GEOGRAPHIC, unit: METER, columns: [POINT, LATITUDE, LONGITUDE]) }}"#
+        ),
+        Some(admin_ctx(admin, org)),
+    )
+    .await["exportPoints"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(geo.lines().next().unwrap(), "Point,Latitude,Longitude");
+    assert_eq!(geo.lines().filter(|l| !l.trim().is_empty()).count(), 3); // header + 2
+
+    // Filtering by an empty category yields only the header.
+    let cat = exec_ok(
+        &schema,
+        r##"mutation { createCategory(name: "Empty", color: "#000", icon: "e") { id } }"##,
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    let cat_id = uuid_at(&cat, &["createCategory", "id"]);
+    let filtered = exec_ok(
+        &schema,
+        &format!(
+            r#"{{ exportPoints(projectId: "{pid}", format: CSV, space: PROJECTED_GRID, unit: METER, categoryId: "{cat_id}") }}"#
+        ),
+        Some(admin_ctx(admin, org)),
+    )
+    .await["exportPoints"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(filtered.lines().filter(|l| !l.trim().is_empty()).count(), 1);
+    assert!(!filtered.contains(",1000,") && !filtered.contains('A'));
+}

@@ -96,4 +96,24 @@ mod tests {
         assert!(xml.contains(r#"<CgPoint name="1" desc="MON">100 200 5</CgPoint>"#));
         assert!(xml.contains(r#"<CgPoint name="2" desc="">101 201</CgPoint>"#));
     }
+
+    #[test]
+    fn csv_escapes_embedded_quotes() {
+        // RFC 4180: a double-quote inside a quoted field is doubled.
+        let csv = to_csv(&["D".into()], &[vec![r#"say "hi""#.into()]]);
+        assert!(csv.contains(r#""say ""hi""""#), "got: {csv}");
+    }
+
+    #[test]
+    fn csv_handles_empty_rows() {
+        let csv = to_csv(&["A".into(), "B".into()], &[]);
+        assert_eq!(csv.trim(), "A,B");
+    }
+
+    #[test]
+    fn landxml_with_no_points_is_well_formed() {
+        let xml = to_landxml(&[]);
+        assert!(xml.contains("<CgPoints"));
+        assert!(!xml.contains("<CgPoint "));
+    }
 }

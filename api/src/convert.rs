@@ -101,4 +101,25 @@ mod tests {
         assert!((set.projected_ground_e.unwrap() - 1000.0 / 0.9999).abs() < 1e-9);
         assert!((set.projected_ground_n.unwrap() - 2000.0 / 0.9999).abs() < 1e-9);
     }
+
+    #[test]
+    fn grid_input_without_transform_has_no_projected_or_geographic() {
+        // Grid coords can't be placed without a transform — nothing downstream
+        // is derivable (no projected, so no ground, so no lat/long).
+        let set = convert(Space::Grid, 10.0, 20.0, None, 2229, 1.0);
+        assert_eq!(set.grid_x, Some(10.0));
+        assert_eq!(set.grid_y, Some(20.0));
+        assert!(set.projected_grid_e.is_none());
+        assert!(set.projected_ground_e.is_none());
+        assert!(set.latitude.is_none());
+        assert!(set.longitude.is_none());
+    }
+
+    #[test]
+    fn invalid_epsg_yields_no_geographic_but_keeps_projected() {
+        let set = convert(Space::Projected, 1000.0, 2000.0, None, 999_999, 1.0);
+        assert_eq!(set.projected_grid_e, Some(1000.0));
+        assert!(set.latitude.is_none());
+        assert!(set.longitude.is_none());
+    }
 }

@@ -146,4 +146,18 @@ mod tests {
         assert!((to_meter("+proj=tmerc +to_meter=0.3048 +no_defs") - 0.3048).abs() < 1e-12);
         assert_eq!(to_meter("+proj=lcc +no_defs"), 1.0);
     }
+
+    #[test]
+    fn metric_utm_crs_roundtrips() {
+        // EPSG:26910 — NAD83 / UTM zone 10N (meters). Exercises a non-foot CRS so
+        // unit handling isn't only validated against state-plane feet.
+        const UTM10: i32 = 26910;
+        let (lat, lon) = (37.7749, -122.4194); // San Francisco, in zone 10N.
+        let (e, n) = geographic_to_projected(UTM10, lat, lon).expect("project");
+        assert!((1.0e5..9.0e5).contains(&e), "easting {e}");
+        assert!((4.0e6..4.3e6).contains(&n), "northing {n}");
+        let (lat2, lon2) = projected_to_geographic(UTM10, e, n).expect("unproject");
+        assert!((lat - lat2).abs() < 1e-7, "lat {lat} vs {lat2}");
+        assert!((lon - lon2).abs() < 1e-7, "lon {lon} vs {lon2}");
+    }
 }
