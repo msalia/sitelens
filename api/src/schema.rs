@@ -321,31 +321,65 @@ impl QueryRoot {
     }
 
     /// Surveyed points for a project, optionally filtered by free-text search
-    /// (label/description/tags) and/or category.
+    /// (label/description/tags) and/or category. Paginated: `limit` is clamped to
+    /// [1, 1000] (default 200) so the list query is always bounded.
     async fn survey_points(
         &self,
         ctx: &Context<'_>,
         project_id: Uuid,
         search: Option<String>,
         category_id: Option<Uuid>,
+        limit: Option<i64>,
+        offset: Option<i64>,
     ) -> Result<Vec<SurveyPoint>> {
         let auth = require_auth(ctx)?;
         let pool = pool(ctx)?;
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
         let search = search.filter(|s| !s.trim().is_empty());
+        let limit = limit.unwrap_or(200).clamp(1, 1000);
+        let offset = offset.unwrap_or(0).max(0);
         let rows: Vec<SurveyPoint> = sqlx::query_as(&format!(
             "SELECT {SURVEY_POINT_COLUMNS} FROM survey_points WHERE project_id = $1 \
              AND ($2::text IS NULL OR label ILIKE '%'||$2||'%' OR description ILIKE '%'||$2||'%' \
                   OR array_to_string(tags, ' ') ILIKE '%'||$2||'%') \
              AND ($3::uuid IS NULL OR category_id = $3) \
-             ORDER BY created_at"
+             ORDER BY seq LIMIT $4 OFFSET $5"
         ))
         .bind(project_id)
         .bind(search)
         .bind(category_id)
+        .bind(limit)
+        .bind(offset)
         .fetch_all(pool)
         .await?;
         Ok(rows)
+    }
+
+    /// Total count of surveyed points matching the same filters as `surveyPoints`.
+    /// Lets the UI paginate without fetching every row.
+    async fn survey_point_count(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        search: Option<String>,
+        category_id: Option<Uuid>,
+    ) -> Result<i64> {
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        let search = search.filter(|s| !s.trim().is_empty());
+        let (count,): (i64,) = sqlx::query_as(
+            "SELECT count(*) FROM survey_points WHERE project_id = $1 \
+             AND ($2::text IS NULL OR label ILIKE '%'||$2||'%' OR description ILIKE '%'||$2||'%' \
+                  OR array_to_string(tags, ' ') ILIKE '%'||$2||'%') \
+             AND ($3::uuid IS NULL OR category_id = $3)",
+        )
+        .bind(project_id)
+        .bind(search)
+        .bind(category_id)
+        .fetch_one(pool)
+        .await?;
+        Ok(count)
     }
 
     /// Import batches for a project.

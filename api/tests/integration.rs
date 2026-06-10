@@ -670,6 +670,58 @@ async fn survey_points_search_filter(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn survey_points_pagination_and_count(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+
+    // Import 5 points in a known order.
+    let mut content = String::from("P,N,E\n");
+    for i in 0..5 {
+        content.push_str(&format!("PT{i},{i},{i}\n"));
+    }
+    let q = r#"mutation ($id: UUID!, $content: String!, $m: CsvMappingInput!) {
+        importPoints(projectId: $id, format: CSV, content: $content, unit: METER, mapping: $m) { rowCount }
+    }"#;
+    let vars = serde_json::json!({
+        "id": pid, "content": content,
+        "m": { "hasHeader": true, "labelCol": 0, "northingCol": 1, "eastingCol": 2 }
+    });
+    exec_ok_vars(&schema, q, vars, admin_ctx(admin, org)).await;
+
+    // Count reflects all matching rows regardless of paging.
+    let counted = exec_ok(
+        &schema,
+        &format!(r#"{{ surveyPointCount(projectId: "{pid}") }}"#),
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    assert_eq!(counted["surveyPointCount"].as_i64().unwrap(), 5);
+
+    // First page of 2.
+    let page1 = exec_ok(
+        &schema,
+        &format!(r#"{{ surveyPoints(projectId: "{pid}", limit: 2, offset: 0) {{ label }} }}"#),
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    let p1 = page1["surveyPoints"].as_array().unwrap();
+    assert_eq!(p1.len(), 2);
+    assert_eq!(p1[0]["label"], Json::String("PT0".into()));
+
+    // Second page continues where the first left off.
+    let page2 = exec_ok(
+        &schema,
+        &format!(r#"{{ surveyPoints(projectId: "{pid}", limit: 2, offset: 2) {{ label }} }}"#),
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    let p2 = page2["surveyPoints"].as_array().unwrap();
+    assert_eq!(p2.len(), 2);
+    assert_eq!(p2[0]["label"], Json::String("PT2".into()));
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn import_landxml_points(pool: PgPool) {
     let schema = schema(pool);
     let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;

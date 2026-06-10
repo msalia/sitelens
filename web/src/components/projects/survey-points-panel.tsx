@@ -33,9 +33,17 @@ import { fromMeters } from '@/lib/units';
 
 const ALL = 'all';
 
+const PAGE_SIZE = 50;
+
 const SURVEY_POINTS = graphql(`
-  query SurveyPoints($id: UUID!, $search: String, $cat: UUID) {
-    surveyPoints(projectId: $id, search: $search, categoryId: $cat) {
+  query SurveyPoints($id: UUID!, $search: String, $cat: UUID, $limit: Int, $offset: Int) {
+    surveyPoints(
+      projectId: $id
+      search: $search
+      categoryId: $cat
+      limit: $limit
+      offset: $offset
+    ) {
       id
       projectId
       label
@@ -47,6 +55,7 @@ const SURVEY_POINTS = graphql(`
       tags
       importBatchId
     }
+    surveyPointCount(projectId: $id, search: $search, categoryId: $cat)
   }
 `);
 const DELETE_SURVEY_POINT = graphql(`
@@ -73,6 +82,8 @@ export function SurveyPointsPanel({
 }) {
   const unitLabel = UNIT_LABELS[project.displayUnit];
   const [points, setPoints] = useState<SurveyPoint[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -85,17 +96,29 @@ export function SurveyPointsPanel({
       const data = await gql(SURVEY_POINTS, {
         cat: categoryFilter === ALL ? null : categoryFilter,
         id: project.id,
+        limit: PAGE_SIZE,
+        offset: page * PAGE_SIZE,
         search: search || null,
       });
       setPoints(data.surveyPoints);
+      setTotal(data.surveyPointCount);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load points');
     }
-  }, [project.id, search, categoryFilter]);
+  }, [project.id, search, categoryFilter, page]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Reset to the first page whenever the filters change.
+  useEffect(() => {
+    setPage(0);
+  }, [search, categoryFilter]);
+
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rangeStart = total === 0 ? 0 : page * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(total, (page + 1) * PAGE_SIZE);
 
   function toggle(id: string) {
     setSelected((s) => {
@@ -254,6 +277,36 @@ export function SurveyPointsPanel({
             )}
           </TableBody>
         </Table>
+
+        {total > 0 && (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">
+              {rangeStart}–{rangeEnd} of {total}
+              {selected.size > 0 ? ` · ${selected.size} selected` : ''}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={page === 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+              >
+                Previous
+              </Button>
+              <span className="text-muted-foreground">
+                Page {page + 1} / {pageCount}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={page + 1 >= pageCount}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
       </CardContent>
 
       <CoordinateInspectorDialog

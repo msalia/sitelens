@@ -66,12 +66,14 @@ export interface CesiumViewerProps {
   visibleCategoryIds: Set<string> | null;
 }
 
-function populate(Cesium: any, viewer: any, props: CesiumViewerProps) {
+function populate(Cesium: any, viewer: any, pointSource: any, props: CesiumViewerProps) {
   const { categories, scene, visibleCategoryIds } = props;
   viewer.entities.removeAll();
+  pointSource.entities.removeAll();
   const colorOf = new Map(categories.map((c) => [c.id, c.color]));
 
   const addPoint = (
+    collection: any,
     id: string | undefined,
     label: string,
     lon: number,
@@ -80,7 +82,7 @@ function populate(Cesium: any, viewer: any, props: CesiumViewerProps) {
     color: string,
     size: number,
   ) => {
-    viewer.entities.add({
+    collection.add({
       id,
       label: {
         backgroundColor: Cesium.Color.BLACK.withAlpha(0.6),
@@ -104,15 +106,35 @@ function populate(Cesium: any, viewer: any, props: CesiumViewerProps) {
     });
   };
 
+  // Control points stay on the main collection (always visible, low count).
   for (const cp of scene.controlPoints) {
-    addPoint(undefined, cp.label, cp.longitude, cp.latitude, cp.height, CONTROL_COLOR, 12);
+    addPoint(
+      viewer.entities,
+      undefined,
+      cp.label,
+      cp.longitude,
+      cp.latitude,
+      cp.height,
+      CONTROL_COLOR,
+      12,
+    );
   }
+  // Survey points (potentially many) go on the clustered data source.
   for (const sp of scene.surveyPoints) {
     if (visibleCategoryIds && sp.categoryId && !visibleCategoryIds.has(sp.categoryId)) {
       continue;
     }
     const color = (sp.categoryId && colorOf.get(sp.categoryId)) || DEFAULT_POINT_COLOR;
-    addPoint(sp.id ?? undefined, sp.label, sp.longitude, sp.latitude, sp.height, color, 9);
+    addPoint(
+      pointSource.entities,
+      sp.id ?? undefined,
+      sp.label,
+      sp.longitude,
+      sp.latitude,
+      sp.height,
+      color,
+      9,
+    );
   }
   for (const line of scene.gridLines) {
     viewer.entities.add({
@@ -159,8 +181,17 @@ function populate(Cesium: any, viewer: any, props: CesiumViewerProps) {
     }
   }
 
-  if (viewer.entities.values.length > 0) {
-    viewer.zoomTo(viewer.entities).catch(() => {});
+  const hasMain = viewer.entities.values.length > 0;
+  const hasPoints = pointSource.entities.values.length > 0;
+  if (hasMain || hasPoints) {
+    const targets = [];
+    if (hasMain) {
+      targets.push(viewer.entities);
+    }
+    if (hasPoints) {
+      targets.push(pointSource);
+    }
+    viewer.zoomTo(targets).catch(() => {});
   } else if (scene.origin) {
     viewer.camera.flyTo({
       destination: Cesium.Cartesian3.fromDegrees(
@@ -175,6 +206,7 @@ function populate(Cesium: any, viewer: any, props: CesiumViewerProps) {
 export function CesiumViewer(props: CesiumViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<any>(null);
+  const pointSourceRef = useRef<any>(null);
   const propsRef = useRef(props);
 
   // Keep the latest props available to the long-lived viewer callbacks.
@@ -216,6 +248,28 @@ export function CesiumViewer(props: CesiumViewerProps) {
       });
       viewerRef.current = viewer;
 
+      // Survey points live on a clustered data source so dense sites stay legible
+      // and fast — nearby points collapse into a labelled cluster when zoomed out.
+      const pointSource = new Cesium.CustomDataSource('survey-points');
+      viewer.dataSources.add(pointSource);
+      const clustering = pointSource.clustering;
+      clustering.enabled = true;
+      clustering.pixelRange = 40;
+      clustering.minimumClusterSize = 5;
+      clustering.clusterEvent.addEventListener((entities: any[], cluster: any) => {
+        cluster.label.show = true;
+        cluster.label.text = String(entities.length);
+        cluster.label.font = 'bold 13px sans-serif';
+        cluster.label.fillColor = Cesium.Color.WHITE;
+        cluster.label.disableDepthTestDistance = Number.POSITIVE_INFINITY;
+        cluster.point.show = true;
+        cluster.point.pixelSize = 18;
+        cluster.point.color = Cesium.Color.fromCssColorString('#0ea5e9');
+        cluster.point.outlineColor = Cesium.Color.WHITE;
+        cluster.point.outlineWidth = 2;
+      });
+      pointSourceRef.current = pointSource;
+
       // Expose a snapshot function: force a render, then download the canvas.
       if (propsRef.current.captureRef) {
         propsRef.current.captureRef.current = () => {
@@ -244,7 +298,7 @@ export function CesiumViewer(props: CesiumViewerProps) {
           /* keep ellipsoid terrain */
         }
       }
-      populate(Cesium, viewer, propsRef.current);
+      populate(Cesium, viewer, pointSource, propsRef.current);
     })();
 
     const captureRef = propsRef.current.captureRef;
@@ -254,6 +308,7 @@ export function CesiumViewer(props: CesiumViewerProps) {
         viewer.destroy();
       }
       viewerRef.current = null;
+      pointSourceRef.current = null;
       if (captureRef) {
         captureRef.current = null;
       }
@@ -267,8 +322,9 @@ export function CesiumViewer(props: CesiumViewerProps) {
     (async () => {
       const Cesium: any = await loadCesium();
       const viewer = viewerRef.current;
-      if (!cancelled && viewer && !viewer.isDestroyed()) {
-        populate(Cesium, viewer, props);
+      const pointSource = pointSourceRef.current;
+      if (!cancelled && viewer && pointSource && !viewer.isDestroyed()) {
+        populate(Cesium, viewer, pointSource, props);
       }
     })();
     return () => {

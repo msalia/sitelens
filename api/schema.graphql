@@ -406,9 +406,15 @@ type QueryRoot {
 	categories: [PointCategory!]!
 	"""
 	Surveyed points for a project, optionally filtered by free-text search
-	(label/description/tags) and/or category.
+	(label/description/tags) and/or category. Paginated: `limit` is clamped to
+	[1, 1000] (default 200) so the list query is always bounded.
 	"""
-	surveyPoints(projectId: UUID!, search: String, categoryId: UUID): [SurveyPoint!]!
+	surveyPoints(projectId: UUID!, search: String, categoryId: UUID, limit: Int, offset: Int): [SurveyPoint!]!
+	"""
+	Total count of surveyed points matching the same filters as `surveyPoints`.
+	Lets the UI paginate without fetching every row.
+	"""
+	surveyPointCount(projectId: UUID!, search: String, categoryId: UUID): Int!
 	"""
 	Import batches for a project.
 	"""

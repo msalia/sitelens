@@ -305,10 +305,12 @@ export type SurveyPointsQueryVariables = Exact<{
   id: string;
   search?: string | null | undefined;
   cat?: string | null | undefined;
+  limit?: number | null | undefined;
+  offset?: number | null | undefined;
 }>;
 
 
-export type SurveyPointsQuery = { surveyPoints: Array<{ id: string, projectId: string, label: string, northing: number, easting: number, elevation: number | null, description: string, categoryId: string | null, tags: Array<string>, importBatchId: string | null }> };
+export type SurveyPointsQuery = { surveyPointCount: number, surveyPoints: Array<{ id: string, projectId: string, label: string, northing: number, easting: number, elevation: number | null, description: string, categoryId: string | null, tags: Array<string>, importBatchId: string | null }> };
 
 export type DeleteSurveyPointMutationVariables = Exact<{
   id: string;
@@ -702,8 +704,14 @@ export const OverlayContentDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<OverlayContentQuery, OverlayContentQueryVariables>;
 export const SurveyPointsDocument = new TypedDocumentString(`
-    query SurveyPoints($id: UUID!, $search: String, $cat: UUID) {
-  surveyPoints(projectId: $id, search: $search, categoryId: $cat) {
+    query SurveyPoints($id: UUID!, $search: String, $cat: UUID, $limit: Int, $offset: Int) {
+  surveyPoints(
+    projectId: $id
+    search: $search
+    categoryId: $cat
+    limit: $limit
+    offset: $offset
+  ) {
     id
     projectId
     label
@@ -715,6 +723,7 @@ export const SurveyPointsDocument = new TypedDocumentString(`
     tags
     importBatchId
   }
+  surveyPointCount(projectId: $id, search: $search, categoryId: $cat)
 }
     `) as unknown as TypedDocumentString<SurveyPointsQuery, SurveyPointsQueryVariables>;
 export const DeleteSurveyPointDocument = new TypedDocumentString(`

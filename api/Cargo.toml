@@ -41,5 +41,12 @@ crs-definitions = { version = "0.3", features = ["proj4", "wkt"] }
 csv = "1"
 roxmltree = "0.20"
 
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "core_bench"
+harness = false
+
 [profile.release]
 opt-level = 2
