@@ -232,7 +232,7 @@ Get data back out; ad-hoc conversions.
 
 - [x] Unit tests on CSV/LandXML format generation (`export.rs`: headers, row order, quoting, CgPoint output)
 - [x] Integration test: `exportPoints` resolver returns CSV + LandXML through the schema with auth + org scoping
-- [ ] Playwright: select points → export → verify file contents (deferred — headless Chromium/WebGL blocked in this sandbox)
+- [x] Playwright: select points → export → verify file contents (`web/e2e/export-contents.spec.ts`: exact CSV header/rows/selection scope + LandXML CgPoints)
 
 ### Validates
 
@@ -259,7 +259,7 @@ possible. Optimize against real benchmarks, not guesses.
 
 - [x] Benchmark suite is repeatable and committed (`cargo bench --bench core_bench`; baseline numbers in `docs/PERFORMANCE.md`)
 - [x] Integration test for paginated `surveyPoints` + `surveyPointCount` (stable order across pages)
-- [ ] Large-dataset E2E: UI stays responsive with a high point count (deferred — headless Chromium/WebGL blocked in this sandbox; pagination + clustering address the underlying risk)
+- [x] Large-dataset E2E: UI stays responsive with a high point count (`web/e2e/large-dataset.spec.ts`: 1,000 points — 50/page in DOM, paging + search within budget, 3D scene boots without choking)
 
 ### Validates
 
@@ -285,7 +285,7 @@ Security, robustness, and deploy.
 - [x] Cross-org isolation suite (comprehensive) — `cross_org_isolation_comprehensive`: every project-scoped read and mutation denied for the other org.
 - [x] Malicious-file rejection tests — oversized, too-many-rows, malformed CSV/XML, XML-bomb.
 - [x] Auth rate-limit test + Redis/in-process limiter unit tests.
-- [ ] End-to-end smoke on the production environment (verify post-deploy).
+- [x] End-to-end smoke on the production environment (`web/e2e/prod-smoke.spec.ts`: home, docs, GraphQL proxy, logged-out `me` is null, HTTPS — read-only against the live deploy).
 
 ### Validates
 

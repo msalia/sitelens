@@ -27,7 +27,7 @@ test('sign up, verify, create a project, and see it listed', async ({ page }) =>
   // Log in.
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill('password123');
-  await page.getByRole('button', { name: 'Log in' }).click();
+  await page.getByRole('button', { name: 'Login' }).click();
   await expect(page).toHaveURL(/\/projects$/);
 
   // Create a project.

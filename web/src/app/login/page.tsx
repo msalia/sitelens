@@ -1,85 +1,53 @@
-'use client';
-
+import { IconCompass } from '@tabler/icons-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { toast } from 'sonner';
 
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { graphql } from '@/lib/gql';
-import { gql } from '@/lib/graphql';
-
-const LOGIN = graphql(`
-  mutation Login($e: String!, $p: String!) {
-    login(email: $e, password: $p) {
-      id
-    }
-  }
-`);
+import { LoginForm } from '@/components/login-form';
 
 export default function LoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      await gql(LOGIN, { e: email, p: password });
-      router.replace('/projects');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Login failed');
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
-    <div className="flex min-h-screen items-center justify-center p-6">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-xl">Log in to SiteLens</CardTitle>
-          <CardDescription>Enter your credentials to continue.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={onSubmit} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
+    <div className="grid min-h-svh lg:grid-cols-2">
+      <div className="flex flex-col gap-4 p-6 md:p-10">
+        <div className="flex justify-center gap-2 md:justify-start">
+          <Link href="/" className="flex items-center gap-2 font-medium">
+            <div className="bg-primary text-primary-foreground flex size-6 items-center justify-center rounded-md">
+              <IconCompass className="size-4" />
             </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <Button type="submit" disabled={busy}>
-              {busy ? 'Logging in…' : 'Log in'}
-            </Button>
-          </form>
-          <p className="text-muted-foreground mt-4 text-sm">
-            No account?{' '}
-            <Link href="/signup" className="text-foreground underline-offset-4 hover:underline">
-              Sign up
-            </Link>
+            SiteLens
+          </Link>
+        </div>
+        <div className="flex flex-1 items-center justify-center">
+          <div className="w-full max-w-xs">
+            <LoginForm />
+          </div>
+        </div>
+      </div>
+
+      {/* Cover panel — branded gradient + survey grid in lieu of a photo asset. */}
+      <div className="bg-muted relative hidden overflow-hidden lg:block">
+        <div className="from-primary/25 via-background to-background absolute inset-0 bg-gradient-to-br" />
+        <div
+          className="absolute inset-0 opacity-[0.18] dark:opacity-10"
+          style={{
+            backgroundImage:
+              'linear-gradient(to right, var(--color-foreground) 1px, transparent 1px), linear-gradient(to bottom, var(--color-foreground) 1px, transparent 1px)',
+            backgroundSize: '40px 40px',
+          }}
+        />
+        {/* A few "control point" ticks to evoke a survey tie. */}
+        <div className="bg-primary absolute left-[20%] top-[30%] size-2 rounded-full" />
+        <div className="bg-primary absolute left-[64%] top-[22%] size-2 rounded-full" />
+        <div className="bg-primary absolute left-[44%] top-[68%] size-2 rounded-full" />
+        <div className="relative flex h-full flex-col items-center justify-center gap-3 p-10 text-center">
+          <div className="bg-primary text-primary-foreground flex size-12 items-center justify-center rounded-xl">
+            <IconCompass className="size-7" />
+          </div>
+          <p className="text-2xl font-semibold tracking-tight">SiteLens</p>
+          <p className="text-muted-foreground max-w-xs text-sm text-balance">
+            Tie the building grid to the real world. Solve, convert, and visualize survey
+            coordinates in 3D.
           </p>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

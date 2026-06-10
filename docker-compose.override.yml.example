@@ -2,6 +2,10 @@
 # Dokploy deploys with `-f docker-compose.yml`, so these ports are local-only.
 services:
   db:
+    # arm64-native PostGIS for Apple Silicon — the official postgis/postgis:16-3.4
+    # is amd64-only and runs under slow emulation locally. Same upstream PostGIS,
+    # PG16-compatible. Local-only: prod (docker-compose.yml) keeps the official image.
+    image: imresamu/postgis:16-3.4
     ports:
       - '5432:5432'
 

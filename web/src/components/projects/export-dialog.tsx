@@ -81,6 +81,16 @@ export function ExportDialog({
   const [scope, setScope] = useState<Scope>(selectedIds.length > 0 ? 'selection' : 'all');
   const [busy, setBusy] = useState(false);
 
+  // Default the scope each time the dialog opens: if points are selected, export
+  // those; otherwise fall back to all. (The component stays mounted, so the
+  // initial useState value can't reflect selections made after first render.)
+  function onOpenChange(next: boolean) {
+    if (next) {
+      setScope(selectedIds.length > 0 ? 'selection' : 'all');
+    }
+    setOpen(next);
+  }
+
   function toggleColumn(col: ExportColumn) {
     setColumns((cols) => (cols.includes(col) ? cols.filter((c) => c !== col) : [...cols, col]));
   }
@@ -125,7 +135,7 @@ export function ExportDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger
         render={
           <Button size="sm" variant="outline">

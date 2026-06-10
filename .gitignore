@@ -28,3 +28,6 @@
 .idea/
 .vscode/
 .DS_Store
+
+# Local Docker overrides (ports, arch-specific images) — see .example
+docker-compose.override.yml
