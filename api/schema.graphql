@@ -261,6 +261,10 @@ type MutationRoot {
 	"""
 	createCategory(name: String!, color: String!, icon: String!): PointCategory!
 	"""
+	Deletes a custom (non-default) category. Points in it are uncategorized.
+	"""
+	deleteCategory(id: UUID!): Boolean!
+	"""
 	Imports points from CSV or LandXML content. Coordinates in `unit` are
 	stored as meters. Optionally tags all points with a category and saves
 	the CSV mapping as a reusable profile.

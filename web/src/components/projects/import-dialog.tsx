@@ -14,9 +14,19 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
@@ -57,10 +67,13 @@ export function ImportDialog({
   categories,
   onImported,
   project,
+  trigger,
 }: {
   project: Project;
   categories: PointCategory[];
   onImported: () => void;
+  /** Optional custom trigger element; falls back to a default button. */
+  trigger?: React.ReactElement;
 }) {
   const [open, setOpen] = useState(false);
   const [format, setFormat] = useState<Format>('CSV');
@@ -154,9 +167,11 @@ export function ImportDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          <Button size="sm" variant="outline">
-            <IconUpload className="mr-1 size-4" /> Import
-          </Button>
+          trigger ?? (
+            <Button size="sm" variant="outline">
+              <IconUpload className="mr-1 size-4" /> Import
+            </Button>
+          )
         }
       />
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
@@ -166,37 +181,43 @@ export function ImportDialog({
         </DialogHeader>
         <form onSubmit={onImport} className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="imp-format">Format</Label>
-              <NativeSelect
-                id="imp-format"
-                className="w-full"
-                value={format}
-                onChange={(e) => setFormat(e.target.value as Format)}
-              >
-                <NativeSelectOption value="CSV">CSV</NativeSelectOption>
-                <NativeSelectOption value="LANDXML">LandXML</NativeSelectOption>
-              </NativeSelect>
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="imp-unit">Unit</Label>
-              <NativeSelect
-                id="imp-unit"
-                className="w-full"
-                value={unit}
-                onChange={(e) => setUnit(e.target.value as LengthUnit)}
-              >
-                {UNIT_OPTIONS.map((u) => (
-                  <NativeSelectOption key={u.value} value={u.value}>
-                    {u.label}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </div>
+            <Field>
+              <FieldLabel htmlFor="imp-format">Format</FieldLabel>
+              <Select value={format} onValueChange={(v) => setFormat(v as Format)}>
+                <SelectTrigger id="imp-format" className="w-full">
+                  <SelectValue placeholder="Select a format" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Format</SelectLabel>
+                    <SelectItem value="CSV">CSV</SelectItem>
+                    <SelectItem value="LANDXML">LandXML</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="imp-unit">Unit</FieldLabel>
+              <Select value={unit} onValueChange={(v) => setUnit(v as LengthUnit)}>
+                <SelectTrigger id="imp-unit" className="w-full">
+                  <SelectValue placeholder="Select a unit" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Unit</SelectLabel>
+                    {UNIT_OPTIONS.map((u) => (
+                      <SelectItem key={u.value} value={u.value}>
+                        {u.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="imp-file">File</Label>
+          <Field>
+            <FieldLabel htmlFor="imp-file">File</FieldLabel>
             <Input id="imp-file" type="file" accept=".csv,.txt,.xml" onChange={onFile} />
             <Textarea
               placeholder="…or paste content here"
@@ -205,18 +226,21 @@ export function ImportDialog({
               className="font-mono text-xs"
               rows={5}
             />
-          </div>
+          </Field>
 
           {format === 'CSV' && (
-            <div className="flex flex-col gap-3 rounded-lg border p-3">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={hasHeader}
-                  onChange={(e) => setHasHeader(e.target.checked)}
-                />
-                First row is a header
-              </label>
+            <div className="flex flex-col gap-4 rounded-lg border p-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col gap-0.5">
+                  <Label htmlFor="imp-header" className="text-sm font-medium">
+                    First row is a header
+                  </Label>
+                  <p className="text-muted-foreground text-sm">
+                    Skip the first row and use its values as column names.
+                  </p>
+                </div>
+                <Switch id="imp-header" checked={hasHeader} onCheckedChange={setHasHeader} />
+              </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <MappingSelect
                   label="Label"
@@ -227,14 +251,14 @@ export function ImportDialog({
                   optional
                 />
                 <MappingSelect
-                  label="Northing *"
+                  label="Northing"
                   value={cols.northingCol}
                   onChange={(v) => setCols((c) => ({ ...c, northingCol: v }))}
                   count={columnCount}
                   colLabel={colLabel}
                 />
                 <MappingSelect
-                  label="Easting *"
+                  label="Easting"
                   value={cols.eastingCol}
                   onChange={(v) => setCols((c) => ({ ...c, eastingCol: v }))}
                   count={columnCount}
@@ -257,33 +281,45 @@ export function ImportDialog({
                   optional
                 />
               </div>
-              <Input
-                placeholder="Save as import profile (optional)"
-                value={profileName}
-                onChange={(e) => setProfileName(e.target.value)}
-              />
+              <Field>
+                <FieldLabel htmlFor="imp-profile" className="w-full">
+                  Save as import profile
+                  <span className="text-muted-foreground ml-auto text-xs font-normal">Optional</span>
+                </FieldLabel>
+                <Input
+                  id="imp-profile"
+                  value={profileName}
+                  onChange={(e) => setProfileName(e.target.value)}
+                />
+              </Field>
             </div>
           )}
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="imp-cat">Assign category (optional)</Label>
-            <NativeSelect
-              id="imp-cat"
-              className="w-full"
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-            >
-              <NativeSelectOption value={NONE}>None</NativeSelectOption>
-              {categories.map((c) => (
-                <NativeSelectOption key={c.id} value={c.id}>
-                  {c.name}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </div>
+          <Field>
+            <FieldLabel htmlFor="imp-cat" className="w-full">
+              Assign category
+              <span className="text-muted-foreground ml-auto text-xs font-normal">Optional</span>
+            </FieldLabel>
+            <Select value={categoryId} onValueChange={(v) => setCategoryId(v ?? NONE)}>
+              <SelectTrigger id="imp-cat" className="w-full">
+                <SelectValue placeholder="None" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectLabel>Category</SelectLabel>
+                  <SelectItem value={NONE}>None</SelectItem>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
 
           <DialogFooter>
-            <Button type="submit" disabled={busy}>
+            <Button type="submit" className="w-full" disabled={busy}>
               {busy ? 'Importing…' : 'Import points'}
             </Button>
           </DialogFooter>
@@ -309,16 +345,29 @@ function MappingSelect({
   optional?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-1">
-      <Label className="text-xs">{label}</Label>
-      <NativeSelect className="w-full" value={value} onChange={(e) => onChange(e.target.value)}>
-        {optional && <NativeSelectOption value={NONE}>—</NativeSelectOption>}
-        {Array.from({ length: Math.max(count, 5) }, (_, i) => (
-          <NativeSelectOption key={i} value={String(i)}>
-            {colLabel(i)}
-          </NativeSelectOption>
-        ))}
-      </NativeSelect>
-    </div>
+    <Field>
+      <FieldLabel className="w-full">
+        {label}
+        {optional && (
+          <span className="text-muted-foreground ml-auto text-xs font-normal">Optional</span>
+        )}
+      </FieldLabel>
+      <Select value={value} onValueChange={(v) => onChange(v ?? NONE)}>
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder="—" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            <SelectLabel>Column</SelectLabel>
+            {optional && <SelectItem value={NONE}>—</SelectItem>}
+            {Array.from({ length: Math.max(count, 5) }, (_, i) => (
+              <SelectItem key={i} value={String(i)}>
+                {colLabel(i)}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+    </Field>
   );
 }

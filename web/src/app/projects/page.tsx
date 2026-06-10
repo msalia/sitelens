@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { Project } from '@/lib/types';
@@ -34,7 +35,9 @@ const DELETE_PROJECT = graphql(`
   }
 `);
 
-export default function ProjectsPage() {
+function ProjectsContent() {
+  const searchParams = useSearchParams();
+  const query = (searchParams.get('q') ?? '').trim().toLowerCase();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -53,10 +56,7 @@ export default function ProjectsPage() {
     void load();
   }, [load]);
 
-  async function remove(id: string, name: string) {
-    if (!confirm(`Delete project "${name}"? This cannot be undone.`)) {
-      return;
-    }
+  async function remove(id: string) {
     try {
       await gql(DELETE_PROJECT, { id });
       toast.success('Project deleted');
@@ -66,31 +66,56 @@ export default function ProjectsPage() {
     }
   }
 
+  const filtered = useMemo(() => {
+    if (!query) {
+      return projects;
+    }
+    return projects.filter(
+      (p) =>
+        p.name.toLowerCase().includes(query) ||
+        (p.description ?? '').toLowerCase().includes(query),
+    );
+  }, [projects, query]);
+
   return (
     <div className="mx-auto max-w-5xl p-6">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Projects</h1>
-          <p className="text-muted-foreground text-sm">Your organization&rsquo;s building sites.</p>
+          <p className="text-muted-foreground text-sm">
+            {query
+              ? `Matching “${query}” · ${filtered.length} of ${projects.length}`
+              : 'Your organization’s building sites.'}
+          </p>
         </div>
         <CreateProjectDialog onCreated={load} />
       </div>
 
       {loading ? (
         <p className="text-muted-foreground text-sm">Loading…</p>
-      ) : projects.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <Card>
           <CardContent className="text-muted-foreground py-10 text-center text-sm">
-            No projects yet. Create your first site to get started.
+            {query
+              ? 'No projects match your search.'
+              : 'No projects yet. Create your first site to get started.'}
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {projects.map((p) => (
-            <ProjectCard key={p.id} project={p} onDelete={() => remove(p.id, p.name)} />
+          {filtered.map((p) => (
+            <ProjectCard key={p.id} project={p} onDelete={() => remove(p.id)} />
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+export default function ProjectsPage() {
+  return (
+    <Suspense>
+      <ProjectsContent />
+    </Suspense>
   );
 }

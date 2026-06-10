@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import {
@@ -96,11 +96,20 @@ export function CoordinateInspectorDialog({
   );
 }
 
-function pair(a: string, b: string, aLabel: string, bLabel: string): string {
-  return `${aLabel} ${a} · ${bLabel} ${b}`;
+function pair(a: string, b: string, aLabel: string, bLabel: string): ReactNode {
+  return (
+    <div className="flex flex-col">
+      <span>
+        {aLabel} {a}
+      </span>
+      <span>
+        {bLabel} {b}
+      </span>
+    </div>
+  );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value }: { label: string; value: ReactNode }) {
   return (
     <>
       <dt className="text-muted-foreground">{label}</dt>

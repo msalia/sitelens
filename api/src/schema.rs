@@ -1386,6 +1386,36 @@ impl MutationRoot {
         Ok(cat)
     }
 
+    /// Deletes a custom (non-default) category. Points in it are uncategorized.
+    async fn delete_category(&self, ctx: &Context<'_>, id: Uuid) -> Result<bool> {
+        let auth = require_editor(ctx)?;
+        let pool = pool(ctx)?;
+        let row: Option<(bool,)> =
+            sqlx::query_as("SELECT is_default FROM point_categories WHERE id = $1 AND org_id = $2")
+                .bind(id)
+                .bind(auth.org_id)
+                .fetch_optional(pool)
+                .await?;
+        let Some((is_default,)) = row else {
+            return Err(async_graphql::Error::new("category not found"));
+        };
+        if is_default {
+            return Err(async_graphql::Error::new("default categories cannot be deleted"));
+        }
+        let mut tx = pool.begin().await?;
+        sqlx::query("UPDATE survey_points SET category_id = NULL WHERE category_id = $1")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM point_categories WHERE id = $1 AND org_id = $2")
+            .bind(id)
+            .bind(auth.org_id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(true)
+    }
+
     // ----- Import -----
 
     /// Imports points from CSV or LandXML content. Coordinates in `unit` are

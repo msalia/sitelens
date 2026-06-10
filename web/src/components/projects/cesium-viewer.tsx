@@ -401,5 +401,10 @@ export function CesiumViewer(props: CesiumViewerProps) {
     };
   }, [props.worldTerrain]);
 
-  return <div ref={containerRef} className="h-[70vh] w-full overflow-hidden rounded-lg border" />;
+  return (
+    <div
+      ref={containerRef}
+      className="h-full min-h-[420px] w-full overflow-hidden rounded-lg border"
+    />
+  );
 }

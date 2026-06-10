@@ -5,7 +5,14 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -18,6 +25,7 @@ import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 import { type Project, type Transform, UNIT_LABELS } from '@/lib/types';
 import { fromMeters } from '@/lib/units';
+import { cn } from '@/lib/utils';
 
 const SOLVE_TRANSFORM = graphql(`
   mutation SolveTransform($id: UUID!) {
@@ -65,15 +73,14 @@ export function TransformPanel({
   }
 
   return (
-    <Card className="lg:col-span-2">
-      <CardHeader className="flex-row items-center justify-between">
-        <CardTitle>Transform (grid → projected)</CardTitle>
-        <Button size="sm" onClick={solve} disabled={busy}>
-          <IconBolt className="mr-1 size-4" />
-          {busy ? 'Solving…' : 'Solve transform'}
-        </Button>
+    <Card>
+      <CardHeader>
+        <CardTitle>Transform</CardTitle>
+        <CardDescription>
+          The Helmert tie mapping building-grid coordinates to projected northing/easting.
+        </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      <CardContent className={cn('flex flex-col gap-4', transform && '-mb-(--card-spacing)')}>
         {!transform ? (
           <p className="text-muted-foreground text-sm">
             Add at least two control points with grid coordinates, then solve the Helmert tie. The
@@ -81,51 +88,64 @@ export function TransformPanel({
           </p>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Stat label="Scale" value={transform.scale.toFixed(6)} />
-              <Stat label="Rotation" value={`${transform.rotationDegrees.toFixed(4)}°`} />
-              <Stat label={`RMS (${unitLabel})`} value={inUnit(transform.rmsError)} />
-              <Stat label="Points" value={String(transform.pointCount)} />
+            <div className="grid grid-cols-2 gap-3">
+              <Stat label="Scale" sub="factor" value={transform.scale.toFixed(6)} />
+              <Stat label="Rotation" sub="clockwise" value={`${transform.rotationDegrees.toFixed(4)}°`} />
+              <Stat label="RMS" sub={unitLabel} value={inUnit(transform.rmsError)} />
+              <Stat label="Points" sub="fitted" value={String(transform.pointCount)} />
             </div>
             <div className="text-muted-foreground text-xs">
               Translation: E {inUnit(transform.translationE)} · N {inUnit(transform.translationN)}{' '}
               {unitLabel}
             </div>
             <div>
-              <p className="mb-1 text-sm font-medium">Residuals ({unitLabel})</p>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Point</TableHead>
-                    <TableHead>ΔE</TableHead>
-                    <TableHead>ΔN</TableHead>
-                    <TableHead>Magnitude</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {transform.residuals.map((r) => (
-                    <TableRow key={r.label}>
-                      <TableCell className="font-medium">{r.label}</TableCell>
-                      <TableCell>{inUnit(r.deltaEasting)}</TableCell>
-                      <TableCell>{inUnit(r.deltaNorthing)}</TableCell>
-                      <TableCell>{inUnit(r.magnitude)}</TableCell>
+              <p className="mb-2 text-sm font-medium">Residuals ({unitLabel})</p>
+              {/* Full-bleed: dividers span the card edges; first/last cells keep
+                  the card's horizontal padding so text still aligns with the title. */}
+              <div className="-mx-(--card-spacing) border-t [&_td:first-child]:pl-(--card-spacing) [&_td:last-child]:pr-(--card-spacing) [&_th:first-child]:pl-(--card-spacing) [&_th:last-child]:pr-(--card-spacing)">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead>Point</TableHead>
+                      <TableHead>ΔE</TableHead>
+                      <TableHead>ΔN</TableHead>
+                      <TableHead>Magnitude</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {transform.residuals.map((r) => (
+                      <TableRow key={r.label}>
+                        <TableCell className="font-medium">{r.label}</TableCell>
+                        <TableCell>{inUnit(r.deltaEasting)}</TableCell>
+                        <TableCell>{inUnit(r.deltaNorthing)}</TableCell>
+                        <TableCell>{inUnit(r.magnitude)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           </>
         )}
       </CardContent>
+      <CardFooter>
+        <Button className="w-full" onClick={solve} disabled={busy}>
+          <IconBolt className="mr-1 size-4" />
+          {busy ? 'Solving…' : 'Solve transform'}
+        </Button>
+      </CardFooter>
     </Card>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, sub, value }: { label: string; sub?: string; value: string }) {
   return (
-    <div className="rounded-lg border px-3 py-2">
-      <p className="text-muted-foreground text-xs">{label}</p>
-      <p className="font-mono text-sm font-semibold">{value}</p>
+    <div className="bg-muted/50 rounded-xl p-3">
+      <p className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
+        {label}
+      </p>
+      <p className="mt-1 font-mono text-lg font-bold tabular-nums">{value}</p>
+      {sub && <p className="text-muted-foreground text-xs">{sub}</p>}
     </div>
   );
 }

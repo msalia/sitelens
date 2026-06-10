@@ -69,13 +69,10 @@ export type Role =
   | 'SURVEYOR'
   | 'VIEWER';
 
-export type LoginMutationVariables = Exact<{
-  e: string;
-  p: string;
-}>;
+export type ConverterProjectsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type LoginMutation = { login: { id: string } };
+export type ConverterProjectsQuery = { projects: Array<{ id: string, orgId: string, name: string, description: string, epsgCode: number, displayUnit: LengthUnit, combinedScaleFactor: number, siteOriginLat: number | null, siteOriginLon: number | null, createdAt: string, updatedAt: string }> };
 
 export type WorkspaceQueryVariables = Exact<{
   id: string;
@@ -95,6 +92,11 @@ export type DeleteProjectMutationVariables = Exact<{
 
 
 export type DeleteProjectMutation = { deleteProject: boolean };
+
+export type SettingsMeQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type SettingsMeQuery = { me: { id: string, orgId: string, email: string, role: Role, emailVerified: boolean } | null };
 
 export type SignupMutationVariables = Exact<{
   e: string;
@@ -121,6 +123,14 @@ export type LogoutMutationVariables = Exact<{ [key: string]: never; }>;
 
 
 export type LogoutMutation = { logout: boolean };
+
+export type LoginMutationVariables = Exact<{
+  e: string;
+  p: string;
+}>;
+
+
+export type LoginMutation = { login: { id: string } };
 
 export type UploadDxfMutationVariables = Exact<{
   id: string;
@@ -158,6 +168,13 @@ export type CreateCategoryMutationVariables = Exact<{
 
 
 export type CreateCategoryMutation = { createCategory: { id: string } };
+
+export type DeleteCategoryMutationVariables = Exact<{
+  id: string;
+}>;
+
+
+export type DeleteCategoryMutation = { deleteCategory: boolean };
 
 export type AddControlPointMutationVariables = Exact<{
   id: string;
@@ -371,13 +388,23 @@ export class TypedDocumentString<TResult, TVariables>
   }
 }
 
-export const LoginDocument = new TypedDocumentString(`
-    mutation Login($e: String!, $p: String!) {
-  login(email: $e, password: $p) {
+export const ConverterProjectsDocument = new TypedDocumentString(`
+    query ConverterProjects {
+  projects {
     id
+    orgId
+    name
+    description
+    epsgCode
+    displayUnit
+    combinedScaleFactor
+    siteOriginLat
+    siteOriginLon
+    createdAt
+    updatedAt
   }
 }
-    `) as unknown as TypedDocumentString<LoginMutation, LoginMutationVariables>;
+    `) as unknown as TypedDocumentString<ConverterProjectsQuery, ConverterProjectsQueryVariables>;
 export const WorkspaceDocument = new TypedDocumentString(`
     query Workspace($id: UUID!) {
   project(id: $id) {
@@ -458,6 +485,17 @@ export const DeleteProjectDocument = new TypedDocumentString(`
   deleteProject(id: $id)
 }
     `) as unknown as TypedDocumentString<DeleteProjectMutation, DeleteProjectMutationVariables>;
+export const SettingsMeDocument = new TypedDocumentString(`
+    query SettingsMe {
+  me {
+    id
+    orgId
+    email
+    role
+    emailVerified
+  }
+}
+    `) as unknown as TypedDocumentString<SettingsMeQuery, SettingsMeQueryVariables>;
 export const SignupDocument = new TypedDocumentString(`
     mutation Signup($e: String!, $p: String!, $o: String!) {
   signup(email: $e, password: $p, orgName: $o) {
@@ -486,6 +524,13 @@ export const LogoutDocument = new TypedDocumentString(`
   logout
 }
     `) as unknown as TypedDocumentString<LogoutMutation, LogoutMutationVariables>;
+export const LoginDocument = new TypedDocumentString(`
+    mutation Login($e: String!, $p: String!) {
+  login(email: $e, password: $p) {
+    id
+  }
+}
+    `) as unknown as TypedDocumentString<LoginMutation, LoginMutationVariables>;
 export const UploadDxfDocument = new TypedDocumentString(`
     mutation UploadDxf($id: UUID!, $f: String!, $c: String!) {
   uploadDxf(projectId: $id, filename: $f, content: $c) {
@@ -519,6 +564,11 @@ export const CreateCategoryDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<CreateCategoryMutation, CreateCategoryMutationVariables>;
+export const DeleteCategoryDocument = new TypedDocumentString(`
+    mutation DeleteCategory($id: UUID!) {
+  deleteCategory(id: $id)
+}
+    `) as unknown as TypedDocumentString<DeleteCategoryMutation, DeleteCategoryMutationVariables>;
 export const AddControlPointDocument = new TypedDocumentString(`
     mutation AddControlPoint($id: UUID!, $label: String!, $n: Float!, $e: Float!, $z: Float, $gx: Float, $gy: Float, $unit: LengthUnit!, $src: String) {
   addControlPoint(

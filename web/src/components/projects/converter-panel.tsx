@@ -1,14 +1,30 @@
 'use client';
 
 import { IconArrowsExchange } from '@tabler/icons-react';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 import {
@@ -19,6 +35,7 @@ import {
   UNIT_OPTIONS,
 } from '@/lib/types';
 import { fromMeters } from '@/lib/units';
+import { cn } from '@/lib/utils';
 
 const CONVERT = graphql(`
   query StandaloneConvert(
@@ -83,41 +100,48 @@ export function ConverterPanel({ project }: { project: Project }) {
     <Card>
       <CardHeader>
         <CardTitle>Coordinate converter</CardTitle>
+        <CardDescription>Convert any coordinate across systems and units.</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <form onSubmit={onConvert} className="flex flex-col gap-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="cv-space">Input space</Label>
-              <NativeSelect
-                id="cv-space"
-                className="w-full"
-                value={space}
-                onChange={(e) => setSpace(e.target.value as InputSpace)}
-              >
-                <NativeSelectOption value="PROJECTED">Projected (grid)</NativeSelectOption>
-                <NativeSelectOption value="GRID">Building grid</NativeSelectOption>
-              </NativeSelect>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="cv-unit">Input unit</Label>
-              <NativeSelect
-                id="cv-unit"
-                className="w-full"
-                value={unit}
-                onChange={(e) => setUnit(e.target.value as LengthUnit)}
-              >
-                {UNIT_OPTIONS.map((o) => (
-                  <NativeSelectOption key={o.value} value={o.value}>
-                    {o.label}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="cv-x">{xLabel}</Label>
+
+      <form onSubmit={onConvert} className="contents">
+        {/* `-mb` collapses the gap so the results table sits flush to the footer. */}
+        <CardContent className={cn('flex flex-col gap-4', set && '-mb-(--card-spacing)')}>
+          <div className="grid grid-cols-2 gap-4">
+            <Field>
+              <FieldLabel htmlFor="cv-space">Input space</FieldLabel>
+              <Select value={space} onValueChange={(v) => setSpace(v as InputSpace)}>
+                <SelectTrigger id="cv-space" className="w-full">
+                  <SelectValue placeholder="Select a space" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Input space</SelectLabel>
+                    <SelectItem value="PROJECTED">Projected (grid)</SelectItem>
+                    <SelectItem value="GRID">Building grid</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="cv-unit">Input unit</FieldLabel>
+              <Select value={unit} onValueChange={(v) => setUnit(v as LengthUnit)}>
+                <SelectTrigger id="cv-unit" className="w-full">
+                  <SelectValue placeholder="Select a unit" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Input unit</SelectLabel>
+                    {UNIT_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="cv-x">{xLabel}</FieldLabel>
               <Input
                 id="cv-x"
                 inputMode="decimal"
@@ -125,9 +149,9 @@ export function ConverterPanel({ project }: { project: Project }) {
                 onChange={(e) => setX(e.target.value)}
                 placeholder="0.000"
               />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="cv-y">{yLabel}</Label>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="cv-y">{yLabel}</FieldLabel>
               <Input
                 id="cv-y"
                 inputMode="decimal"
@@ -135,39 +159,59 @@ export function ConverterPanel({ project }: { project: Project }) {
                 onChange={(e) => setY(e.target.value)}
                 placeholder="0.000"
               />
-            </div>
+            </Field>
           </div>
-          <Button type="submit" disabled={busy} className="self-start">
+
+          {set && (
+            <div className="-mx-(--card-spacing) border-t [&_td:first-child]:pl-(--card-spacing) [&_td:last-child]:pr-(--card-spacing)">
+              <Table>
+                <TableBody>
+                  <ResultRow label="Building grid" value={pair('X', u(set.gridX), 'Y', u(set.gridY))} />
+                  <ResultRow
+                    label="Projected (grid)"
+                    value={pair('E', u(set.projectedGridE), 'N', u(set.projectedGridN))}
+                  />
+                  <ResultRow
+                    label="Projected (ground)"
+                    value={pair('E', u(set.projectedGroundE), 'N', u(set.projectedGroundN))}
+                  />
+                  <ResultRow label="Latitude" value={deg(set.latitude)} />
+                  <ResultRow label="Longitude" value={deg(set.longitude)} />
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+
+        <CardFooter>
+          <Button type="submit" className="w-full" disabled={busy}>
             <IconArrowsExchange className="mr-1 size-4" />
             {busy ? 'Converting…' : 'Convert'}
           </Button>
-        </form>
-
-        {set && (
-          <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 border-t pt-4 text-sm">
-            <Row label="Building grid" value={`X ${u(set.gridX)} · Y ${u(set.gridY)}`} />
-            <Row
-              label="Projected (grid)"
-              value={`E ${u(set.projectedGridE)} · N ${u(set.projectedGridN)}`}
-            />
-            <Row
-              label="Projected (ground)"
-              value={`E ${u(set.projectedGroundE)} · N ${u(set.projectedGroundN)}`}
-            />
-            <Row label="Latitude" value={deg(set.latitude)} />
-            <Row label="Longitude" value={deg(set.longitude)} />
-          </dl>
-        )}
-      </CardContent>
+        </CardFooter>
+      </form>
     </Card>
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function pair(aLabel: string, a: string, bLabel: string, b: string): ReactNode {
   return (
-    <>
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="font-mono">{value}</dd>
-    </>
+    <div className="flex flex-col items-end">
+      <span>
+        {aLabel} {a}
+      </span>
+      <span>
+        {bLabel} {b}
+      </span>
+    </div>
+  );
+}
+
+function ResultRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <TableRow>
+      <TableCell className="text-muted-foreground align-top whitespace-nowrap">{label}</TableCell>
+      <TableCell className="text-right font-mono">{value}</TableCell>
+    </TableRow>
   );
 }

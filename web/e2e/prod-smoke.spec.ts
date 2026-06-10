@@ -19,10 +19,10 @@ test.describe('production smoke', () => {
     await expect(page.getByRole('link', { name: /docs/i })).toBeVisible();
   });
 
-  test('docs site renders in prod', async ({ page }) => {
+  test('docs are behind the auth wall in prod', async ({ page }) => {
+    // Docs require login; an unauthenticated visit redirects to /login.
     await page.goto('/docs');
-    await expect(page.getByRole('heading', { level: 1, name: 'Introduction' })).toBeVisible();
-    await expect(page.getByText('Guides', { exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/\/login$/);
   });
 
   test('GraphQL API is reachable through the web proxy', async ({ request }) => {

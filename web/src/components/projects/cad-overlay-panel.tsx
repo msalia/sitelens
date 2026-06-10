@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 
 import type { CadOverlay, Project } from '@/lib/types';
 
+import { ConfirmDialog } from '@/components/projects/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -156,9 +157,16 @@ function OverlayRow({
             />
             visible
           </label>
-          <Button variant="ghost" size="icon-sm" aria-label="Delete overlay" onClick={onDelete}>
-            <IconTrash className="size-4" />
-          </Button>
+          <ConfirmDialog
+            title={`Delete ${overlay.originalFilename}?`}
+            description="This DXF overlay will be removed from the scene. This can’t be undone."
+            onConfirm={onDelete}
+            trigger={
+              <Button variant="ghost" size="icon-sm" aria-label="Delete overlay">
+                <IconTrash className="size-4" />
+              </Button>
+            }
+          />
         </div>
       </div>
       <div className="grid grid-cols-4 gap-2">

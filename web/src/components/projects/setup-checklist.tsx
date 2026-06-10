@@ -30,6 +30,7 @@ function jumpTo(id: string) {
 export function SetupChecklist({
   axesCount,
   controlPointsWithGrid,
+  onNavigate,
   pointCount,
   transformSolved,
 }: {
@@ -37,6 +38,8 @@ export function SetupChecklist({
   controlPointsWithGrid: number;
   transformSolved: boolean;
   pointCount: number;
+  /** Navigate to a step's target (lets the workspace switch tabs as needed). */
+  onNavigate?: (target: string) => void;
 }) {
   const steps: Step[] = [
     {
@@ -112,7 +115,11 @@ export function SetupChecklist({
                   {!s.done && <p className="text-muted-foreground text-xs">{s.hint}</p>}
                 </div>
                 {!s.done && (
-                  <Button size="sm" variant="outline" onClick={() => jumpTo(s.target)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => (onNavigate ? onNavigate(s.target) : jumpTo(s.target))}
+                  >
                     {s.action}
                   </Button>
                 )}

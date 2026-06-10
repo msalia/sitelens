@@ -7,7 +7,12 @@ import type { DocGroup, DocNavItem } from '@/lib/docs';
 
 import { cn } from '@/lib/utils';
 
-const GROUPS: DocGroup[] = ['Guides', 'Reference'];
+const GROUPS: DocGroup[] = [
+  'Getting Started',
+  'Coordinates & Transform',
+  'Working with Data',
+  'Visualization',
+];
 
 interface DocsNavProps {
   items: DocNavItem[];
@@ -17,10 +22,8 @@ export function DocsNav({ items }: DocsNavProps) {
   const pathname = usePathname();
 
   return (
-    <nav className="bg-background/60 sticky top-0 h-[100dvh] w-64 shrink-0 overflow-y-auto border-r px-4 py-6">
-      <Link href="/" className="mb-6 block px-2 text-lg font-bold tracking-tight">
-        SiteLens
-      </Link>
+    <nav className="bg-background/60 w-60 shrink-0 self-start overflow-y-auto px-4 py-6">
+      <p className="mb-4 px-2 text-sm font-semibold tracking-tight">Documentation</p>
       {GROUPS.map((group) => {
         const groupItems = items.filter((item) => item.group === group);
         if (groupItems.length === 0) {

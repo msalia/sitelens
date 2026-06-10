@@ -87,7 +87,7 @@ export function EditProjectDialog({ onSaved, project }: { project: Project; onSa
           </Button>
         }
       />
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>Edit project</DialogTitle>
           <DialogDescription>Update the site and its coordinate reference.</DialogDescription>
@@ -99,7 +99,7 @@ export function EditProjectDialog({ onSaved, project }: { project: Project; onSa
             onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
           />
           <DialogFooter>
-            <Button type="submit" disabled={busy}>
+            <Button type="submit" className="w-full" disabled={busy}>
               {busy ? 'Saving…' : 'Save changes'}
             </Button>
           </DialogFooter>

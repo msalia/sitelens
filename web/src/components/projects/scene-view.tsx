@@ -202,7 +202,7 @@ export function SceneView({
   }
 
   return (
-    <Card className="lg:col-span-2">
+    <Card className="flex h-full min-h-0 flex-col">
       <CardHeader className="flex-row items-center justify-between">
         <CardTitle>3D view</CardTitle>
         <div className="flex items-center gap-2">
@@ -230,12 +230,14 @@ export function SceneView({
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3">
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-3">
         {!shown || !scene ? (
-          <p className="text-muted-foreground text-sm">
-            Load the 3D scene to view control points, surveyed points, and grid lines over terrain.
-            Terrain is a backdrop — imported elevations are the source of truth.
-          </p>
+          <div className="text-muted-foreground flex flex-1 items-center justify-center p-6 text-center text-sm">
+            <p className="max-w-md">
+              Load the 3D scene to view control points, surveyed points, and grid lines over
+              terrain. Terrain is a backdrop — imported elevations are the source of truth.
+            </p>
+          </div>
         ) : (
           <>
             <div className="flex flex-wrap gap-2">
@@ -256,17 +258,19 @@ export function SceneView({
                 );
               })}
             </div>
-            <CesiumViewer
-              scene={scene}
-              categories={categories}
-              visibleCategoryIds={visibleCategoryIds}
-              onSelectPoint={onSelectPoint}
-              overlays={renderables}
-              ionToken={ionToken}
-              worldTerrain={worldTerrain}
-              focus={viewerFocus}
-              captureRef={captureRef}
-            />
+            <div className="min-h-0 flex-1">
+              <CesiumViewer
+                scene={scene}
+                categories={categories}
+                visibleCategoryIds={visibleCategoryIds}
+                onSelectPoint={onSelectPoint}
+                overlays={renderables}
+                ionToken={ionToken}
+                worldTerrain={worldTerrain}
+                focus={viewerFocus}
+                captureRef={captureRef}
+              />
+            </div>
             <CadOverlayPanel project={project} overlays={overlayMeta} onChanged={load} />
           </>
         )}

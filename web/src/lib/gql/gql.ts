@@ -15,18 +15,21 @@ import * as types from './graphql';
  * Learn more about it here: https://the-guild.dev/graphql/codegen/plugins/presets/preset-client#reducing-bundle-size
  */
 type Documents = {
-    "\n  mutation Login($e: String!, $p: String!) {\n    login(email: $e, password: $p) {\n      id\n    }\n  }\n": typeof types.LoginDocument,
+    "\n  query ConverterProjects {\n    projects {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.ConverterProjectsDocument,
     "\n  query Workspace($id: UUID!) {\n    project(id: $id) {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      createdAt\n      updatedAt\n    }\n    gridAxes(projectId: $id) {\n      id\n      projectId\n      family\n      label\n      position\n    }\n    controlPoints(projectId: $id) {\n      id\n      projectId\n      label\n      northing\n      easting\n      elevation\n      gridX\n      gridY\n      source\n    }\n    transform(projectId: $id) {\n      translationE\n      translationN\n      rotationDegrees\n      scale\n      rmsError\n      pointCount\n      residuals {\n        label\n        deltaEasting\n        deltaNorthing\n        magnitude\n      }\n    }\n    categories {\n      id\n      orgId\n      name\n      color\n      icon\n      isDefault\n    }\n    surveyPointCount(projectId: $id)\n  }\n": typeof types.WorkspaceDocument,
     "\n  query Projects {\n    projects {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.ProjectsDocument,
     "\n  mutation DeleteProject($id: UUID!) {\n    deleteProject(id: $id)\n  }\n": typeof types.DeleteProjectDocument,
+    "\n  query SettingsMe {\n    me {\n      id\n      orgId\n      email\n      role\n      emailVerified\n    }\n  }\n": typeof types.SettingsMeDocument,
     "\n  mutation Signup($e: String!, $p: String!, $o: String!) {\n    signup(email: $e, password: $p, orgName: $o) {\n      verificationToken\n    }\n  }\n": typeof types.SignupDocument,
     "\n  mutation VerifyEmail($t: String!) {\n    verifyEmail(token: $t)\n  }\n": typeof types.VerifyEmailDocument,
     "\n  query Me {\n    me {\n      id\n      orgId\n      email\n      role\n      emailVerified\n    }\n  }\n": typeof types.MeDocument,
     "\n  mutation Logout {\n    logout\n  }\n": typeof types.LogoutDocument,
+    "\n  mutation Login($e: String!, $p: String!) {\n    login(email: $e, password: $p) {\n      id\n    }\n  }\n": typeof types.LoginDocument,
     "\n  mutation UploadDxf($id: UUID!, $f: String!, $c: String!) {\n    uploadDxf(projectId: $id, filename: $f, content: $c) {\n      id\n    }\n  }\n": typeof types.UploadDxfDocument,
     "\n  mutation SetCadGeoreference(\n    $id: UUID!\n    $oe: Float\n    $on: Float\n    $rot: Float\n    $sc: Float\n    $vis: Boolean\n  ) {\n    setCadGeoreference(\n      id: $id\n      offsetE: $oe\n      offsetN: $on\n      rotationDeg: $rot\n      scale: $sc\n      visible: $vis\n    ) {\n      id\n    }\n  }\n": typeof types.SetCadGeoreferenceDocument,
     "\n  mutation DeleteCadOverlay($id: UUID!) {\n    deleteCadOverlay(id: $id)\n  }\n": typeof types.DeleteCadOverlayDocument,
     "\n  mutation CreateCategory($name: String!, $color: String!, $icon: String!) {\n    createCategory(name: $name, color: $color, icon: $icon) {\n      id\n    }\n  }\n": typeof types.CreateCategoryDocument,
+    "\n  mutation DeleteCategory($id: UUID!) {\n    deleteCategory(id: $id)\n  }\n": typeof types.DeleteCategoryDocument,
     "\n  mutation AddControlPoint(\n    $id: UUID!\n    $label: String!\n    $n: Float!\n    $e: Float!\n    $z: Float\n    $gx: Float\n    $gy: Float\n    $unit: LengthUnit!\n    $src: String\n  ) {\n    addControlPoint(\n      projectId: $id\n      label: $label\n      northing: $n\n      easting: $e\n      elevation: $z\n      gridX: $gx\n      gridY: $gy\n      unit: $unit\n      source: $src\n    ) {\n      id\n    }\n  }\n": typeof types.AddControlPointDocument,
     "\n  mutation DeleteControlPoint($id: UUID!) {\n    deleteControlPoint(id: $id)\n  }\n": typeof types.DeleteControlPointDocument,
     "\n  query StandaloneConvert(\n    $id: UUID!\n    $space: CoordinateSpace!\n    $x: Float!\n    $y: Float!\n    $unit: LengthUnit!\n  ) {\n    convertCoordinate(projectId: $id, space: $space, x: $x, y: $y, unit: $unit) {\n      gridX\n      gridY\n      projectedGridE\n      projectedGridN\n      projectedGroundE\n      projectedGroundN\n      latitude\n      longitude\n    }\n  }\n": typeof types.StandaloneConvertDocument,
@@ -48,18 +51,21 @@ type Documents = {
     "\n  mutation SolveTransform($id: UUID!) {\n    solveTransform(projectId: $id) {\n      translationE\n      translationN\n      rotationDegrees\n      scale\n      rmsError\n      pointCount\n      residuals {\n        label\n        deltaEasting\n        deltaNorthing\n        magnitude\n      }\n    }\n  }\n": typeof types.SolveTransformDocument,
 };
 const documents: Documents = {
-    "\n  mutation Login($e: String!, $p: String!) {\n    login(email: $e, password: $p) {\n      id\n    }\n  }\n": types.LoginDocument,
+    "\n  query ConverterProjects {\n    projects {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      createdAt\n      updatedAt\n    }\n  }\n": types.ConverterProjectsDocument,
     "\n  query Workspace($id: UUID!) {\n    project(id: $id) {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      createdAt\n      updatedAt\n    }\n    gridAxes(projectId: $id) {\n      id\n      projectId\n      family\n      label\n      position\n    }\n    controlPoints(projectId: $id) {\n      id\n      projectId\n      label\n      northing\n      easting\n      elevation\n      gridX\n      gridY\n      source\n    }\n    transform(projectId: $id) {\n      translationE\n      translationN\n      rotationDegrees\n      scale\n      rmsError\n      pointCount\n      residuals {\n        label\n        deltaEasting\n        deltaNorthing\n        magnitude\n      }\n    }\n    categories {\n      id\n      orgId\n      name\n      color\n      icon\n      isDefault\n    }\n    surveyPointCount(projectId: $id)\n  }\n": types.WorkspaceDocument,
     "\n  query Projects {\n    projects {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      createdAt\n      updatedAt\n    }\n  }\n": types.ProjectsDocument,
     "\n  mutation DeleteProject($id: UUID!) {\n    deleteProject(id: $id)\n  }\n": types.DeleteProjectDocument,
+    "\n  query SettingsMe {\n    me {\n      id\n      orgId\n      email\n      role\n      emailVerified\n    }\n  }\n": types.SettingsMeDocument,
     "\n  mutation Signup($e: String!, $p: String!, $o: String!) {\n    signup(email: $e, password: $p, orgName: $o) {\n      verificationToken\n    }\n  }\n": types.SignupDocument,
     "\n  mutation VerifyEmail($t: String!) {\n    verifyEmail(token: $t)\n  }\n": types.VerifyEmailDocument,
     "\n  query Me {\n    me {\n      id\n      orgId\n      email\n      role\n      emailVerified\n    }\n  }\n": types.MeDocument,
     "\n  mutation Logout {\n    logout\n  }\n": types.LogoutDocument,
+    "\n  mutation Login($e: String!, $p: String!) {\n    login(email: $e, password: $p) {\n      id\n    }\n  }\n": types.LoginDocument,
     "\n  mutation UploadDxf($id: UUID!, $f: String!, $c: String!) {\n    uploadDxf(projectId: $id, filename: $f, content: $c) {\n      id\n    }\n  }\n": types.UploadDxfDocument,
     "\n  mutation SetCadGeoreference(\n    $id: UUID!\n    $oe: Float\n    $on: Float\n    $rot: Float\n    $sc: Float\n    $vis: Boolean\n  ) {\n    setCadGeoreference(\n      id: $id\n      offsetE: $oe\n      offsetN: $on\n      rotationDeg: $rot\n      scale: $sc\n      visible: $vis\n    ) {\n      id\n    }\n  }\n": types.SetCadGeoreferenceDocument,
     "\n  mutation DeleteCadOverlay($id: UUID!) {\n    deleteCadOverlay(id: $id)\n  }\n": types.DeleteCadOverlayDocument,
     "\n  mutation CreateCategory($name: String!, $color: String!, $icon: String!) {\n    createCategory(name: $name, color: $color, icon: $icon) {\n      id\n    }\n  }\n": types.CreateCategoryDocument,
+    "\n  mutation DeleteCategory($id: UUID!) {\n    deleteCategory(id: $id)\n  }\n": types.DeleteCategoryDocument,
     "\n  mutation AddControlPoint(\n    $id: UUID!\n    $label: String!\n    $n: Float!\n    $e: Float!\n    $z: Float\n    $gx: Float\n    $gy: Float\n    $unit: LengthUnit!\n    $src: String\n  ) {\n    addControlPoint(\n      projectId: $id\n      label: $label\n      northing: $n\n      easting: $e\n      elevation: $z\n      gridX: $gx\n      gridY: $gy\n      unit: $unit\n      source: $src\n    ) {\n      id\n    }\n  }\n": types.AddControlPointDocument,
     "\n  mutation DeleteControlPoint($id: UUID!) {\n    deleteControlPoint(id: $id)\n  }\n": types.DeleteControlPointDocument,
     "\n  query StandaloneConvert(\n    $id: UUID!\n    $space: CoordinateSpace!\n    $x: Float!\n    $y: Float!\n    $unit: LengthUnit!\n  ) {\n    convertCoordinate(projectId: $id, space: $space, x: $x, y: $y, unit: $unit) {\n      gridX\n      gridY\n      projectedGridE\n      projectedGridN\n      projectedGroundE\n      projectedGroundN\n      latitude\n      longitude\n    }\n  }\n": types.StandaloneConvertDocument,
@@ -84,7 +90,7 @@ const documents: Documents = {
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  mutation Login($e: String!, $p: String!) {\n    login(email: $e, password: $p) {\n      id\n    }\n  }\n"): typeof import('./graphql').LoginDocument;
+export function graphql(source: "\n  query ConverterProjects {\n    projects {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      createdAt\n      updatedAt\n    }\n  }\n"): typeof import('./graphql').ConverterProjectsDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -97,6 +103,10 @@ export function graphql(source: "\n  query Projects {\n    projects {\n      id\
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation DeleteProject($id: UUID!) {\n    deleteProject(id: $id)\n  }\n"): typeof import('./graphql').DeleteProjectDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query SettingsMe {\n    me {\n      id\n      orgId\n      email\n      role\n      emailVerified\n    }\n  }\n"): typeof import('./graphql').SettingsMeDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -116,6 +126,10 @@ export function graphql(source: "\n  mutation Logout {\n    logout\n  }\n"): typ
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "\n  mutation Login($e: String!, $p: String!) {\n    login(email: $e, password: $p) {\n      id\n    }\n  }\n"): typeof import('./graphql').LoginDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "\n  mutation UploadDxf($id: UUID!, $f: String!, $c: String!) {\n    uploadDxf(projectId: $id, filename: $f, content: $c) {\n      id\n    }\n  }\n"): typeof import('./graphql').UploadDxfDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -129,6 +143,10 @@ export function graphql(source: "\n  mutation DeleteCadOverlay($id: UUID!) {\n  
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation CreateCategory($name: String!, $color: String!, $icon: String!) {\n    createCategory(name: $name, color: $color, icon: $icon) {\n      id\n    }\n  }\n"): typeof import('./graphql').CreateCategoryDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DeleteCategory($id: UUID!) {\n    deleteCategory(id: $id)\n  }\n"): typeof import('./graphql').DeleteCategoryDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

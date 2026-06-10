@@ -1,14 +1,25 @@
 'use client';
 
+import {
+  IconBook2,
+  IconChevronDown,
+  IconCompass,
+  IconLayoutGrid,
+  IconLogout,
+  IconSearch,
+  IconSettings,
+} from '@tabler/icons-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
 
 import type { Me } from '@/lib/types';
 
-import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/theme-toggle';
+import { Input } from '@/components/ui/input';
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
+import { cn } from '@/lib/utils';
 
 const ME = graphql(`
   query Me {
@@ -27,11 +38,20 @@ const LOGOUT = graphql(`
   }
 `);
 
-/** Guards a route: redirects unauthenticated users to /login and shows a header. */
+const NAV = [
+  { href: '/projects', icon: IconLayoutGrid, label: 'Projects' },
+  { href: '/docs', icon: IconBook2, label: 'Docs' },
+] as const;
+
+/** Guards a route: redirects unauthenticated users to /login, then renders the
+ *  command-center chrome — a top bar (brand, search, theme, user menu) over a
+ *  left icon rail + the page content. */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     gql(ME)
@@ -54,6 +74,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }
 
+  function onSearch(e: React.FormEvent) {
+    e.preventDefault();
+    const q = query.trim();
+    router.push(q ? `/projects?q=${encodeURIComponent(q)}` : '/projects');
+  }
+
   if (loading || !me) {
     return (
       <div className="text-muted-foreground flex min-h-screen items-center justify-center text-sm">
@@ -63,21 +89,143 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-between border-b px-6 py-3">
-        <Link href="/projects" className="font-bold tracking-tight">
-          SiteLens
+    <div className="flex h-svh flex-col">
+      {/* Top bar */}
+      <header className="flex items-center gap-4 border-b px-4 py-2.5">
+        <Link href="/projects" className="flex w-52 shrink-0 items-center gap-2 font-semibold">
+          <div className="bg-primary text-primary-foreground flex size-7 items-center justify-center rounded-lg">
+            <IconCompass className="size-4" />
+          </div>
+          <span className="tracking-tight">SiteLens</span>
         </Link>
-        <div className="flex items-center gap-3 text-sm">
-          <span className="text-muted-foreground">
-            {me.email} · {me.role.toLowerCase()}
-          </span>
-          <Button variant="outline" size="sm" onClick={logout}>
-            Log out
-          </Button>
+
+        <form onSubmit={onSearch} className="relative mx-auto w-full max-w-xl">
+          <IconSearch className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search projects…"
+            className="bg-muted/50 rounded-full pl-9"
+            aria-label="Search projects"
+          />
+        </form>
+
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <ThemeToggle />
+          <UserMenu me={me} onLogout={logout} />
         </div>
       </header>
-      <main className="flex-1">{children}</main>
+
+      <div className="flex min-h-0 flex-1">
+        {/* Left icon rail */}
+        <nav className="bg-muted/30 flex w-16 shrink-0 flex-col items-center gap-1 border-r py-3">
+          {NAV.map((item) => (
+            <RailLink key={item.href} {...item} active={pathname.startsWith(item.href)} />
+          ))}
+          <div className="mt-auto">
+            <RailLink
+              href="/settings"
+              icon={IconSettings}
+              label="Settings"
+              active={pathname.startsWith('/settings')}
+            />
+          </div>
+        </nav>
+
+        <main className="min-w-0 flex-1 overflow-auto">{children}</main>
+      </div>
+    </div>
+  );
+}
+
+function RailLink({
+  active,
+  href,
+  icon: Icon,
+  label,
+}: {
+  href: string;
+  icon: typeof IconLayoutGrid;
+  label: string;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      title={label}
+      aria-label={label}
+      className={cn(
+        'flex size-11 items-center justify-center rounded-xl transition-colors',
+        active
+          ? 'bg-primary/10 text-primary'
+          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+      )}
+    >
+      <Icon className="size-5" />
+    </Link>
+  );
+}
+
+function UserMenu({ me, onLogout }: { me: Me; onLogout: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const initials = me.email.slice(0, 2).toUpperCase();
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    function onClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="hover:bg-muted flex items-center gap-2 rounded-full py-1 pr-2 pl-1 transition-colors"
+      >
+        <span className="bg-primary/15 text-primary flex size-8 items-center justify-center rounded-full text-xs font-semibold">
+          {initials}
+        </span>
+        <span className="hidden text-left text-sm leading-tight sm:block">
+          <span className="block max-w-40 truncate font-medium">{me.email}</span>
+          <span className="text-muted-foreground block text-xs capitalize">
+            {me.role.toLowerCase()}
+          </span>
+        </span>
+        <IconChevronDown className="text-muted-foreground size-4" />
+      </button>
+
+      {open && (
+        <div className="bg-popover absolute right-0 z-50 mt-2 w-56 rounded-xl border p-1 shadow-lg">
+          <div className="px-3 py-2">
+            <p className="truncate text-sm font-medium">{me.email}</p>
+            <p className="text-muted-foreground text-xs capitalize">{me.role.toLowerCase()}</p>
+          </div>
+          <div className="bg-border my-1 h-px" />
+          <Link
+            href="/settings"
+            onClick={() => setOpen(false)}
+            className="hover:bg-muted flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
+          >
+            <IconSettings className="size-4" /> Settings
+          </Link>
+          <button
+            type="button"
+            onClick={onLogout}
+            className="hover:bg-muted flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm"
+          >
+            <IconLogout className="size-4" /> Log out
+          </button>
+        </div>
+      )}
     </div>
   );
 }

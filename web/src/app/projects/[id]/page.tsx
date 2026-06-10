@@ -1,9 +1,15 @@
 'use client';
 
-import { IconArrowLeft } from '@tabler/icons-react';
+import {
+  IconArrowLeft,
+  IconCircleCheck,
+  IconMapPin,
+  IconPoint,
+  IconRoute,
+} from '@tabler/icons-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { ControlPointsEditor } from '@/components/projects/control-points-editor';
@@ -25,6 +31,7 @@ import {
   type Transform,
   UNIT_LABELS,
 } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 const WORKSPACE_QUERY = graphql(`
   query Workspace($id: UUID!) {
@@ -85,6 +92,8 @@ const WORKSPACE_QUERY = graphql(`
   }
 `);
 
+type Tab = 'setup' | 'grid' | 'points' | 'convert';
+
 export default function ProjectWorkspace() {
   const { id } = useParams<{ id: string }>();
   const [project, setProject] = useState<Project | null>(null);
@@ -95,11 +104,24 @@ export default function ProjectWorkspace() {
   const [pointCount, setPointCount] = useState(0);
   const [focus, setFocus] = useState<{ id: string; nonce: number } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<Tab>('setup');
 
-  // Fly the 3D view to a point picked from the table, scrolling it into view.
+  // Fly the persistent 3D hero to a point picked from the table.
   const locate = useCallback((p: SurveyPoint) => {
     setFocus({ id: p.id, nonce: performance.now() });
-    document.getElementById('panel-scene')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  // Checklist navigation: some steps live in other tabs; the rest scroll.
+  const navigateTo = useCallback((target: string) => {
+    if (target === 'panel-grid' || target === 'panel-transform') {
+      setTab('grid');
+      return;
+    }
+    if (target === 'panel-points') {
+      setTab('points');
+      return;
+    }
+    document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
   const load = useCallback(async () => {
@@ -122,6 +144,11 @@ export default function ProjectWorkspace() {
     void load();
   }, [load]);
 
+  const tiedControlPoints = useMemo(
+    () => points.filter((p) => p.gridX !== null && p.gridY !== null).length,
+    [points],
+  );
+
   if (loading) {
     return <p className="text-muted-foreground p-6 text-sm">Loading…</p>;
   }
@@ -137,56 +164,133 @@ export default function ProjectWorkspace() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl p-6">
-      <Link
-        href="/projects"
-        className="text-muted-foreground mb-4 inline-flex items-center gap-1 text-sm hover:underline"
-      >
-        <IconArrowLeft className="size-4" /> Projects
-      </Link>
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{project.name}</h1>
-          <p className="text-muted-foreground text-sm">
-            EPSG {project.epsgCode} · units {UNIT_LABELS[project.displayUnit]} · scale{' '}
-            {project.combinedScaleFactor}
-          </p>
-          {project.description && (
-            <p className="text-muted-foreground mt-1 text-sm">{project.description}</p>
-          )}
-        </div>
-        <EditProjectDialog project={project} onSaved={load} />
-      </div>
+    <div className="flex h-full min-h-0">
+      {/* Detail panel */}
+      <aside className="flex w-[440px] shrink-0 flex-col border-r">
+        <header className="border-b px-4 py-3">
+          <Link
+            href="/projects"
+            className="text-muted-foreground mb-2 inline-flex items-center gap-1 text-xs hover:underline"
+          >
+            <IconArrowLeft className="size-3.5" /> Projects
+          </Link>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-bold tracking-tight">{project.name}</h1>
+              <p className="text-muted-foreground text-xs">
+                EPSG {project.epsgCode} · {UNIT_LABELS[project.displayUnit]} · scale{' '}
+                {project.combinedScaleFactor}
+              </p>
+            </div>
+            <EditProjectDialog project={project} onSaved={load} />
+          </div>
+        </header>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <SetupChecklist
-          axesCount={axes.length}
-          controlPointsWithGrid={points.filter((p) => p.gridX !== null && p.gridY !== null).length}
-          transformSolved={transform !== null}
-          pointCount={pointCount}
-        />
-        <section id="panel-grid" className="scroll-mt-6 lg:col-span-1">
-          <GridEditor project={project} axes={axes} onSaved={load} />
-        </section>
-        <section id="panel-control" className="scroll-mt-6 lg:col-span-1">
-          <ControlPointsEditor project={project} points={points} onChanged={load} />
-        </section>
-        <section id="panel-transform" className="scroll-mt-6 lg:col-span-2">
-          <TransformPanel project={project} initialTransform={transform} />
-        </section>
-        <ConverterPanel project={project} />
-        <section id="panel-points" className="scroll-mt-6 lg:col-span-2">
-          <SurveyPointsPanel
-            project={project}
-            categories={categories}
-            onCategoriesChanged={load}
-            onLocate={locate}
+        <div className="flex gap-1 border-b px-3 py-2">
+          {(
+            [
+              ['setup', 'Setup'],
+              ['grid', 'Grid'],
+              ['points', 'Points'],
+              ['convert', 'Converter'],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              className={cn(
+                'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+                tab === key
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* `[&>*]:shrink-0` keeps cards at natural height (flex children would
+            otherwise shrink and clip their overflow-hidden content). */}
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 [&>*]:shrink-0">
+          {tab === 'setup' && (
+            <>
+              <SetupChecklist
+                axesCount={axes.length}
+                controlPointsWithGrid={tiedControlPoints}
+                transformSolved={transform !== null}
+                pointCount={pointCount}
+                onNavigate={navigateTo}
+              />
+              <section id="panel-control">
+                <ControlPointsEditor project={project} points={points} onChanged={load} />
+              </section>
+            </>
+          )}
+          {tab === 'grid' && (
+            <>
+              <section id="panel-grid">
+                <GridEditor project={project} axes={axes} onSaved={load} />
+              </section>
+              <section id="panel-transform">
+                <TransformPanel project={project} initialTransform={transform} />
+              </section>
+            </>
+          )}
+          {tab === 'points' && (
+            <section id="panel-points">
+              <SurveyPointsPanel
+                project={project}
+                categories={categories}
+                onCategoriesChanged={load}
+                onLocate={locate}
+              />
+            </section>
+          )}
+          {tab === 'convert' && <ConverterPanel project={project} />}
+        </div>
+      </aside>
+
+      {/* Hero — persistent 3D scene + live stat pills */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex items-center justify-end gap-2 px-4 pt-4">
+          <StatPill icon={<IconMapPin className="size-3.5" />} label="Control" value={points.length} />
+          <StatPill icon={<IconPoint className="size-3.5" />} label="Points" value={pointCount} />
+          <StatPill
+            icon={
+              transform ? (
+                <IconCircleCheck className="size-3.5 text-emerald-500" />
+              ) : (
+                <IconRoute className="size-3.5" />
+              )
+            }
+            label={transform ? 'RMS' : 'Tie'}
+            value={transform ? transform.rmsError.toFixed(3) : 'Not tied'}
           />
-        </section>
-        <section id="panel-scene" className="scroll-mt-6 lg:col-span-2">
+        </div>
+        <section id="panel-scene" className="flex min-h-0 flex-1 flex-col p-4">
           <SceneView project={project} categories={categories} focus={focus} />
         </section>
       </div>
+    </div>
+  );
+}
+
+function StatPill({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="bg-card flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm shadow-sm">
+      {icon}
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-semibold">{value}</span>
     </div>
   );
 }

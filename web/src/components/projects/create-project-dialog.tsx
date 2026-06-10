@@ -76,7 +76,7 @@ export function CreateProjectDialog({ onCreated }: { onCreated: () => void }) {
           </Button>
         }
       />
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>New project</DialogTitle>
           <DialogDescription>Define the site and its coordinate reference.</DialogDescription>
@@ -88,7 +88,7 @@ export function CreateProjectDialog({ onCreated }: { onCreated: () => void }) {
             onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
           />
           <DialogFooter>
-            <Button type="submit" disabled={busy}>
+            <Button type="submit" className="w-full" disabled={busy}>
               {busy ? 'Creating…' : 'Create project'}
             </Button>
           </DialogFooter>

@@ -42,7 +42,14 @@ export async function createProjectAndOpen(page: Page, name: string): Promise<vo
  * Imports points from pasted CSV in the given unit. `csv` should already include
  * a header row (the importer defaults to PNEZD column mapping with a header).
  */
+/** Switches the workspace detail panel to a tab ('Setup' | 'Points' | 'Convert'). */
+export async function gotoTab(page: Page, name: 'Setup' | 'Points' | 'Converter'): Promise<void> {
+  await page.getByRole('button', { exact: true, name }).click();
+}
+
 export async function importCsv(page: Page, csv: string, unit = 'METER'): Promise<void> {
+  // Survey-point tools live in the "Points" tab of the workspace detail panel.
+  await gotoTab(page, 'Points');
   // `exact` avoids matching the setup-checklist's "Import points" shortcut button.
   await page.getByRole('button', { exact: true, name: 'Import' }).click();
   // Scope to the dialog: "Import points" also exists on the setup checklist.

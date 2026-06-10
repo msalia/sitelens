@@ -14,8 +14,18 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { Field, FieldLabel } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 import {
@@ -28,6 +38,17 @@ import {
   type Project,
   UNIT_OPTIONS,
 } from '@/lib/types';
+import { cn } from '@/lib/utils';
+
+const COLUMN_DESC: Record<ExportColumn, string> = {
+  DESCRIPTION: 'Free-text description of the point.',
+  EASTING: 'Easting in the chosen coordinate space.',
+  ELEVATION: 'Elevation (Z) in the chosen unit.',
+  LATITUDE: 'Geographic latitude (degrees).',
+  LONGITUDE: 'Geographic longitude (degrees).',
+  NORTHING: 'Northing in the chosen coordinate space.',
+  POINT: 'Point name / identifier.',
+};
 
 const EXPORT_POINTS = graphql(`
   query ExportPoints(
@@ -66,12 +87,15 @@ export function ExportDialog({
   categoryFilter,
   project,
   selectedIds,
+  trigger,
 }: {
   project: Project;
   /** Currently selected point ids in the table (for scope = selection). */
   selectedIds: string[];
   /** Active category filter id, or null for "all categories". */
   categoryFilter: string | null;
+  /** Optional custom trigger element; falls back to a default button. */
+  trigger?: React.ReactElement;
 }) {
   const [open, setOpen] = useState(false);
   const [format, setFormat] = useState<ExportFormat>('CSV');
@@ -138,101 +162,120 @@ export function ExportDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger
         render={
-          <Button size="sm" variant="outline">
-            <IconDownload className="mr-1 size-4" /> Export
-          </Button>
+          trigger ?? (
+            <Button size="sm" variant="outline">
+              <IconDownload className="mr-1 size-4" /> Export
+            </Button>
+          )
         }
       />
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Export points</DialogTitle>
           <DialogDescription>Download surveyed points as CSV or LandXML.</DialogDescription>
         </DialogHeader>
         <form onSubmit={onExport} className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="exp-format">Format</Label>
-              <NativeSelect
-                id="exp-format"
-                className="w-full"
-                value={format}
-                onChange={(e) => setFormat(e.target.value as ExportFormat)}
-              >
-                <NativeSelectOption value="CSV">CSV</NativeSelectOption>
-                <NativeSelectOption value="LANDXML">LandXML</NativeSelectOption>
-              </NativeSelect>
+          <div className={cn('grid gap-4', format === 'CSV' && 'sm:grid-cols-3')}>
+            <div className="flex flex-col gap-4">
+              <Field>
+                <FieldLabel htmlFor="exp-format">Format</FieldLabel>
+                <Select value={format} onValueChange={(v) => setFormat(v as ExportFormat)}>
+                  <SelectTrigger id="exp-format" className="w-full">
+                    <SelectValue placeholder="Select a format" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Format</SelectLabel>
+                      <SelectItem value="CSV">CSV</SelectItem>
+                      <SelectItem value="LANDXML">LandXML</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="exp-unit">Unit</FieldLabel>
+                <Select value={unit} onValueChange={(v) => setUnit(v as LengthUnit)}>
+                  <SelectTrigger id="exp-unit" className="w-full">
+                    <SelectValue placeholder="Select a unit" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Unit</SelectLabel>
+                      {UNIT_OPTIONS.map((u) => (
+                        <SelectItem key={u.value} value={u.value}>
+                          {u.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="exp-space">Coordinate space</FieldLabel>
+                <Select value={space} onValueChange={(v) => setSpace(v as ExportSpace)}>
+                  <SelectTrigger id="exp-space" className="w-full">
+                    <SelectValue placeholder="Select a space" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Coordinate space</SelectLabel>
+                      {EXPORT_SPACE_OPTIONS.map((s) => (
+                        <SelectItem key={s.value} value={s.value}>
+                          {s.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="exp-scope">Scope</FieldLabel>
+                <Select value={scope} onValueChange={(v) => setScope(v as Scope)}>
+                  <SelectTrigger id="exp-scope" className="w-full">
+                    <SelectValue placeholder="Select a scope" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Scope</SelectLabel>
+                      <SelectItem value="all">All points</SelectItem>
+                      <SelectItem value="category" disabled={!categoryFilter}>
+                        Current category filter
+                      </SelectItem>
+                      <SelectItem value="selection" disabled={selectedIds.length === 0}>
+                        Selected points ({selectedIds.length})
+                      </SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
             </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="exp-unit">Unit</Label>
-              <NativeSelect
-                id="exp-unit"
-                className="w-full"
-                value={unit}
-                onChange={(e) => setUnit(e.target.value as LengthUnit)}
-              >
-                {UNIT_OPTIONS.map((u) => (
-                  <NativeSelectOption key={u.value} value={u.value}>
-                    {u.label}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </div>
-          </div>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="exp-space">Coordinate space</Label>
-            <NativeSelect
-              id="exp-space"
-              className="w-full"
-              value={space}
-              onChange={(e) => setSpace(e.target.value as ExportSpace)}
-            >
-              {EXPORT_SPACE_OPTIONS.map((s) => (
-                <NativeSelectOption key={s.value} value={s.value}>
-                  {s.label}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+            {format === 'CSV' && (
+              <Field className="sm:col-span-2">
+                <FieldLabel>Columns</FieldLabel>
+                <div className="divide-y rounded-lg border">
+                  {EXPORT_COLUMN_OPTIONS.map((c) => (
+                    <div key={c.value} className="flex items-center justify-between gap-4 p-3">
+                      <div className="flex flex-col gap-0.5">
+                        <Label htmlFor={`col-${c.value}`} className="text-sm font-medium">
+                          {c.label}
+                        </Label>
+                        <p className="text-muted-foreground text-sm">{COLUMN_DESC[c.value]}</p>
+                      </div>
+                      <Switch
+                        id={`col-${c.value}`}
+                        checked={columns.includes(c.value)}
+                        onCheckedChange={() => toggleColumn(c.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </Field>
+            )}
           </div>
-
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="exp-scope">Scope</Label>
-            <NativeSelect
-              id="exp-scope"
-              className="w-full"
-              value={scope}
-              onChange={(e) => setScope(e.target.value as Scope)}
-            >
-              <NativeSelectOption value="all">All points</NativeSelectOption>
-              <NativeSelectOption value="category" disabled={!categoryFilter}>
-                Current category filter
-              </NativeSelectOption>
-              <NativeSelectOption value="selection" disabled={selectedIds.length === 0}>
-                Selected points ({selectedIds.length})
-              </NativeSelectOption>
-            </NativeSelect>
-          </div>
-
-          {format === 'CSV' && (
-            <div className="flex flex-col gap-2">
-              <Label>Columns</Label>
-              <div className="grid grid-cols-2 gap-2 rounded-lg border p-3">
-                {EXPORT_COLUMN_OPTIONS.map((c) => (
-                  <label key={c.value} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={columns.includes(c.value)}
-                      onChange={() => toggleColumn(c.value)}
-                    />
-                    {c.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
 
           <DialogFooter>
-            <Button type="submit" disabled={busy}>
+            <Button type="submit" className="w-full" disabled={busy}>
               {busy ? 'Exporting…' : 'Download'}
             </Button>
           </DialogFooter>

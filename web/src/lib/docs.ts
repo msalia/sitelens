@@ -1,7 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 
-export type DocGroup = 'Guides' | 'Reference';
+export type DocGroup =
+  | 'Getting Started'
+  | 'Coordinates & Transform'
+  | 'Working with Data'
+  | 'Visualization';
 
 export interface DocMeta {
   description: string;
@@ -15,14 +19,14 @@ export interface DocMeta {
 export const docsOrder: DocMeta[] = [
   {
     description: 'What SiteLens is and the surveyor workflow it supports.',
-    group: 'Guides',
+    group: 'Getting Started',
     href: '/docs',
     slug: 'introduction',
     title: 'Introduction',
   },
   {
     description: 'Create a project, pick a CRS, and set your display units.',
-    group: 'Guides',
+    group: 'Getting Started',
     href: '/docs/getting-started',
     slug: 'getting-started',
     title: 'Getting Started',
@@ -30,59 +34,52 @@ export const docsOrder: DocMeta[] = [
   {
     description:
       'Building grid, projected northing/easting, geographic, grid vs ground, and units.',
-    group: 'Guides',
+    group: 'Coordinates & Transform',
     href: '/docs/coordinate-systems',
     slug: 'coordinate-systems',
     title: 'Coordinate Systems',
   },
   {
     description: 'Define building gridlines and enter the city control points.',
-    group: 'Guides',
+    group: 'Coordinates & Transform',
     href: '/docs/grid-and-control-points',
     slug: 'grid-and-control-points',
     title: 'Grid & Control Points',
   },
   {
     description: 'Solve the grid-to-ground tie with a Helmert fit, residuals, and RMS.',
-    group: 'Guides',
+    group: 'Coordinates & Transform',
     href: '/docs/the-transform',
     slug: 'the-transform',
     title: 'The Transform',
   },
   {
     description: 'Bring in survey-machine exports via CSV and LandXML.',
-    group: 'Guides',
+    group: 'Working with Data',
     href: '/docs/importing-points',
     slug: 'importing-points',
     title: 'Importing Points',
   },
   {
+    description: 'Convert coordinates across systems and export CSV, LandXML, and snapshots.',
+    group: 'Working with Data',
+    href: '/docs/converting-and-exporting',
+    slug: 'converting-and-exporting',
+    title: 'Converting & Exporting',
+  },
+  {
     description: 'The Cesium scene, terrain backdrop, elevation, and point categories.',
-    group: 'Guides',
+    group: 'Visualization',
     href: '/docs/visualization',
     slug: 'visualization',
     title: '3D Visualization',
   },
   {
     description: 'Import and georeference the architect drawing in the 3D scene.',
-    group: 'Guides',
+    group: 'Visualization',
     href: '/docs/dxf-overlay',
     slug: 'dxf-overlay',
     title: 'DXF Overlay',
-  },
-  {
-    description: 'Convert coordinates across systems and export CSV, LandXML, and snapshots.',
-    group: 'Guides',
-    href: '/docs/converting-and-exporting',
-    slug: 'converting-and-exporting',
-    title: 'Converting & Exporting',
-  },
-  {
-    description: 'System topology, services, the geo-core, and data model.',
-    group: 'Reference',
-    href: '/docs/architecture',
-    slug: 'architecture',
-    title: 'Architecture',
   },
 ];
 

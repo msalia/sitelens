@@ -37,10 +37,10 @@ async function addControlPoint(
   gridY: number,
 ): Promise<void> {
   await page.locator('#cp-label').fill(label);
-  await page.getByPlaceholder(/^Northing/).fill(String(northing));
-  await page.getByPlaceholder(/^Easting/).fill(String(easting));
-  await page.getByPlaceholder(/^Grid X/).fill(String(gridX));
-  await page.getByPlaceholder(/^Grid Y/).fill(String(gridY));
+  await page.locator('#cp-northing').fill(String(northing));
+  await page.locator('#cp-easting').fill(String(easting));
+  await page.locator('#cp-gridx').fill(String(gridX));
+  await page.locator('#cp-gridy').fill(String(gridY));
   // Scope to the panel: the setup checklist also has an "Add control points" button.
   await page.locator('#panel-control').getByRole('button', { name: 'Add control point' }).click();
   await expect(page.getByRole('cell', { exact: true, name: label })).toBeVisible();
@@ -72,6 +72,9 @@ test('core surveyor workflow: project → control points → solve → import �
   await page.locator('#panel-transform').getByRole('button', { name: 'Solve transform' }).click();
   await expect(page.getByText(/Residuals/)).toBeVisible();
 
+  // Survey-point tools live in the "Points" tab of the detail panel.
+  await page.getByRole('button', { exact: true, name: 'Points' }).click();
+
   // Import surveyed points from a pasted PNEZD CSV. `exact` skips the checklist's
   // "Import points" shortcut; the submit is scoped to the dialog.
   await page.locator('#panel-points').getByRole('button', { exact: true, name: 'Import' }).click();
@@ -85,13 +88,15 @@ test('core surveyor workflow: project → control points → solve → import �
   await expect(page.getByRole('cell', { exact: true, name: 'PT1' })).toBeVisible();
   await expect(page.getByText(/of 2/)).toBeVisible();
 
-  // Standalone converter returns every representation of a coordinate.
+  // Standalone converter lives in the "Converter" tab.
+  await page.getByRole('button', { exact: true, name: 'Converter' }).click();
   await page.getByLabel('Easting', { exact: true }).fill('545000');
   await page.getByLabel('Northing', { exact: true }).fill('4184000');
   await page.getByRole('button', { name: 'Convert' }).click();
   await expect(page.getByText('Latitude')).toBeVisible();
 
-  // Export the points to CSV — a download is triggered.
+  // Export the points to CSV (back in the "Points" tab) — a download is triggered.
+  await page.getByRole('button', { exact: true, name: 'Points' }).click();
   await page.getByRole('button', { name: 'Export' }).click();
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download' }).click();

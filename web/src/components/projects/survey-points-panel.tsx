@@ -3,21 +3,56 @@
 import {
   IconArrowDown,
   IconArrowUp,
+  IconChevronRight,
   IconCurrentLocation,
+  IconDotsVertical,
+  IconDownload,
   IconMapPin,
+  IconTag,
   IconTrash,
+  IconUpload,
 } from '@tabler/icons-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  type ComponentPropsWithoutRef,
+  forwardRef,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { toast } from 'sonner';
 
 import { CategoryManagerDialog } from '@/components/projects/category-manager-dialog';
+import { ConfirmDialog } from '@/components/projects/confirm-dialog';
 import { CoordinateInspectorDialog } from '@/components/projects/coordinate-inspector-dialog';
 import { ExportDialog } from '@/components/projects/export-dialog';
 import { ImportDialog } from '@/components/projects/import-dialog';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -33,9 +68,10 @@ import {
   type PointCategory,
   type Project,
   type SurveyPoint,
-  UNIT_LABELS,
+  UNIT_OPTIONS,
 } from '@/lib/types';
 import { fromMeters } from '@/lib/units';
+import { cn } from '@/lib/utils';
 
 const ALL = 'all';
 const NONE = 'none';
@@ -112,16 +148,19 @@ export function SurveyPointsPanel({
   /** Ask the 3D view to fly to a point. */
   onLocate?: (point: SurveyPoint) => void;
 }) {
-  const unitLabel = UNIT_LABELS[project.displayUnit];
+  const unitLabel = UNIT_OPTIONS.find((u) => u.value === project.displayUnit)?.label ?? '';
   const [points, setPoints] = useState<SurveyPoint[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
+  // Debounced search so we hit the server after typing settles, not per keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL);
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDesc, setSortDesc] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [inspecting, setInspecting] = useState<InspectablePoint | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<SurveyPoint | null>(null);
   const [busy, setBusy] = useState(false);
 
   const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
@@ -134,7 +173,7 @@ export function SurveyPointsPanel({
         id: project.id,
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
-        search: search || null,
+        search: debouncedSearch || null,
         sort: sortField,
       });
       setPoints(data.surveyPoints);
@@ -142,18 +181,25 @@ export function SurveyPointsPanel({
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load points');
     }
-  }, [project.id, search, categoryFilter, page, sortField, sortDesc]);
+  }, [project.id, debouncedSearch, categoryFilter, page, sortField, sortDesc]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  // Debounce the search input → server query fires ~300ms after typing settles.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
   // Reset to the first page whenever the filters or sort change.
   useEffect(() => {
     setPage(0);
-  }, [search, categoryFilter, sortField, sortDesc]);
+  }, [debouncedSearch, categoryFilter, sortField, sortDesc]);
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const showPagination = pageCount > 1;
   const rangeStart = total === 0 ? 0 : page * PAGE_SIZE + 1;
   const rangeEnd = Math.min(total, (page + 1) * PAGE_SIZE);
 
@@ -203,9 +249,6 @@ export function SurveyPointsPanel({
   }
 
   async function bulkDelete() {
-    if (!window.confirm(`Delete ${selected.size} point(s)? This cannot be undone.`)) {
-      return;
-    }
     setBusy(true);
     try {
       const { deleteSurveyPoints } = await gql(BULK_DELETE, { ids: [...selected] });
@@ -251,63 +294,114 @@ export function SurveyPointsPanel({
   }
 
   return (
-    <Card className="lg:col-span-2">
-      <CardHeader className="flex-row items-center justify-between gap-2">
-        <CardTitle>Survey points</CardTitle>
-        <div className="flex items-center gap-2">
-          <CategoryManagerDialog categories={categories} onChanged={onCategoriesChanged} />
+    <div className="flex flex-col gap-4 [&>*]:shrink-0">
+      <Card>
+        <CardHeader>
+          <CardTitle>Manage points</CardTitle>
+          <CardDescription>Import, categorize, and export survey points.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
+          <ImportDialog
+            project={project}
+            categories={categories}
+            onImported={load}
+            trigger={
+              <ActionRow
+                icon={<IconUpload className="size-5" />}
+                title="Import points"
+                description="From a survey-machine CSV or LandXML export."
+              />
+            }
+          />
+          <CategoryManagerDialog
+            categories={categories}
+            onChanged={onCategoriesChanged}
+            trigger={
+              <ActionRow
+                icon={<IconTag className="size-5" />}
+                title="Categories"
+                description="Manage point categories for this organization."
+              />
+            }
+          />
           <ExportDialog
             project={project}
             selectedIds={[...selected]}
             categoryFilter={categoryFilter === ALL ? null : categoryFilter}
+            trigger={
+              <ActionRow
+                icon={<IconDownload className="size-5" />}
+                title="Export points"
+                description="Download CSV or LandXML in any space and unit."
+              />
+            }
           />
-          <ImportDialog project={project} categories={categories} onImported={load} />
-        </div>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Survey points</CardTitle>
+        </CardHeader>
+        <CardContent
+          className={cn('flex flex-col gap-3', !showPagination && '-mb-(--card-spacing)')}
+        >
         <div className="flex gap-2">
           <Input
             placeholder="Search label, description, tags…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <NativeSelect
-            className="w-48"
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-          >
-            <NativeSelectOption value={ALL}>All categories</NativeSelectOption>
-            {categories.map((c) => (
-              <NativeSelectOption key={c.id} value={c.id}>
-                {c.name}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+          <Select value={categoryFilter} onValueChange={(v) => setCategoryFilter(v ?? ALL)}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="All categories" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectLabel>Filter by category</SelectLabel>
+                <SelectItem value={ALL}>All categories</SelectItem>
+                {categories.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </div>
 
         {selected.size > 0 && (
           <div className="bg-muted/40 flex flex-wrap items-center gap-2 rounded-lg border p-2 text-sm">
             <span className="font-medium">{selected.size} selected</span>
-            <NativeSelect
-              className="h-8 w-44"
-              value=""
-              disabled={busy}
-              onChange={(e) => e.target.value && bulkAssign(e.target.value)}
-            >
-              <NativeSelectOption value="">Assign category…</NativeSelectOption>
-              <NativeSelectOption value={NONE}>— Clear category —</NativeSelectOption>
-              {categories.map((c) => (
-                <NativeSelectOption key={c.id} value={c.id}>
-                  {c.name}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+            <Select value="" onValueChange={(v) => v && bulkAssign(v)}>
+              <SelectTrigger className="h-8 w-44" disabled={busy}>
+                <SelectValue placeholder="Assign category…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectLabel>Assign to</SelectLabel>
+                  <SelectItem value={NONE}>— Clear category —</SelectItem>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
             <Button size="sm" variant="outline" disabled={busy} onClick={saveGroup}>
               Save as group
             </Button>
-            <Button size="sm" variant="destructive" disabled={busy} onClick={bulkDelete}>
-              Delete
-            </Button>
+            <ConfirmDialog
+              title={`Delete ${selected.size} point(s)?`}
+              description="The selected survey points will be removed. This can’t be undone."
+              onConfirm={bulkDelete}
+              trigger={
+                <Button size="sm" variant="destructive" disabled={busy}>
+                  Delete
+                </Button>
+              }
+            />
             <Button
               size="sm"
               variant="ghost"
@@ -319,131 +413,136 @@ export function SurveyPointsPanel({
           </div>
         )}
 
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-8">
-                <input
-                  type="checkbox"
-                  checked={allOnPageSelected}
-                  onChange={toggleAllOnPage}
-                  aria-label="Select all on page"
+        {/* Full-bleed table with sticky selector, label, and action columns. */}
+        <div
+          className={cn(
+            '-mx-(--card-spacing) border-t [&_[data-slot=table-container]]:overscroll-x-none',
+            showPagination && 'border-b',
+          )}
+        >
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted">
+                <TableHead className="w-12 pl-(--card-spacing)" />
+                <TableHead className="w-10">
+                  <input
+                    type="checkbox"
+                    checked={allOnPageSelected}
+                    onChange={toggleAllOnPage}
+                    aria-label="Select all on page"
+                  />
+                </TableHead>
+                <SortHeader
+                  label="Label"
+                  field="label"
+                  active={sortField}
+                  desc={sortDesc}
+                  onSort={setSort}
                 />
-              </TableHead>
-              <SortHeader
-                label="Label"
-                field="label"
-                active={sortField}
-                desc={sortDesc}
-                onSort={setSort}
-              />
-              <SortHeader
-                label={`N (${unitLabel})`}
-                field="northing"
-                active={sortField}
-                desc={sortDesc}
-                onSort={setSort}
-              />
-              <SortHeader
-                label={`E (${unitLabel})`}
-                field="easting"
-                active={sortField}
-                desc={sortDesc}
-                onSort={setSort}
-              />
-              <SortHeader
-                label={`Z (${unitLabel})`}
-                field="elevation"
-                active={sortField}
-                desc={sortDesc}
-                onSort={setSort}
-              />
-              <TableHead>Category</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {points.map((p) => {
-              const cat = p.categoryId ? catById.get(p.categoryId) : undefined;
-              return (
-                <TableRow key={p.id}>
-                  <TableCell>
-                    <input
-                      type="checkbox"
-                      checked={selected.has(p.id)}
-                      onChange={() => toggle(p.id)}
-                      aria-label={`Select ${p.label}`}
-                    />
-                  </TableCell>
-                  <TableCell className="font-medium">{p.label}</TableCell>
-                  <TableCell>{fromMeters(p.northing, project.displayUnit).toFixed(3)}</TableCell>
-                  <TableCell>{fromMeters(p.easting, project.displayUnit).toFixed(3)}</TableCell>
-                  <TableCell>
-                    {p.elevation === null
-                      ? '—'
-                      : fromMeters(p.elevation, project.displayUnit).toFixed(3)}
-                  </TableCell>
-                  <TableCell>
-                    {cat ? (
-                      <span className="inline-flex items-center gap-1.5 text-xs">
-                        <span
-                          className="size-2.5 rounded-full"
-                          style={{ backgroundColor: cat.color }}
+                <SortHeader
+                  label="N"
+                  field="northing"
+                  active={sortField}
+                  desc={sortDesc}
+                  onSort={setSort}
+                />
+                <SortHeader
+                  label="E"
+                  field="easting"
+                  active={sortField}
+                  desc={sortDesc}
+                  onSort={setSort}
+                />
+                <SortHeader
+                  label="Z"
+                  field="elevation"
+                  active={sortField}
+                  desc={sortDesc}
+                  onSort={setSort}
+                />
+                <TableHead className="pr-(--card-spacing)">Category</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {points.map((p) => {
+                const cat = p.categoryId ? catById.get(p.categoryId) : undefined;
+                return (
+                  <TableRow key={p.id}>
+                    <TableCell className="w-12 pl-(--card-spacing)">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <Button variant="ghost" size="icon-sm" aria-label="Point actions">
+                              <IconDotsVertical className="size-4" />
+                            </Button>
+                          }
                         />
-                        {cat.name}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground max-w-40 truncate text-xs">
-                    {p.description || '—'}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      {onLocate && (
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label="Locate in 3D"
-                          onClick={() => onLocate(p)}
-                        >
-                          <IconCurrentLocation className="size-4" />
-                        </Button>
+                        <DropdownMenuContent align="start">
+                          {onLocate && (
+                            <DropdownMenuItem onClick={() => onLocate(p)}>
+                              <IconCurrentLocation className="size-4" /> Locate in 3D
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem onClick={() => setInspecting(p)}>
+                            <IconMapPin className="size-4" /> Inspect
+                          </DropdownMenuItem>
+                          <DropdownMenuItem variant="destructive" onClick={() => setPendingDelete(p)}>
+                            <IconTrash className="size-4" /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(p.id)}
+                        onChange={() => toggle(p.id)}
+                        aria-label={`Select ${p.label}`}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-medium">{p.label}</div>
+                      {p.description && (
+                        <div className="text-muted-foreground max-w-48 truncate text-xs">
+                          {p.description}
+                        </div>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Inspect"
-                        onClick={() => setInspecting(p)}
-                      >
-                        <IconMapPin className="size-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Delete"
-                        onClick={() => remove(p.id)}
-                      >
-                        <IconTrash className="size-4" />
-                      </Button>
-                    </div>
+                    </TableCell>
+                    <TableCell>{fromMeters(p.northing, project.displayUnit).toFixed(3)}</TableCell>
+                    <TableCell>{fromMeters(p.easting, project.displayUnit).toFixed(3)}</TableCell>
+                    <TableCell>
+                      {p.elevation === null
+                        ? '—'
+                        : fromMeters(p.elevation, project.displayUnit).toFixed(3)}
+                    </TableCell>
+                    <TableCell className="pr-(--card-spacing)">
+                      {cat ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs">
+                          <span
+                            className="size-2.5 rounded-full"
+                            style={{ backgroundColor: cat.color }}
+                          />
+                          {cat.name}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {points.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-muted-foreground text-center text-sm">
+                    No points. Import a CSV or LandXML file to get started.
                   </TableCell>
                 </TableRow>
-              );
-            })}
-            {points.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={8} className="text-muted-foreground text-center text-sm">
-                  No points. Import a CSV or LandXML file to get started.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+              )}
+            </TableBody>
+          </Table>
+        </div>
 
-        {total > 0 && (
+        {showPagination && (
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">
               {rangeStart}–{rangeEnd} of {total}
@@ -473,19 +572,62 @@ export function SurveyPointsPanel({
           </div>
         )}
       </CardContent>
+      <CardFooter>
+        <p className="text-muted-foreground text-xs">
+          N (northing), E (easting), and Z (elevation) are shown in {unitLabel}.
+        </p>
+      </CardFooter>
 
-      <CoordinateInspectorDialog
-        project={project}
-        point={inspecting}
-        onClose={() => setInspecting(null)}
-      />
-    </Card>
+        <CoordinateInspectorDialog
+          project={project}
+          point={inspecting}
+          onClose={() => setInspecting(null)}
+        />
+
+        <ConfirmDialog
+          open={pendingDelete !== null}
+          onOpenChange={(o) => !o && setPendingDelete(null)}
+          title={pendingDelete ? `Delete ${pendingDelete.label}?` : 'Delete point?'}
+          description="This survey point will be removed. This can’t be undone."
+          onConfirm={() => {
+            if (pendingDelete) {
+              void remove(pendingDelete.id);
+            }
+            setPendingDelete(null);
+          }}
+        />
+      </Card>
+    </div>
   );
 }
+
+/** A row-style action button: icon, title, description, chevron. Forwards props
+ *  so it can be used as a dialog trigger (base-ui injects onClick/ref). */
+const ActionRow = forwardRef<
+  HTMLButtonElement,
+  { icon: ReactNode; title: string; description: string } & ComponentPropsWithoutRef<'button'>
+>(function ActionRow({ description, icon, title, ...props }, ref) {
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className="bg-muted/50 hover:bg-muted flex w-full items-center gap-3 rounded-xl p-3 text-left transition-colors"
+      {...props}
+    >
+      <span className="text-muted-foreground shrink-0">{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-medium">{title}</span>
+        <span className="text-muted-foreground block text-sm">{description}</span>
+      </span>
+      <IconChevronRight className="text-muted-foreground size-4 shrink-0" />
+    </button>
+  );
+});
 
 /** A clickable, sort-indicating column header. */
 function SortHeader({
   active,
+  className,
   desc,
   field,
   label,
@@ -496,10 +638,11 @@ function SortHeader({
   active: SortField | null;
   desc: boolean;
   onSort: (f: SortField) => void;
+  className?: string;
 }) {
   const isActive = active === field;
   return (
-    <TableHead>
+    <TableHead className={className}>
       <button
         type="button"
         onClick={() => onSort(field)}

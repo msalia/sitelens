@@ -1,23 +1,20 @@
 import { expect, test } from '@playwright/test';
 
-test('home page renders and links to docs', async ({ page }) => {
+test('home page renders and links to auth', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1, name: 'SiteLens' })).toBeVisible();
-  await expect(page.getByRole('link', { name: /docs/i })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Log in' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Sign up' })).toBeVisible();
 });
 
-test('docs index renders with navigation', async ({ page }) => {
+test('docs are behind the auth wall', async ({ page }) => {
+  // Docs moved behind login; an unauthenticated visit redirects to /login.
   await page.goto('/docs');
-  await expect(page.getByRole('heading', { level: 1, name: 'Introduction' })).toBeVisible();
-  // Grouped nav is present.
-  await expect(page.getByText('Guides', { exact: true })).toBeVisible();
-  await expect(page.getByText('Reference', { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/login$/);
 });
 
-test('can navigate to a docs topic', async ({ page }) => {
-  await page.goto('/docs');
-  await page.getByRole('link', { name: 'The Transform' }).click();
-  await expect(page).toHaveURL(/\/docs\/the-transform$/);
-  await expect(page.getByRole('heading', { level: 1, name: 'The Transform' })).toBeVisible();
-  await expect(page.getByText(/Helmert/i).first()).toBeVisible();
+test('login page renders the login-02 layout', async ({ page }) => {
+  await page.goto('/login');
+  await expect(page.getByRole('heading', { name: 'Login to your account' })).toBeVisible();
+  await expect(page.getByRole('button', { exact: true, name: 'Login' })).toBeVisible();
 });
