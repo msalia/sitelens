@@ -364,3 +364,45 @@ pub struct CsvMappingInput {
     pub elevation_col: Option<i32>,
     pub description_col: Option<i32>,
 }
+
+// ---------------------------------------------------------------------------
+// Phase 6: 3D scene data (everything in geographic coords for rendering)
+// ---------------------------------------------------------------------------
+
+/// A geographic position (degrees) with height in meters.
+#[derive(SimpleObject, Clone, Copy)]
+pub struct LatLng {
+    pub latitude: f64,
+    pub longitude: f64,
+    pub height: f64,
+}
+
+/// A renderable point in geographic coordinates. `easting`/`northing` (meters)
+/// are carried so the client can open the coordinate inspector from a 3D pick.
+#[derive(SimpleObject, Clone)]
+pub struct ScenePoint {
+    pub id: Option<Uuid>,
+    pub label: String,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub height: f64,
+    pub easting: f64,
+    pub northing: f64,
+    pub category_id: Option<Uuid>,
+}
+
+/// A renderable polyline (e.g. a grid axis) in geographic coordinates.
+#[derive(SimpleObject, Clone)]
+pub struct SceneLine {
+    pub label: String,
+    pub coordinates: Vec<LatLng>,
+}
+
+/// Everything the 3D viewer needs, pre-projected to geographic coordinates.
+#[derive(SimpleObject, Default)]
+pub struct SceneData {
+    pub origin: Option<LatLng>,
+    pub control_points: Vec<ScenePoint>,
+    pub survey_points: Vec<ScenePoint>,
+    pub grid_lines: Vec<SceneLine>,
+}

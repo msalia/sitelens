@@ -2,6 +2,7 @@ import nextVitals from 'eslint-config-next/core-web-vitals';
 import nextTs from 'eslint-config-next/typescript';
 import prettier from 'eslint-config-prettier';
 import perfectionist from 'eslint-plugin-perfectionist';
+import reactHooks from 'eslint-plugin-react-hooks';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
 const eslintConfig = defineConfig([
@@ -19,11 +20,16 @@ const eslintConfig = defineConfig([
       'perfectionist/sort-named-exports': ['error', { order: 'asc', type: 'alphabetical' }],
       'perfectionist/sort-named-imports': ['error', { order: 'asc', type: 'alphabetical' }],
       'perfectionist/sort-objects': ['error', { order: 'asc', type: 'alphabetical' }],
-      // Advisory perf rule; our data-load and derive-from-props effects are intentional.
+    },
+  },
+  {
+    // Advisory perf rule; our data-load and derive-from-props effects are intentional.
+    plugins: { 'react-hooks': reactHooks },
+    rules: {
       'react-hooks/set-state-in-effect': 'warn',
     },
   },
-  globalIgnores(['.next/**', 'out/**', 'build/**', 'next-env.d.ts']),
+  globalIgnores(['.next/**', 'out/**', 'build/**', 'next-env.d.ts', 'public/cesium/**']),
 ]);
 
 export default eslintConfig;

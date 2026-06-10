@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { ControlPointsEditor } from '@/components/projects/control-points-editor';
 import { EditProjectDialog } from '@/components/projects/edit-project-dialog';
 import { GridEditor } from '@/components/projects/grid-editor';
+import { SceneView } from '@/components/projects/scene-view';
 import { SurveyPointsPanel } from '@/components/projects/survey-points-panel';
 import { TransformPanel } from '@/components/projects/transform-panel';
 import { gql } from '@/lib/graphql';
@@ -108,6 +109,7 @@ export default function ProjectWorkspace() {
         <ControlPointsEditor project={project} points={points} onChanged={load} />
         <TransformPanel project={project} initialTransform={transform} />
         <SurveyPointsPanel project={project} categories={categories} onCategoriesChanged={load} />
+        <SceneView project={project} categories={categories} />
       </div>
     </div>
   );

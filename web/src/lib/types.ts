@@ -72,6 +72,35 @@ export interface PointGroup {
   projectId: string;
 }
 
+export interface LatLng {
+  height: number;
+  latitude: number;
+  longitude: number;
+}
+
+export interface ScenePoint {
+  categoryId: string | null;
+  easting: number;
+  height: number;
+  id: string | null;
+  label: string;
+  latitude: number;
+  longitude: number;
+  northing: number;
+}
+
+export interface SceneLine {
+  coordinates: LatLng[];
+  label: string;
+}
+
+export interface SceneData {
+  controlPoints: ScenePoint[];
+  gridLines: SceneLine[];
+  origin: LatLng | null;
+  surveyPoints: ScenePoint[];
+}
+
 /** Minimal shape the coordinate inspector needs. */
 export interface InspectablePoint {
   easting: number;

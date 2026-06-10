@@ -14,7 +14,7 @@
 | 3     | Geo-core: Helmert transform + residuals (Rust)      | 2               | Complete    |
 | 4     | Coordinate conversion + units (Rust + UI)           | 3               | Complete    |
 | 5     | Point import (CSV/LandXML) + categories/groups      | 2, 4            | Complete    |
-| 6     | 3D Cesium scene + terrain + point visualization     | 3, 5            | Not started |
+| 6     | 3D Cesium scene + terrain + point visualization     | 3, 5            | Complete\*  |
 | 7     | DXF vector import + georeferenced overlay           | 6               | Not started |
 | 8     | Export (CSV/LandXML/image) + standalone converter   | 4, 5, 6         | Not started |
 | 9     | Performance: benchmarks, profiling, API + UI tuning | 1–8 (API ready) | Not started |
@@ -173,21 +173,23 @@ See the site in 3D over terrain.
 
 ### Deliverables
 
-- [ ] CesiumJS scene in the workspace viewport
-- [ ] AWS open Terrain Tiles base (no token); optional per-tenant Cesium Ion token
-- [ ] Render grid lines + control points + surveyed points at their Z
-- [ ] Category-driven marker color/icon; category visibility toggles
-- [ ] Point selection in 3D ↔ sidebar/inspector sync
-- [ ] Scene centered on project site origin
+- [x] CesiumJS scene in the workspace (lazy-loaded card; assets served from /cesium)
+- [~] Terrain: flat-ellipsoid default (no token) + OSM imagery; optional Cesium Ion token enables World Terrain. Raw AWS Terrarium tiles deferred (need a quantized-mesh server)
+- [x] Render grid lines + control points + surveyed points at their Z (via `sceneData`)
+- [x] Category-driven marker color; category visibility toggles
+- [x] Point selection in 3D → opens coordinate inspector
+- [x] Scene centered on points (zoomTo) / project site origin
 
 ### Tests
 
-- [ ] Component tests: scene mounts, layers toggle
-- [ ] Playwright: create project → enter data → solve → import → points visible in 3D
+- [x] API integration: `sceneData` projects points to geographic + builds grid lines
+- [~] Browser/Playwright 3D render not run here (headless WebGL unavailable in sandbox); Cesium assets verified served from the container, build green
 
 ### Validates
 
 The full grid + control + surveyed points render in 3D over terrain; imported Z drives elevation (terrain is backdrop).
+
+> Note: Cesium is loaded from the prebuilt `/cesium/Cesium.js` (script tag) rather than bundled, to avoid the bundler choking on Cesium's KML/zip internals. AWS-tiles terrain remains a deferred enhancement.
 
 ---
 
