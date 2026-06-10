@@ -14,9 +14,11 @@ test('manage-points card exposes import / categories / export', async ({ page })
   await signUpAndLogin(page, 'sp-manage');
   await createProjectAndOpen(page, 'SP Manage');
   await gotoTab(page, 'Points');
-  await expect(page.getByRole('button', { name: /Import points/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Categories/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Export points/ })).toBeVisible();
+  // Scope to the points panel — the 3D view also has a "Categories" control.
+  const panel = page.locator('#panel-points');
+  await expect(panel.getByRole('button', { name: /Import points/ })).toBeVisible();
+  await expect(panel.getByRole('button', { name: /Categories/ })).toBeVisible();
+  await expect(panel.getByRole('button', { name: /Export points/ })).toBeVisible();
 });
 
 test('import points and see them listed', async ({ page }) => {

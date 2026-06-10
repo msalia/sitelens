@@ -18,6 +18,8 @@ import * as THREE from 'three';
 
 import type { PointCategory, SceneData } from '@/lib/types';
 
+import { drapedHeight, isValidElevation, sampleElevation } from '@/lib/terrain';
+
 // `@react-three/fiber`'s render loop still constructs a `THREE.Clock`, which
 // three r184 deprecated in favor of `THREE.Timer`. It's an upstream-only fix, so
 // until fiber updates we drop just that one (harmless) deprecation line.
@@ -164,7 +166,7 @@ async function buildTerrainGeometry(buf: ArrayBuffer, frame: Frame): Promise<Ter
   const rasters = await image.readRasters({ samples: [0] });
   const band = rasters[0] as unknown as ArrayLike<number>;
 
-  const valid = (v: number) => Number.isFinite(v) && v > -1000 && v < 1e6;
+  const valid = isValidElevation;
   let sum = 0;
   let count = 0;
   for (let i = 0; i < band.length; i++) {
@@ -257,26 +259,8 @@ async function buildTerrainGeometry(buf: ArrayBuffer, frame: Frame): Promise<Ter
 
   // Bilinear elevation sampler over the full-resolution DEM (for draping points
   // and grid lines onto the surface). Returns null outside the tile's bbox.
-  const sample = (lat: number, lon: number): number | null => {
-    if (lon < west || lon > east || lat < south || lat > north) {
-      return null;
-    }
-    const fx = ((lon - west) / (east - west)) * (w - 1);
-    const fy = ((north - lat) / (north - south)) * (h - 1);
-    const x0 = Math.floor(fx);
-    const x1 = Math.min(x0 + 1, w - 1);
-    const y0 = Math.floor(fy);
-    const y1 = Math.min(y0 + 1, h - 1);
-    const tx = fx - x0;
-    const ty = fy - y0;
-    const g = (xx: number, yy: number) => {
-      const v = band[yy * w + xx];
-      return valid(v) ? v : meanHeight;
-    };
-    const top = g(x0, y0) * (1 - tx) + g(x1, y0) * tx;
-    const bot = g(x0, y1) * (1 - tx) + g(x1, y1) * tx;
-    return top * (1 - ty) + bot * ty;
-  };
+  const sample = (lat: number, lon: number): number | null =>
+    sampleElevation({ band, east, height: h, meanHeight, north, south, west, width: w }, lat, lon);
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -468,15 +452,6 @@ function CameraRig({
 }
 
 type Sampler = ((lat: number, lon: number) => number | null) | null;
-
-/** Resolves the height a feature sits at: its own z when non-zero (z always
- * wins), otherwise the sampled terrain elevation when projecting is enabled. */
-function drapedHeight(sample: Sampler, lat: number, lon: number, height: number): number {
-  if (sample && height === 0) {
-    return sample(lat, lon) ?? height;
-  }
-  return height;
-}
 
 type Vec3 = [number, number, number];
 

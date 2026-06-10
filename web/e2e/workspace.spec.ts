@@ -57,6 +57,8 @@ test('converter returns every representation', async ({ page }) => {
   await page.getByLabel('Easting', { exact: true }).fill('545000');
   await page.getByLabel('Northing', { exact: true }).fill('4184000');
   await page.getByRole('button', { exact: true, name: 'Convert' }).click();
-  await expect(page.getByText('Latitude')).toBeVisible();
-  await expect(page.getByText('Building grid')).toBeVisible();
+  // Scope to the result table cells — "Building grid" also appears in the 3D
+  // view's setup-overlay copy, so a bare text match is ambiguous.
+  await expect(page.getByRole('cell', { name: 'Latitude' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Building grid' })).toBeVisible();
 });
