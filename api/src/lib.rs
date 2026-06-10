@@ -3,6 +3,7 @@ pub mod convert;
 pub mod crs;
 pub mod db;
 pub mod geo;
+pub mod import;
 pub mod models;
 pub mod schema;
 pub mod storage;

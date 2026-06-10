@@ -13,12 +13,29 @@ use crate::auth::{
 };
 use crate::convert::{self, Space};
 use crate::geo::{solve_helmert, Correspondence, HelmertParams};
+use crate::import::{self, CsvMapping};
 use crate::models::{
-    ControlPoint, CoordinateSet, CoordinateSpace, GridAxis, GridAxisInput, GridAxisRow,
-    InviteResult, LoginRow, Org, Project, ProjectRow, SignupResult, Transform, TransformResidual,
-    User, UserRow,
+    ControlPoint, CoordinateSet, CoordinateSpace, CsvMappingInput, GridAxis, GridAxisInput,
+    GridAxisRow, ImportBatch, ImportFormat, ImportProfile, ImportProfileRow, InviteResult,
+    LoginRow, Org, PointCategory, PointGroup, Project, ProjectRow, SignupResult, SurveyPoint,
+    Transform, TransformResidual, User, UserRow,
 };
 use crate::units::LengthUnit;
+
+const CATEGORY_COLUMNS: &str = "id, org_id, name, color, icon, is_default";
+const SURVEY_POINT_COLUMNS: &str = "id, project_id, label, northing, easting, elevation, \
+    description, category_id, tags, import_batch_id";
+
+/// The default category set seeded for every new organization.
+const DEFAULT_CATEGORIES: &[(&str, &str, &str)] = &[
+    ("Control/Reference", "#ef4444", "target"),
+    ("Station/Setup", "#f59e0b", "station"),
+    ("Column", "#3b82f6", "column"),
+    ("Corner", "#8b5cf6", "corner"),
+    ("Spot/Elevation", "#10b981", "spot"),
+    ("Utility", "#6b7280", "utility"),
+    ("Other", "#94a3b8", "other"),
+];
 
 /// Loads the persisted transform's parameters for a project, if solved.
 async fn load_transform_params(pool: &PgPool, project_id: Uuid) -> Result<Option<HelmertParams>> {
@@ -258,6 +275,100 @@ impl QueryRoot {
         );
         Ok(result.into())
     }
+
+    /// The caller organization's point categories (defaults + custom).
+    async fn categories(&self, ctx: &Context<'_>) -> Result<Vec<PointCategory>> {
+        let auth = require_auth(ctx)?;
+        let rows: Vec<PointCategory> = sqlx::query_as(&format!(
+            "SELECT {CATEGORY_COLUMNS} FROM point_categories WHERE org_id = $1 \
+             ORDER BY is_default DESC, name"
+        ))
+        .bind(auth.org_id)
+        .fetch_all(pool(ctx)?)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Surveyed points for a project, optionally filtered by free-text search
+    /// (label/description/tags) and/or category.
+    async fn survey_points(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        search: Option<String>,
+        category_id: Option<Uuid>,
+    ) -> Result<Vec<SurveyPoint>> {
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        let search = search.filter(|s| !s.trim().is_empty());
+        let rows: Vec<SurveyPoint> = sqlx::query_as(&format!(
+            "SELECT {SURVEY_POINT_COLUMNS} FROM survey_points WHERE project_id = $1 \
+             AND ($2::text IS NULL OR label ILIKE '%'||$2||'%' OR description ILIKE '%'||$2||'%' \
+                  OR array_to_string(tags, ' ') ILIKE '%'||$2||'%') \
+             AND ($3::uuid IS NULL OR category_id = $3) \
+             ORDER BY created_at"
+        ))
+        .bind(project_id)
+        .bind(search)
+        .bind(category_id)
+        .fetch_all(pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Import batches for a project.
+    async fn import_batches(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+    ) -> Result<Vec<ImportBatch>> {
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        let rows: Vec<ImportBatch> = sqlx::query_as(
+            "SELECT id, project_id, source_filename, format, row_count FROM import_batches \
+             WHERE project_id = $1 ORDER BY created_at DESC",
+        )
+        .bind(project_id)
+        .fetch_all(pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Saved CSV import profiles for a project.
+    async fn import_profiles(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+    ) -> Result<Vec<ImportProfile>> {
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        let rows: Vec<ImportProfileRow> = sqlx::query_as(
+            "SELECT id, project_id, name, unit, mapping FROM import_profiles \
+             WHERE project_id = $1 ORDER BY name",
+        )
+        .bind(project_id)
+        .fetch_all(pool)
+        .await?;
+        Ok(rows.into_iter().map(ImportProfile::from).collect())
+    }
+
+    /// Saved point groups (named selections) for a project.
+    async fn point_groups(&self, ctx: &Context<'_>, project_id: Uuid) -> Result<Vec<PointGroup>> {
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        let rows: Vec<PointGroup> = sqlx::query_as(
+            "SELECT id, project_id, name, member_ids FROM point_groups \
+             WHERE project_id = $1 ORDER BY name",
+        )
+        .bind(project_id)
+        .fetch_all(pool)
+        .await?;
+        Ok(rows)
+    }
 }
 
 /// Row shape for reading a persisted transform.
@@ -343,6 +454,20 @@ impl MutationRoot {
         .fetch_one(&mut *tx)
         .await
         .map(User::from)?;
+
+        // Seed the default point categories for the new org.
+        for (name, color, icon) in DEFAULT_CATEGORIES {
+            sqlx::query(
+                "INSERT INTO point_categories (org_id, name, color, icon, is_default) \
+                 VALUES ($1, $2, $3, $4, true)",
+            )
+            .bind(org.id)
+            .bind(name)
+            .bind(color)
+            .bind(icon)
+            .execute(&mut *tx)
+            .await?;
+        }
 
         tx.commit().await?;
 
@@ -816,6 +941,258 @@ impl MutationRoot {
             residuals,
         })
     }
+
+    // ----- Categories -----
+
+    /// Creates a custom point category for the caller's organization.
+    async fn create_category(
+        &self,
+        ctx: &Context<'_>,
+        name: String,
+        color: String,
+        icon: String,
+    ) -> Result<PointCategory> {
+        let auth = require_editor(ctx)?;
+        if name.trim().is_empty() {
+            return Err(async_graphql::Error::new("category name is required"));
+        }
+        let cat: PointCategory = sqlx::query_as(&format!(
+            "INSERT INTO point_categories (org_id, name, color, icon, is_default) \
+             VALUES ($1, $2, $3, $4, false) RETURNING {CATEGORY_COLUMNS}"
+        ))
+        .bind(auth.org_id)
+        .bind(name.trim())
+        .bind(color)
+        .bind(icon)
+        .fetch_one(pool(ctx)?)
+        .await?;
+        Ok(cat)
+    }
+
+    // ----- Import -----
+
+    /// Imports points from CSV or LandXML content. Coordinates in `unit` are
+    /// stored as meters. Optionally tags all points with a category and saves
+    /// the CSV mapping as a reusable profile.
+    async fn import_points(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        format: ImportFormat,
+        content: String,
+        unit: LengthUnit,
+        mapping: Option<CsvMappingInput>,
+        source_filename: Option<String>,
+        category_id: Option<Uuid>,
+        save_profile_name: Option<String>,
+    ) -> Result<ImportBatch> {
+        let auth = require_editor(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+
+        let (parsed, format_str) = match format {
+            ImportFormat::Csv => {
+                let m = mapping.as_ref().ok_or_else(|| {
+                    async_graphql::Error::new("a column mapping is required for CSV")
+                })?;
+                let csv_mapping = to_csv_mapping(m)?;
+                (
+                    import::parse_csv(&content, &csv_mapping)
+                        .map_err(|e| async_graphql::Error::new(e.to_string()))?,
+                    "csv",
+                )
+            }
+            ImportFormat::Landxml => (
+                import::parse_landxml(&content)
+                    .map_err(|e| async_graphql::Error::new(e.to_string()))?,
+                "landxml",
+            ),
+        };
+        if parsed.is_empty() {
+            return Err(async_graphql::Error::new("no points found in the file"));
+        }
+
+        let mut tx = pool.begin().await?;
+        let batch: ImportBatch = sqlx::query_as(
+            "INSERT INTO import_batches (project_id, source_filename, format, row_count) \
+             VALUES ($1, $2, $3, $4) RETURNING id, project_id, source_filename, format, row_count",
+        )
+        .bind(project_id)
+        .bind(source_filename.unwrap_or_default())
+        .bind(format_str)
+        .bind(parsed.len() as i32)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        for p in &parsed {
+            sqlx::query(
+                "INSERT INTO survey_points \
+                   (project_id, label, northing, easting, elevation, description, category_id, import_batch_id) \
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+            )
+            .bind(project_id)
+            .bind(&p.label)
+            .bind(unit.to_meters(p.northing))
+            .bind(unit.to_meters(p.easting))
+            .bind(p.elevation.map(|e| unit.to_meters(e)))
+            .bind(&p.description)
+            .bind(category_id)
+            .bind(batch.id)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        // Optionally persist the CSV mapping as a reusable profile.
+        if let (Some(name), Some(m)) = (save_profile_name.as_ref(), mapping.as_ref()) {
+            if !name.trim().is_empty() {
+                let mapping_json = serde_json::json!({
+                    "hasHeader": m.has_header,
+                    "labelCol": m.label_col,
+                    "northingCol": m.northing_col,
+                    "eastingCol": m.easting_col,
+                    "elevationCol": m.elevation_col,
+                    "descriptionCol": m.description_col,
+                });
+                sqlx::query(
+                    "INSERT INTO import_profiles (project_id, name, unit, mapping) \
+                     VALUES ($1, $2, $3, $4)",
+                )
+                .bind(project_id)
+                .bind(name.trim())
+                .bind(unit.as_db_str())
+                .bind(sqlx::types::Json(mapping_json))
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
+
+        tx.commit().await?;
+        Ok(batch)
+    }
+
+    // ----- Survey points -----
+
+    /// Updates a surveyed point's organizational fields (label, description,
+    /// category, tags). Editor role required.
+    async fn update_survey_point(
+        &self,
+        ctx: &Context<'_>,
+        id: Uuid,
+        label: Option<String>,
+        description: Option<String>,
+        category_id: Option<Uuid>,
+        tags: Option<Vec<String>>,
+    ) -> Result<SurveyPoint> {
+        let auth = require_editor(ctx)?;
+        let point: Option<SurveyPoint> = sqlx::query_as(&format!(
+            "UPDATE survey_points sp SET \
+               label = COALESCE($2, sp.label), \
+               description = COALESCE($3, sp.description), \
+               category_id = COALESCE($4, sp.category_id), \
+               tags = COALESCE($5, sp.tags) \
+             FROM projects p \
+             WHERE sp.id = $1 AND sp.project_id = p.id AND p.org_id = $6 \
+             RETURNING {}",
+            SURVEY_POINT_COLUMNS
+                .split(", ")
+                .map(|c| format!("sp.{c}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))
+        .bind(id)
+        .bind(label)
+        .bind(description)
+        .bind(category_id)
+        .bind(tags)
+        .bind(auth.org_id)
+        .fetch_optional(pool(ctx)?)
+        .await?;
+        point.ok_or_else(|| async_graphql::Error::new("point not found in your organization"))
+    }
+
+    /// Deletes a surveyed point. Editor role required.
+    async fn delete_survey_point(&self, ctx: &Context<'_>, id: Uuid) -> Result<bool> {
+        let auth = require_editor(ctx)?;
+        let result = sqlx::query(
+            "DELETE FROM survey_points sp USING projects p \
+             WHERE sp.id = $1 AND sp.project_id = p.id AND p.org_id = $2",
+        )
+        .bind(id)
+        .bind(auth.org_id)
+        .execute(pool(ctx)?)
+        .await?;
+        if result.rows_affected() == 0 {
+            return Err(async_graphql::Error::new(
+                "point not found in your organization",
+            ));
+        }
+        Ok(true)
+    }
+
+    // ----- Point groups -----
+
+    /// Saves a named selection of points. Editor role required.
+    async fn create_point_group(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        name: String,
+        member_ids: Vec<Uuid>,
+    ) -> Result<PointGroup> {
+        let auth = require_editor(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        if name.trim().is_empty() {
+            return Err(async_graphql::Error::new("group name is required"));
+        }
+        let group: PointGroup = sqlx::query_as(
+            "INSERT INTO point_groups (project_id, name, member_ids) VALUES ($1, $2, $3) \
+             RETURNING id, project_id, name, member_ids",
+        )
+        .bind(project_id)
+        .bind(name.trim())
+        .bind(&member_ids)
+        .fetch_one(pool)
+        .await?;
+        Ok(group)
+    }
+
+    /// Deletes a point group. Editor role required.
+    async fn delete_point_group(&self, ctx: &Context<'_>, id: Uuid) -> Result<bool> {
+        let auth = require_editor(ctx)?;
+        let result = sqlx::query(
+            "DELETE FROM point_groups pg USING projects p \
+             WHERE pg.id = $1 AND pg.project_id = p.id AND p.org_id = $2",
+        )
+        .bind(id)
+        .bind(auth.org_id)
+        .execute(pool(ctx)?)
+        .await?;
+        if result.rows_affected() == 0 {
+            return Err(async_graphql::Error::new(
+                "group not found in your organization",
+            ));
+        }
+        Ok(true)
+    }
+}
+
+/// Converts a GraphQL CSV mapping into the parser's mapping (validating indices).
+fn to_csv_mapping(m: &CsvMappingInput) -> Result<CsvMapping> {
+    let idx = |v: i32, what: &str| -> Result<usize> {
+        usize::try_from(v).map_err(|_| async_graphql::Error::new(format!("invalid {what} column")))
+    };
+    let opt = |v: Option<i32>, what: &str| -> Result<Option<usize>> {
+        v.map(|x| idx(x, what)).transpose()
+    };
+    Ok(CsvMapping {
+        has_header: m.has_header,
+        label_col: opt(m.label_col, "label")?,
+        northing_col: idx(m.northing_col, "northing")?,
+        easting_col: idx(m.easting_col, "easting")?,
+        elevation_col: opt(m.elevation_col, "elevation")?,
+        description_col: opt(m.description_col, "description")?,
+    })
 }
 
 /// Row shape for control points used as transform correspondences.

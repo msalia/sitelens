@@ -9,11 +9,13 @@ import { toast } from 'sonner';
 import { ControlPointsEditor } from '@/components/projects/control-points-editor';
 import { EditProjectDialog } from '@/components/projects/edit-project-dialog';
 import { GridEditor } from '@/components/projects/grid-editor';
+import { SurveyPointsPanel } from '@/components/projects/survey-points-panel';
 import { TransformPanel } from '@/components/projects/transform-panel';
 import { gql } from '@/lib/graphql';
 import {
   type ControlPoint,
   type GridAxis,
+  type PointCategory,
   type Project,
   type Transform,
   UNIT_LABELS,
@@ -28,6 +30,7 @@ const WORKSPACE_QUERY = `
       translationE translationN rotationDegrees scale rmsError pointCount
       residuals { label deltaEasting deltaNorthing magnitude }
     }
+    categories { id orgId name color icon isDefault }
   }`;
 
 export default function ProjectWorkspace() {
@@ -36,6 +39,7 @@ export default function ProjectWorkspace() {
   const [axes, setAxes] = useState<GridAxis[]>([]);
   const [points, setPoints] = useState<ControlPoint[]>([]);
   const [transform, setTransform] = useState<Transform | null>(null);
+  const [categories, setCategories] = useState<PointCategory[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -45,11 +49,13 @@ export default function ProjectWorkspace() {
         gridAxes: GridAxis[];
         controlPoints: ControlPoint[];
         transform: Transform | null;
+        categories: PointCategory[];
       }>(WORKSPACE_QUERY, { id });
       setProject(data.project);
       setAxes(data.gridAxes);
       setPoints(data.controlPoints);
       setTransform(data.transform);
+      setCategories(data.categories);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load project');
     } finally {
@@ -101,6 +107,7 @@ export default function ProjectWorkspace() {
         <GridEditor project={project} axes={axes} onSaved={load} />
         <ControlPointsEditor project={project} points={points} onChanged={load} />
         <TransformPanel project={project} initialTransform={transform} />
+        <SurveyPointsPanel project={project} categories={categories} onCategoriesChanged={load} />
       </div>
     </div>
   );

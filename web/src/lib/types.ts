@@ -43,6 +43,42 @@ export interface ControlPoint {
   source: string;
 }
 
+export interface PointCategory {
+  color: string;
+  icon: string;
+  id: string;
+  isDefault: boolean;
+  name: string;
+  orgId: string;
+}
+
+export interface SurveyPoint {
+  categoryId: string | null;
+  description: string;
+  easting: number;
+  elevation: number | null;
+  id: string;
+  importBatchId: string | null;
+  label: string;
+  northing: number;
+  projectId: string;
+  tags: string[];
+}
+
+export interface PointGroup {
+  id: string;
+  memberIds: string[];
+  name: string;
+  projectId: string;
+}
+
+/** Minimal shape the coordinate inspector needs. */
+export interface InspectablePoint {
+  easting: number;
+  label: string;
+  northing: number;
+}
+
 export interface CoordinateSet {
   gridX: number | null;
   gridY: number | null;

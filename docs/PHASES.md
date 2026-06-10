@@ -13,7 +13,7 @@
 | 2     | Projects, grid, control points (data + forms)       | 1               | Complete\*  |
 | 3     | Geo-core: Helmert transform + residuals (Rust)      | 2               | Complete    |
 | 4     | Coordinate conversion + units (Rust + UI)           | 3               | Complete    |
-| 5     | Point import (CSV/LandXML) + categories/groups      | 2, 4            | Not started |
+| 5     | Point import (CSV/LandXML) + categories/groups      | 2, 4            | Complete    |
 | 6     | 3D Cesium scene + terrain + point visualization     | 3, 5            | Not started |
 | 7     | DXF vector import + georeferenced overlay           | 6               | Not started |
 | 8     | Export (CSV/LandXML/image) + standalone converter   | 4, 5, 6         | Not started |
@@ -145,23 +145,25 @@ Bring in field data; organize it.
 
 ### Deliverables
 
-- [ ] CSV import with interactive column-mapping (P/N/E/Z/Description) + unit pick
-- [ ] Saved ImportProfiles per project
-- [ ] LandXML import (points)
-- [ ] ImportBatch records; sandboxed parsing with size/timeout limits
-- [ ] PointCategory: default set + per-tenant custom (color/icon); one category + free-text tags per point
-- [ ] PointGroup (saved named selections)
-- [ ] Searchable/filterable point sidebar (category, label, description, tags), multi-select
+- [x] CSV import with interactive column-mapping (P/N/E/Z/Description) + unit pick
+- [x] Saved ImportProfiles per project (`saveProfileName` on import)
+- [x] LandXML import (CgPoints)
+- [x] ImportBatch records; size/row caps in the parser (`import.rs`)
+- [x] PointCategory: default set (seeded per org) + per-tenant custom (color/icon); one category + free-text tags per point
+- [x] PointGroup (saved named selections) — multi-select → save group
+- [x] Searchable/filterable points panel (category, label, description, tags), multi-select
 
 ### Tests
 
-- [ ] Parser unit tests: CSV column orders, LandXML; malformed/oversized rejected
-- [ ] API integration: import batch org-scoped; category/group CRUD
-- [ ] Round-trip: imported feet → stored meters → displayed correctly
+- [x] Parser unit tests: CSV column orders, LandXML; malformed/oversized rejected
+- [x] API integration: import batch (feet→meters), search filter, LandXML, category/group CRUD
+- [x] Round-trip: imported feet → stored meters → displayed correctly
 
 ### Validates
 
-A surveyor imports a machine export, sees the points listed, categorized, searchable.
+A surveyor imports a machine export, sees the points listed, categorized, searchable. ✅ Verified live (7 default categories, CSV `1000 ft → 304.8006 m`, search, saved profile).
+
+> Note: timeouts on parsing are bounded by request handling; explicit per-job timeouts land with the sandboxing work in Phase 10.
 
 ---
 

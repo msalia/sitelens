@@ -38,6 +38,8 @@ async-trait = "0.1"
 nalgebra = "0.33"
 proj4rs = "0.1"
 crs-definitions = "0.3"
+csv = "1"
+roxmltree = "0.20"
 
 [profile.release]
 opt-level = 2

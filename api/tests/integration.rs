@@ -514,9 +514,39 @@ async fn convert_coordinate_returns_all_representations(pool: PgPool) {
     let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
 
     // Identity transform, translation E=100 N=200, so grid (x,y) → projected (x+100, y+200).
-    add_cp(&schema, admin_ctx(admin, org), pid, "A", 100.0, 200.0, 0.0, 0.0).await;
-    add_cp(&schema, admin_ctx(admin, org), pid, "B", 110.0, 200.0, 10.0, 0.0).await;
-    add_cp(&schema, admin_ctx(admin, org), pid, "C", 100.0, 210.0, 0.0, 10.0).await;
+    add_cp(
+        &schema,
+        admin_ctx(admin, org),
+        pid,
+        "A",
+        100.0,
+        200.0,
+        0.0,
+        0.0,
+    )
+    .await;
+    add_cp(
+        &schema,
+        admin_ctx(admin, org),
+        pid,
+        "B",
+        110.0,
+        200.0,
+        10.0,
+        0.0,
+    )
+    .await;
+    add_cp(
+        &schema,
+        admin_ctx(admin, org),
+        pid,
+        "C",
+        100.0,
+        210.0,
+        0.0,
+        10.0,
+    )
+    .await;
     let solve = format!(r#"mutation {{ solveTransform(projectId: "{pid}") {{ scale }} }}"#);
     exec_ok(&schema, &solve, Some(admin_ctx(admin, org))).await;
 
@@ -542,4 +572,135 @@ async fn convert_coordinate_returns_all_representations(pool: PgPool) {
     let c2 = &data2["convertCoordinate"];
     assert!((c2["projectedGridE"].as_f64().unwrap() - 110.0).abs() < 1e-6);
     assert!((c2["projectedGridN"].as_f64().unwrap() - 220.0).abs() < 1e-6);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5: points, categories, import
+// ---------------------------------------------------------------------------
+
+async fn exec_ok_vars(
+    schema: &ApiSchema,
+    query: &str,
+    vars: serde_json::Value,
+    auth: AuthContext,
+) -> Json {
+    let req = async_graphql::Request::new(query)
+        .variables(async_graphql::Variables::from_json(vars))
+        .data(auth);
+    let resp = schema.execute(req).await;
+    assert!(
+        resp.errors.is_empty(),
+        "unexpected errors: {:?}",
+        resp.errors
+    );
+    serde_json::to_value(resp.data).unwrap()
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn default_categories_seeded_on_signup(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let data = exec_ok(
+        &schema,
+        "{ categories { name isDefault } }",
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    let cats = data["categories"].as_array().unwrap();
+    assert_eq!(cats.len(), 7, "expected 7 default categories");
+    assert!(cats.iter().all(|c| c["isDefault"].as_bool().unwrap()));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn import_csv_converts_feet_to_meters(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+
+    let content = "P,N,E,Z,D\n1,1000,2000,5,MON\n2,1001,2001,,IP\n";
+    let q = r#"mutation ($id: UUID!, $content: String!, $m: CsvMappingInput!) {
+        importPoints(projectId: $id, format: CSV, content: $content, unit: US_SURVEY_FOOT, mapping: $m) { rowCount }
+    }"#;
+    let vars = serde_json::json!({
+        "id": pid,
+        "content": content,
+        "m": { "hasHeader": true, "labelCol": 0, "northingCol": 1, "eastingCol": 2, "elevationCol": 3, "descriptionCol": 4 }
+    });
+    let data = exec_ok_vars(&schema, q, vars, admin_ctx(admin, org)).await;
+    assert_eq!(data["importPoints"]["rowCount"].as_i64().unwrap(), 2);
+
+    let pts = exec_ok(
+        &schema,
+        &format!(r#"{{ surveyPoints(projectId: "{pid}") {{ label northing description }} }}"#),
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    let arr = pts["surveyPoints"].as_array().unwrap();
+    assert_eq!(arr.len(), 2);
+    let us_ft_m = 1200.0_f64 / 3937.0;
+    assert!((arr[0]["northing"].as_f64().unwrap() - 1000.0 * us_ft_m).abs() < 1e-6);
+    assert_eq!(arr[0]["description"], Json::String("MON".into()));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn survey_points_search_filter(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+    let content = "P,N,E,D\nCB1,1,1,catch basin\nMH1,2,2,manhole\n";
+    let q = r#"mutation ($id: UUID!, $content: String!, $m: CsvMappingInput!) {
+        importPoints(projectId: $id, format: CSV, content: $content, unit: METER, mapping: $m) { rowCount }
+    }"#;
+    let vars = serde_json::json!({
+        "id": pid, "content": content,
+        "m": { "hasHeader": true, "labelCol": 0, "northingCol": 1, "eastingCol": 2, "descriptionCol": 3 }
+    });
+    exec_ok_vars(&schema, q, vars, admin_ctx(admin, org)).await;
+
+    let filtered = exec_ok(
+        &schema,
+        &format!(r#"{{ surveyPoints(projectId: "{pid}", search: "manhole") {{ label }} }}"#),
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    let arr = filtered["surveyPoints"].as_array().unwrap();
+    assert_eq!(arr.len(), 1);
+    assert_eq!(arr[0]["label"], Json::String("MH1".into()));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn import_landxml_points(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+    let content = r#"<LandXML><CgPoints><CgPoint name="1" code="MON">100 200 5</CgPoint><CgPoint name="2">101 201</CgPoint></CgPoints></LandXML>"#;
+    let q = r#"mutation ($id: UUID!, $content: String!) {
+        importPoints(projectId: $id, format: LANDXML, content: $content, unit: METER) { rowCount }
+    }"#;
+    let data = exec_ok_vars(
+        &schema,
+        q,
+        serde_json::json!({ "id": pid, "content": content }),
+        admin_ctx(admin, org),
+    )
+    .await;
+    assert_eq!(data["importPoints"]["rowCount"].as_i64().unwrap(), 2);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn point_group_create_and_list(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+    let q = format!(
+        r#"mutation {{ createPointGroup(projectId: "{pid}", name: "North wing", memberIds: []) {{ id name }} }}"#
+    );
+    exec_ok(&schema, &q, Some(admin_ctx(admin, org))).await;
+    let data = exec_ok(
+        &schema,
+        &format!(r#"{{ pointGroups(projectId: "{pid}") {{ name }} }}"#),
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    assert_eq!(data["pointGroups"].as_array().unwrap().len(), 1);
 }

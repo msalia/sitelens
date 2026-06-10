@@ -54,7 +54,10 @@ impl HelmertParams {
     pub fn inverse(&self, e: f64, n: f64) -> (f64, f64) {
         let d = self.a * self.a + self.b * self.b;
         let (de, dn) = (e - self.tx, n - self.ty);
-        ((self.a * de + self.b * dn) / d, (-self.b * de + self.a * dn) / d)
+        (
+            (self.a * de + self.b * dn) / d,
+            (-self.b * de + self.a * dn) / d,
+        )
     }
 
     /// Rebuilds parameters from the persisted scale/rotation/translation form.

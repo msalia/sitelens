@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { gql } from '@/lib/graphql';
-import { type ControlPoint, type CoordinateSet, type Project, UNIT_LABELS } from '@/lib/types';
+import { type CoordinateSet, type InspectablePoint, type Project, UNIT_LABELS } from '@/lib/types';
 import { fromMeters } from '@/lib/units';
 
 const CONVERT = `
@@ -28,7 +28,7 @@ export function CoordinateInspectorDialog({
   project,
 }: {
   project: Project;
-  point: ControlPoint | null;
+  point: InspectablePoint | null;
   onClose: () => void;
 }) {
   const unitLabel = UNIT_LABELS[project.displayUnit];

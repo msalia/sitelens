@@ -47,7 +47,8 @@ pub fn projected_to_geographic(epsg: i32, easting_m: f64, northing_m: f64) -> Op
     let (crs, m_per_unit) = crs_for(epsg)?;
     let wgs = wgs84()?;
     // proj4rs works in the CRS's native units (projected) and radians (geographic).
-    let (lon, lat) = transform_xy(&crs, &wgs, easting_m / m_per_unit, northing_m / m_per_unit).ok()?;
+    let (lon, lat) =
+        transform_xy(&crs, &wgs, easting_m / m_per_unit, northing_m / m_per_unit).ok()?;
     Some((lat.to_degrees(), lon.to_degrees()))
 }
 
