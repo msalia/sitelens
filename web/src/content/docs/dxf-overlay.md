@@ -3,6 +3,11 @@
 Bring the architect's drawing into the 3D scene so survey points sit in the
 context of the design.
 
+> **Status:** DXF overlay rendering is being rebuilt for the new 3D engine and is
+> temporarily unavailable in the viewer. Uploaded overlays and their
+> georeferencing are preserved; this page describes how the feature works and how
+> it will behave when it returns.
+
 ## DXF, not DWG
 
 SiteLens imports **DXF** — the open, text-based CAD interchange format. It parses

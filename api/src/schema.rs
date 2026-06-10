@@ -5,6 +5,8 @@
 use std::sync::Arc;
 
 use async_graphql::{Context, Object, Result};
+use base64::Engine as _;
+use chrono::{DateTime, Utc};
 use rand::{distributions::Alphanumeric, Rng};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -22,14 +24,15 @@ use crate::models::{
     CadOverlay, ControlPoint, CoordinateSet, CoordinateSpace, CsvMappingInput, EpsgEntry,
     ExportColumn, ExportFormat, ExportSpace, GridAxis, GridAxisInput, GridAxisRow, ImportBatch,
     ImportFormat, ImportProfile, ImportProfileRow, InviteResult, LoginRow, Org, PointCategory,
-    PointGroup, Project, ProjectRow, PublicConfig, SceneData, SceneLine, ScenePoint, SignupResult,
-    SurveyPoint, Transform, TransformResidual, User, UserRow,
+    PointGroup, Project, ProjectRow, ProjectTerrain, PublicConfig, SceneData, SceneLine,
+    ScenePoint, SignupResult, SurveyPoint, Transform, TransformResidual, User, UserRow,
 };
 use crate::ratelimit::{ClientIp, RateLimiter};
 use crate::storage::Storage;
 
 const CAD_OVERLAY_COLUMNS: &str = "id, project_id, original_filename, offset_e, offset_n, \
     rotation_deg, scale, assume_real_world, visible";
+const TERRAIN_COLUMNS: &str = "project_id, demtype, south, north, west, east, fetched_at";
 
 /// Returns the storage key of a CAD overlay if it belongs to the org.
 async fn overlay_key_in_org(pool: &PgPool, id: Uuid, org_id: Uuid) -> Result<String> {
@@ -313,15 +316,15 @@ impl QueryRoot {
         let space = match space {
             CoordinateSpace::Grid => Space::Grid,
             CoordinateSpace::Projected => Space::Projected,
+            CoordinateSpace::Geographic => Space::Geographic,
         };
-        let result = convert::convert(
-            space,
-            unit.to_meters(x),
-            unit.to_meters(y),
-            params,
-            epsg,
-            csf,
-        );
+        // Geographic input is in degrees (x = lon, y = lat); everything else is a
+        // linear measure in `unit` that we normalize to meters first.
+        let (cx, cy) = match space {
+            Space::Geographic => (x, y),
+            _ => (unit.to_meters(x), unit.to_meters(y)),
+        };
+        let result = convert::convert(space, cx, cy, params, epsg, csf);
         Ok(result.into())
     }
 
@@ -490,6 +493,45 @@ impl QueryRoot {
         let bytes = storage.get(&key).await.map_err(async_graphql::Error::new)?;
         String::from_utf8(bytes)
             .map_err(|_| async_graphql::Error::new("overlay is not valid UTF-8"))
+    }
+
+    /// Cached OpenTopography terrain metadata for a project (null until first
+    /// fetched). Drives the "Refresh terrain" 7-day cooldown on the client.
+    async fn project_terrain(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+    ) -> Result<Option<ProjectTerrain>> {
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        let row = sqlx::query_as(&format!(
+            "SELECT {TERRAIN_COLUMNS} FROM project_terrain WHERE project_id = $1"
+        ))
+        .bind(project_id)
+        .fetch_optional(pool)
+        .await?;
+        Ok(row)
+    }
+
+    /// Base64-encoded cached DEM GeoTIFF for the project's terrain.
+    async fn project_terrain_content(&self, ctx: &Context<'_>, project_id: Uuid) -> Result<String> {
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        let key: Option<(String,)> =
+            sqlx::query_as("SELECT storage_key FROM project_terrain WHERE project_id = $1")
+                .bind(project_id)
+                .fetch_optional(pool)
+                .await?;
+        let Some((key,)) = key else {
+            return Err(async_graphql::Error::new(
+                "no terrain cached for this project",
+            ));
+        };
+        let storage = ctx.data::<Arc<dyn Storage>>()?;
+        let bytes = storage.get(&key).await.map_err(async_graphql::Error::new)?;
+        Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
     }
 
     /// Searches the EPSG coordinate-reference-system catalog by code or name.
@@ -1400,7 +1442,9 @@ impl MutationRoot {
             return Err(async_graphql::Error::new("category not found"));
         };
         if is_default {
-            return Err(async_graphql::Error::new("default categories cannot be deleted"));
+            return Err(async_graphql::Error::new(
+                "default categories cannot be deleted",
+            ));
         }
         let mut tx = pool.begin().await?;
         sqlx::query("UPDATE survey_points SET category_id = NULL WHERE category_id = $1")
@@ -1697,6 +1741,105 @@ impl MutationRoot {
         .bind(id)
         .bind(project_id)
         .bind(filename.trim())
+        .bind(&key)
+        .fetch_one(pool)
+        .await?;
+        Ok(row)
+    }
+
+    /// Fetches (if needed) and caches the OpenTopography DEM for a project's
+    /// bbox. Lazy: a cached terrain is reused unless `force`. A forced refresh is
+    /// blocked for 7 days after the last fetch (OpenTopography is rate-limited).
+    /// The DEM is fetched server-side here; the API key never reaches the client.
+    async fn refresh_terrain(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        south: f64,
+        north: f64,
+        west: f64,
+        east: f64,
+        demtype: Option<String>,
+        force: Option<bool>,
+    ) -> Result<ProjectTerrain> {
+        let auth = require_editor(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        let demtype = demtype.unwrap_or_else(|| "SRTMGL1".to_string());
+        let force = force.unwrap_or(false);
+
+        let existing: Option<(DateTime<Utc>,)> =
+            sqlx::query_as("SELECT fetched_at FROM project_terrain WHERE project_id = $1")
+                .bind(project_id)
+                .fetch_optional(pool)
+                .await?;
+        if let Some((fetched_at,)) = existing {
+            if !force {
+                // Already cached and no forced refresh requested — reuse it.
+                let row = sqlx::query_as(&format!(
+                    "SELECT {TERRAIN_COLUMNS} FROM project_terrain WHERE project_id = $1"
+                ))
+                .bind(project_id)
+                .fetch_one(pool)
+                .await?;
+                return Ok(row);
+            }
+            let age = Utc::now() - fetched_at;
+            if age < chrono::Duration::days(7) {
+                let days = (7 - age.num_days()).max(1);
+                return Err(async_graphql::Error::new(format!(
+                    "Terrain was refreshed recently — try again in {days} day(s)."
+                )));
+            }
+        }
+
+        let api_key = std::env::var("OPENTOPO_API_KEY")
+            .map_err(|_| async_graphql::Error::new("OPENTOPO_API_KEY is not configured"))?;
+        let url = format!(
+            "https://portal.opentopography.org/API/globaldem?demtype={demtype}\
+             &south={south}&north={north}&west={west}&east={east}&outputFormat=GTiff&API_Key={api_key}"
+        );
+        let resp = reqwest::Client::new().get(&url).send().await.map_err(|e| {
+            async_graphql::Error::new(format!("OpenTopography request failed: {e}"))
+        })?;
+        if !resp.status().is_success() {
+            let code = resp.status().as_u16();
+            let body = resp.text().await.unwrap_or_default();
+            let snippet: String = body.chars().take(200).collect();
+            return Err(async_graphql::Error::new(format!(
+                "OpenTopography error ({code}): {snippet}"
+            )));
+        }
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| async_graphql::Error::new(format!("OpenTopography read failed: {e}")))?;
+        if bytes.is_empty() {
+            return Err(async_graphql::Error::new("OpenTopography returned no data"));
+        }
+
+        let storage = ctx.data::<Arc<dyn Storage>>()?;
+        let key = format!("terrain/{project_id}.tif");
+        storage
+            .put(&key, &bytes)
+            .await
+            .map_err(async_graphql::Error::new)?;
+        let row: ProjectTerrain = sqlx::query_as(&format!(
+            "INSERT INTO project_terrain \
+             (project_id, demtype, south, north, west, east, storage_key, fetched_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, now()) \
+             ON CONFLICT (project_id) DO UPDATE SET \
+               demtype = EXCLUDED.demtype, south = EXCLUDED.south, north = EXCLUDED.north, \
+               west = EXCLUDED.west, east = EXCLUDED.east, storage_key = EXCLUDED.storage_key, \
+               fetched_at = now() \
+             RETURNING {TERRAIN_COLUMNS}"
+        ))
+        .bind(project_id)
+        .bind(demtype.trim())
+        .bind(south)
+        .bind(north)
+        .bind(west)
+        .bind(east)
         .bind(&key)
         .fetch_one(pool)
         .await?;

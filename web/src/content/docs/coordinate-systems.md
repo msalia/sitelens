@@ -19,7 +19,9 @@ northing (Y) and easting (X) in the project's units.
 
 Angular coordinates on the ellipsoid (WGS84). SiteLens converts to and from
 geographic so it can place the site on terrain and so you can cross-check against
-mapping tools.
+mapping tools. The converter works **both ways** — give it a latitude/longitude
+and it returns the projected northing/easting and (where a transform is solved)
+the building-grid coordinates, all derived through the project's CRS.
 
 ## Grid vs. ground
 

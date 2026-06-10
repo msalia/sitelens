@@ -14,7 +14,7 @@ RUN cargo build --release
 FROM rust:1.93-slim AS runner
 WORKDIR /app
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates libssl3 \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/release/sitelens-api /usr/local/bin/sitelens-api
 EXPOSE 4000

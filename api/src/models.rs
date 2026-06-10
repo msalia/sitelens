@@ -224,6 +224,9 @@ pub struct TransformResidual {
 pub enum CoordinateSpace {
     Grid,
     Projected,
+    /// Geographic input: `x` is longitude, `y` is latitude (degrees); `unit` is
+    /// ignored. Derives projected/grid/ground via the project's CRS + transform.
+    Geographic,
 }
 
 /// All derivable representations of a coordinate. Linear fields are meters;
@@ -438,6 +441,19 @@ pub struct CadOverlay {
     pub scale: f64,
     pub assume_real_world: bool,
     pub visible: bool,
+}
+
+/// Cached OpenTopography DEM metadata for a project (the GeoTIFF bytes live in
+/// storage; `storage_key` is intentionally not exposed via GraphQL).
+#[derive(SimpleObject, Clone, sqlx::FromRow)]
+pub struct ProjectTerrain {
+    pub project_id: Uuid,
+    pub demtype: String,
+    pub south: f64,
+    pub north: f64,
+    pub west: f64,
+    pub east: f64,
+    pub fetched_at: DateTime<Utc>,
 }
 
 // ---------------------------------------------------------------------------

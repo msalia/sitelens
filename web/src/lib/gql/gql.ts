@@ -13,7 +13,6 @@ import * as types from './graphql';
  * Learn more about it here: https://the-guild.dev/graphql/codegen/plugins/presets/preset-client#reducing-bundle-size
  */
 type Documents = {
-  '\n  query ConverterProjects {\n    projects {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      createdAt\n      updatedAt\n    }\n  }\n': typeof types.ConverterProjectsDocument;
   '\n  query Workspace($id: UUID!) {\n    project(id: $id) {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      createdAt\n      updatedAt\n    }\n    gridAxes(projectId: $id) {\n      id\n      projectId\n      family\n      label\n      position\n    }\n    controlPoints(projectId: $id) {\n      id\n      projectId\n      label\n      northing\n      easting\n      elevation\n      gridX\n      gridY\n      source\n    }\n    transform(projectId: $id) {\n      translationE\n      translationN\n      rotationDegrees\n      scale\n      rmsError\n      pointCount\n      residuals {\n        label\n        deltaEasting\n        deltaNorthing\n        magnitude\n      }\n    }\n    categories {\n      id\n      orgId\n      name\n      color\n      icon\n      isDefault\n    }\n    surveyPointCount(projectId: $id)\n  }\n': typeof types.WorkspaceDocument;
   '\n  query Projects {\n    projects {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      createdAt\n      updatedAt\n    }\n  }\n': typeof types.ProjectsDocument;
   '\n  mutation DeleteProject($id: UUID!) {\n    deleteProject(id: $id)\n  }\n': typeof types.DeleteProjectDocument;
@@ -39,8 +38,9 @@ type Documents = {
   '\n  query ExportPoints(\n    $id: UUID!\n    $format: ExportFormat!\n    $space: ExportSpace!\n    $unit: LengthUnit!\n    $columns: [ExportColumn!]\n    $pointIds: [UUID!]\n    $categoryId: UUID\n  ) {\n    exportPoints(\n      projectId: $id\n      format: $format\n      space: $space\n      unit: $unit\n      columns: $columns\n      pointIds: $pointIds\n      categoryId: $categoryId\n    )\n  }\n': typeof types.ExportPointsDocument;
   '\n  mutation SetGridAxes($id: UUID!, $unit: LengthUnit!, $axes: [GridAxisInput!]!) {\n    setGridAxes(projectId: $id, unit: $unit, axes: $axes) {\n      id\n    }\n  }\n': typeof types.SetGridAxesDocument;
   '\n  mutation ImportPoints(\n    $id: UUID!\n    $format: ImportFormat!\n    $content: String!\n    $unit: LengthUnit!\n    $mapping: CsvMappingInput\n    $filename: String\n    $categoryId: UUID\n    $profile: String\n  ) {\n    importPoints(\n      projectId: $id\n      format: $format\n      content: $content\n      unit: $unit\n      mapping: $mapping\n      sourceFilename: $filename\n      categoryId: $categoryId\n      saveProfileName: $profile\n    ) {\n      rowCount\n    }\n  }\n': typeof types.ImportPointsDocument;
-  '\n  query SceneAndOverlays($id: UUID!) {\n    publicConfig {\n      cesiumIonToken\n    }\n    sceneData(projectId: $id) {\n      origin {\n        latitude\n        longitude\n        height\n      }\n      originProjectedE\n      originProjectedN\n      controlPoints {\n        id\n        label\n        latitude\n        longitude\n        height\n        easting\n        northing\n        categoryId\n      }\n      surveyPoints {\n        id\n        label\n        latitude\n        longitude\n        height\n        easting\n        northing\n        categoryId\n      }\n      gridLines {\n        label\n        coordinates {\n          latitude\n          longitude\n          height\n        }\n      }\n    }\n    cadOverlays(projectId: $id) {\n      id\n      projectId\n      originalFilename\n      offsetE\n      offsetN\n      rotationDeg\n      scale\n      assumeRealWorld\n      visible\n    }\n  }\n': typeof types.SceneAndOverlaysDocument;
-  '\n  query OverlayContent($id: UUID!) {\n    cadOverlayContent(id: $id)\n  }\n': typeof types.OverlayContentDocument;
+  '\n  query Scene($id: UUID!) {\n    sceneData(projectId: $id) {\n      origin {\n        latitude\n        longitude\n        height\n      }\n      originProjectedE\n      originProjectedN\n      controlPoints {\n        id\n        label\n        latitude\n        longitude\n        height\n        easting\n        northing\n        categoryId\n      }\n      surveyPoints {\n        id\n        label\n        latitude\n        longitude\n        height\n        easting\n        northing\n        categoryId\n      }\n      gridLines {\n        label\n        coordinates {\n          latitude\n          longitude\n          height\n        }\n      }\n    }\n    projectTerrain(projectId: $id) {\n      demtype\n      fetchedAt\n    }\n  }\n': typeof types.SceneDocument;
+  '\n  query TerrainContent($id: UUID!) {\n    projectTerrainContent(projectId: $id)\n  }\n': typeof types.TerrainContentDocument;
+  '\n  mutation RefreshTerrain(\n    $id: UUID!\n    $south: Float!\n    $north: Float!\n    $west: Float!\n    $east: Float!\n    $force: Boolean\n  ) {\n    refreshTerrain(\n      projectId: $id\n      south: $south\n      north: $north\n      west: $west\n      east: $east\n      force: $force\n    ) {\n      demtype\n      fetchedAt\n    }\n  }\n': typeof types.RefreshTerrainDocument;
   '\n  query SurveyPoints(\n    $id: UUID!\n    $search: String\n    $cat: UUID\n    $limit: Int\n    $offset: Int\n    $sort: String\n    $descending: Boolean\n  ) {\n    surveyPoints(\n      projectId: $id\n      search: $search\n      categoryId: $cat\n      limit: $limit\n      offset: $offset\n      sort: $sort\n      descending: $descending\n    ) {\n      id\n      projectId\n      label\n      northing\n      easting\n      elevation\n      description\n      categoryId\n      tags\n      importBatchId\n    }\n    surveyPointCount(projectId: $id, search: $search, categoryId: $cat)\n  }\n': typeof types.SurveyPointsDocument;
   '\n  mutation DeleteSurveyPoint($id: UUID!) {\n    deleteSurveyPoint(id: $id)\n  }\n': typeof types.DeleteSurveyPointDocument;
   '\n  mutation DeleteSurveyPoints($ids: [UUID!]!) {\n    deleteSurveyPoints(ids: $ids)\n  }\n': typeof types.DeleteSurveyPointsDocument;
@@ -49,8 +49,6 @@ type Documents = {
   '\n  mutation SolveTransform($id: UUID!) {\n    solveTransform(projectId: $id) {\n      translationE\n      translationN\n      rotationDegrees\n      scale\n      rmsError\n      pointCount\n      residuals {\n        label\n        deltaEasting\n        deltaNorthing\n        magnitude\n      }\n    }\n  }\n': typeof types.SolveTransformDocument;
 };
 const documents: Documents = {
-  '\n  query ConverterProjects {\n    projects {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      createdAt\n      updatedAt\n    }\n  }\n':
-    types.ConverterProjectsDocument,
   '\n  query Workspace($id: UUID!) {\n    project(id: $id) {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      createdAt\n      updatedAt\n    }\n    gridAxes(projectId: $id) {\n      id\n      projectId\n      family\n      label\n      position\n    }\n    controlPoints(projectId: $id) {\n      id\n      projectId\n      label\n      northing\n      easting\n      elevation\n      gridX\n      gridY\n      source\n    }\n    transform(projectId: $id) {\n      translationE\n      translationN\n      rotationDegrees\n      scale\n      rmsError\n      pointCount\n      residuals {\n        label\n        deltaEasting\n        deltaNorthing\n        magnitude\n      }\n    }\n    categories {\n      id\n      orgId\n      name\n      color\n      icon\n      isDefault\n    }\n    surveyPointCount(projectId: $id)\n  }\n':
     types.WorkspaceDocument,
   '\n  query Projects {\n    projects {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      createdAt\n      updatedAt\n    }\n  }\n':
@@ -100,10 +98,12 @@ const documents: Documents = {
     types.SetGridAxesDocument,
   '\n  mutation ImportPoints(\n    $id: UUID!\n    $format: ImportFormat!\n    $content: String!\n    $unit: LengthUnit!\n    $mapping: CsvMappingInput\n    $filename: String\n    $categoryId: UUID\n    $profile: String\n  ) {\n    importPoints(\n      projectId: $id\n      format: $format\n      content: $content\n      unit: $unit\n      mapping: $mapping\n      sourceFilename: $filename\n      categoryId: $categoryId\n      saveProfileName: $profile\n    ) {\n      rowCount\n    }\n  }\n':
     types.ImportPointsDocument,
-  '\n  query SceneAndOverlays($id: UUID!) {\n    publicConfig {\n      cesiumIonToken\n    }\n    sceneData(projectId: $id) {\n      origin {\n        latitude\n        longitude\n        height\n      }\n      originProjectedE\n      originProjectedN\n      controlPoints {\n        id\n        label\n        latitude\n        longitude\n        height\n        easting\n        northing\n        categoryId\n      }\n      surveyPoints {\n        id\n        label\n        latitude\n        longitude\n        height\n        easting\n        northing\n        categoryId\n      }\n      gridLines {\n        label\n        coordinates {\n          latitude\n          longitude\n          height\n        }\n      }\n    }\n    cadOverlays(projectId: $id) {\n      id\n      projectId\n      originalFilename\n      offsetE\n      offsetN\n      rotationDeg\n      scale\n      assumeRealWorld\n      visible\n    }\n  }\n':
-    types.SceneAndOverlaysDocument,
-  '\n  query OverlayContent($id: UUID!) {\n    cadOverlayContent(id: $id)\n  }\n':
-    types.OverlayContentDocument,
+  '\n  query Scene($id: UUID!) {\n    sceneData(projectId: $id) {\n      origin {\n        latitude\n        longitude\n        height\n      }\n      originProjectedE\n      originProjectedN\n      controlPoints {\n        id\n        label\n        latitude\n        longitude\n        height\n        easting\n        northing\n        categoryId\n      }\n      surveyPoints {\n        id\n        label\n        latitude\n        longitude\n        height\n        easting\n        northing\n        categoryId\n      }\n      gridLines {\n        label\n        coordinates {\n          latitude\n          longitude\n          height\n        }\n      }\n    }\n    projectTerrain(projectId: $id) {\n      demtype\n      fetchedAt\n    }\n  }\n':
+    types.SceneDocument,
+  '\n  query TerrainContent($id: UUID!) {\n    projectTerrainContent(projectId: $id)\n  }\n':
+    types.TerrainContentDocument,
+  '\n  mutation RefreshTerrain(\n    $id: UUID!\n    $south: Float!\n    $north: Float!\n    $west: Float!\n    $east: Float!\n    $force: Boolean\n  ) {\n    refreshTerrain(\n      projectId: $id\n      south: $south\n      north: $north\n      west: $west\n      east: $east\n      force: $force\n    ) {\n      demtype\n      fetchedAt\n    }\n  }\n':
+    types.RefreshTerrainDocument,
   '\n  query SurveyPoints(\n    $id: UUID!\n    $search: String\n    $cat: UUID\n    $limit: Int\n    $offset: Int\n    $sort: String\n    $descending: Boolean\n  ) {\n    surveyPoints(\n      projectId: $id\n      search: $search\n      categoryId: $cat\n      limit: $limit\n      offset: $offset\n      sort: $sort\n      descending: $descending\n    ) {\n      id\n      projectId\n      label\n      northing\n      easting\n      elevation\n      description\n      categoryId\n      tags\n      importBatchId\n    }\n    surveyPointCount(projectId: $id, search: $search, categoryId: $cat)\n  }\n':
     types.SurveyPointsDocument,
   '\n  mutation DeleteSurveyPoint($id: UUID!) {\n    deleteSurveyPoint(id: $id)\n  }\n':
@@ -118,12 +118,6 @@ const documents: Documents = {
     types.SolveTransformDocument,
 };
 
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: '\n  query ConverterProjects {\n    projects {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      createdAt\n      updatedAt\n    }\n  }\n',
-): typeof import('./graphql').ConverterProjectsDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -278,14 +272,20 @@ export function graphql(
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
-  source: '\n  query SceneAndOverlays($id: UUID!) {\n    publicConfig {\n      cesiumIonToken\n    }\n    sceneData(projectId: $id) {\n      origin {\n        latitude\n        longitude\n        height\n      }\n      originProjectedE\n      originProjectedN\n      controlPoints {\n        id\n        label\n        latitude\n        longitude\n        height\n        easting\n        northing\n        categoryId\n      }\n      surveyPoints {\n        id\n        label\n        latitude\n        longitude\n        height\n        easting\n        northing\n        categoryId\n      }\n      gridLines {\n        label\n        coordinates {\n          latitude\n          longitude\n          height\n        }\n      }\n    }\n    cadOverlays(projectId: $id) {\n      id\n      projectId\n      originalFilename\n      offsetE\n      offsetN\n      rotationDeg\n      scale\n      assumeRealWorld\n      visible\n    }\n  }\n',
-): typeof import('./graphql').SceneAndOverlaysDocument;
+  source: '\n  query Scene($id: UUID!) {\n    sceneData(projectId: $id) {\n      origin {\n        latitude\n        longitude\n        height\n      }\n      originProjectedE\n      originProjectedN\n      controlPoints {\n        id\n        label\n        latitude\n        longitude\n        height\n        easting\n        northing\n        categoryId\n      }\n      surveyPoints {\n        id\n        label\n        latitude\n        longitude\n        height\n        easting\n        northing\n        categoryId\n      }\n      gridLines {\n        label\n        coordinates {\n          latitude\n          longitude\n          height\n        }\n      }\n    }\n    projectTerrain(projectId: $id) {\n      demtype\n      fetchedAt\n    }\n  }\n',
+): typeof import('./graphql').SceneDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
-  source: '\n  query OverlayContent($id: UUID!) {\n    cadOverlayContent(id: $id)\n  }\n',
-): typeof import('./graphql').OverlayContentDocument;
+  source: '\n  query TerrainContent($id: UUID!) {\n    projectTerrainContent(projectId: $id)\n  }\n',
+): typeof import('./graphql').TerrainContentDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  mutation RefreshTerrain(\n    $id: UUID!\n    $south: Float!\n    $north: Float!\n    $west: Float!\n    $east: Float!\n    $force: Boolean\n  ) {\n    refreshTerrain(\n      projectId: $id\n      south: $south\n      north: $north\n      west: $west\n      east: $east\n      force: $force\n    ) {\n      demtype\n      fetchedAt\n    }\n  }\n',
+): typeof import('./graphql').RefreshTerrainDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

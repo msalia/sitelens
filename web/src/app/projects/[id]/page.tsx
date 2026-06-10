@@ -1,12 +1,6 @@
 'use client';
 
-import {
-  IconArrowLeft,
-  IconCircleCheck,
-  IconMapPin,
-  IconPoint,
-  IconRoute,
-} from '@tabler/icons-react';
+import { IconArrowLeft } from '@tabler/icons-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -257,49 +251,22 @@ export default function ProjectWorkspace() {
         </div>
       </aside>
 
-      {/* Hero — persistent 3D scene + live stat pills */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center justify-end gap-2 px-4 pt-4">
-          <StatPill
-            icon={<IconMapPin className="size-3.5" />}
-            label="Control"
-            value={points.length}
-          />
-          <StatPill icon={<IconPoint className="size-3.5" />} label="Points" value={pointCount} />
-          <StatPill
-            icon={
-              transform ? (
-                <IconCircleCheck className="size-3.5 text-emerald-500" />
-              ) : (
-                <IconRoute className="size-3.5" />
-              )
-            }
-            label={transform ? 'RMS' : 'Tie'}
-            value={transform ? transform.rmsError.toFixed(3) : 'Not tied'}
-          />
-        </div>
-        <section id="panel-scene" className="flex min-h-0 flex-1 flex-col p-4">
-          <SceneView project={project} categories={categories} focus={focus} />
-        </section>
-      </div>
-    </div>
-  );
-}
-
-function StatPill({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: React.ReactNode;
-}) {
-  return (
-    <div className="bg-card flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm shadow-sm">
-      {icon}
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-semibold">{value}</span>
+      {/* Hero — persistent, full-bleed 3D scene. Stats render as an overlay
+          inside the viewer (bottom-left), so the scene fills the whole pane. */}
+      <section id="panel-scene" className="min-h-0 min-w-0 flex-1">
+        <SceneView
+          project={project}
+          categories={categories}
+          focus={focus}
+          stats={[
+            { label: 'Control', value: points.length },
+            { label: 'Points', value: pointCount },
+            transform
+              ? { label: 'RMS', value: transform.rmsError.toFixed(3) }
+              : { label: 'Tie', value: 'Not tied' },
+          ]}
+        />
+      </section>
     </div>
   );
 }

@@ -13,6 +13,8 @@ type Point = (f64, f64);
 pub enum Space {
     Grid,
     Projected,
+    /// Geographic input — `x` is longitude, `y` is latitude (degrees).
+    Geographic,
 }
 
 /// Every representation we can derive from the input (None where not derivable —
@@ -33,6 +35,9 @@ pub struct CoordinateSet {
 ///
 /// `transform` ties grid↔projected; `epsg` enables geographic; `csf` is the
 /// combined scale factor (grid→ground divides projected coords by it).
+///
+/// For `Space::Grid`/`Space::Projected`, `x`/`y` are meters. For
+/// `Space::Geographic`, `x` is longitude and `y` is latitude (degrees).
 pub fn convert(
     space: Space,
     x_m: f64,
@@ -47,6 +52,12 @@ pub fn convert(
     let (grid, projected_grid): (Option<Point>, Option<Point>) = match space {
         Space::Grid => (Some((x_m, y_m)), transform.map(|t| t.apply(x_m, y_m))),
         Space::Projected => (transform.map(|t| t.inverse(x_m, y_m)), Some((x_m, y_m))),
+        Space::Geographic => {
+            // x = longitude, y = latitude (degrees) → projected, then grid.
+            let proj = crs::geographic_to_projected(epsg, y_m, x_m);
+            let grid = proj.and_then(|(e, n)| transform.map(|t| t.inverse(e, n)));
+            (grid, proj)
+        }
     };
 
     if let Some((gx, gy)) = grid {
@@ -113,6 +124,30 @@ mod tests {
         assert!(set.projected_ground_e.is_none());
         assert!(set.latitude.is_none());
         assert!(set.longitude.is_none());
+    }
+
+    #[test]
+    fn geographic_input_derives_projected_and_round_trips() {
+        // A point in the CA zone 5 (EPSG:2229) area; x = lon, y = lat.
+        let (lon, lat) = (-118.2437, 34.0522);
+        let set = convert(Space::Geographic, lon, lat, None, 2229, 1.0);
+        assert!(set.projected_grid_e.is_some());
+        assert!((set.latitude.unwrap() - lat).abs() < 1e-6);
+        assert!((set.longitude.unwrap() - lon).abs() < 1e-6);
+        // Grid needs a transform; none here.
+        assert!(set.grid_x.is_none());
+    }
+
+    #[test]
+    fn geographic_input_derives_grid_through_transform() {
+        let t = HelmertParams::from_components(1.0, 0.0, 100.0, 200.0);
+        let (lon, lat) = (-118.2437, 34.0522);
+        let set = convert(Space::Geographic, lon, lat, Some(t), 2229, 1.0);
+        let (e, n) = (set.projected_grid_e.unwrap(), set.projected_grid_n.unwrap());
+        // Grid is the inverse-transform of the derived projected coordinate.
+        let (gx, gy) = t.inverse(e, n);
+        assert!((set.grid_x.unwrap() - gx).abs() < 1e-9);
+        assert!((set.grid_y.unwrap() - gy).abs() < 1e-9);
     }
 
     #[test]

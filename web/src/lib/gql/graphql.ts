@@ -7,7 +7,12 @@ export type Incremental<T> =
   | { [P in keyof T]?: P extends ' $fragmentName' | '__typename' ? T[P] : never };
 import { DocumentTypeDecoration } from '@graphql-typed-document-node/core';
 /** The space an input coordinate is expressed in (GraphQL enum). */
-export type CoordinateSpace = 'GRID' | 'PROJECTED';
+export type CoordinateSpace =
+  /**
+   * Geographic input: `x` is longitude, `y` is latitude (degrees); `unit` is
+   * ignored. Derives projected/grid/ground via the project's CRS + transform.
+   */
+  'GEOGRAPHIC' | 'GRID' | 'PROJECTED';
 
 /** CSV column mapping (0-based indices). */
 export type CsvMappingInput = {
@@ -52,24 +57,6 @@ export type LengthUnit = 'INTERNATIONAL_FOOT' | 'METER' | 'US_SURVEY_FOOT';
 
 /** In-org role. The string values match the `users.role` CHECK constraint. */
 export type Role = 'ADMIN' | 'SURVEYOR' | 'VIEWER';
-
-export type ConverterProjectsQueryVariables = Exact<{ [key: string]: never }>;
-
-export type ConverterProjectsQuery = {
-  projects: Array<{
-    id: string;
-    orgId: string;
-    name: string;
-    description: string;
-    epsgCode: number;
-    displayUnit: LengthUnit;
-    combinedScaleFactor: number;
-    siteOriginLat: number | null;
-    siteOriginLon: number | null;
-    createdAt: string;
-    updatedAt: string;
-  }>;
-};
 
 export type WorkspaceQueryVariables = Exact<{
   id: string;
@@ -371,12 +358,11 @@ export type ImportPointsMutationVariables = Exact<{
 
 export type ImportPointsMutation = { importPoints: { rowCount: number } };
 
-export type SceneAndOverlaysQueryVariables = Exact<{
+export type SceneQueryVariables = Exact<{
   id: string;
 }>;
 
-export type SceneAndOverlaysQuery = {
-  publicConfig: { cesiumIonToken: string };
+export type SceneQuery = {
   sceneData: {
     originProjectedE: number | null;
     originProjectedN: number | null;
@@ -406,24 +392,25 @@ export type SceneAndOverlaysQuery = {
       coordinates: Array<{ latitude: number; longitude: number; height: number }>;
     }>;
   };
-  cadOverlays: Array<{
-    id: string;
-    projectId: string;
-    originalFilename: string;
-    offsetE: number;
-    offsetN: number;
-    rotationDeg: number;
-    scale: number;
-    assumeRealWorld: boolean;
-    visible: boolean;
-  }>;
+  projectTerrain: { demtype: string; fetchedAt: string } | null;
 };
 
-export type OverlayContentQueryVariables = Exact<{
+export type TerrainContentQueryVariables = Exact<{
   id: string;
 }>;
 
-export type OverlayContentQuery = { cadOverlayContent: string };
+export type TerrainContentQuery = { projectTerrainContent: string };
+
+export type RefreshTerrainMutationVariables = Exact<{
+  id: string;
+  south: number;
+  north: number;
+  west: number;
+  east: number;
+  force?: boolean | null | undefined;
+}>;
+
+export type RefreshTerrainMutation = { refreshTerrain: { demtype: string; fetchedAt: string } };
 
 export type SurveyPointsQueryVariables = Exact<{
   id: string;
@@ -518,23 +505,6 @@ export class TypedDocumentString<TResult, TVariables>
   }
 }
 
-export const ConverterProjectsDocument = new TypedDocumentString(`
-    query ConverterProjects {
-  projects {
-    id
-    orgId
-    name
-    description
-    epsgCode
-    displayUnit
-    combinedScaleFactor
-    siteOriginLat
-    siteOriginLon
-    createdAt
-    updatedAt
-  }
-}
-    `) as unknown as TypedDocumentString<ConverterProjectsQuery, ConverterProjectsQueryVariables>;
 export const WorkspaceDocument = new TypedDocumentString(`
     query Workspace($id: UUID!) {
   project(id: $id) {
@@ -853,11 +823,8 @@ export const ImportPointsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ImportPointsMutation, ImportPointsMutationVariables>;
-export const SceneAndOverlaysDocument = new TypedDocumentString(`
-    query SceneAndOverlays($id: UUID!) {
-  publicConfig {
-    cesiumIonToken
-  }
+export const SceneDocument = new TypedDocumentString(`
+    query Scene($id: UUID!) {
   sceneData(projectId: $id) {
     origin {
       latitude
@@ -895,24 +862,32 @@ export const SceneAndOverlaysDocument = new TypedDocumentString(`
       }
     }
   }
-  cadOverlays(projectId: $id) {
-    id
-    projectId
-    originalFilename
-    offsetE
-    offsetN
-    rotationDeg
-    scale
-    assumeRealWorld
-    visible
+  projectTerrain(projectId: $id) {
+    demtype
+    fetchedAt
   }
 }
-    `) as unknown as TypedDocumentString<SceneAndOverlaysQuery, SceneAndOverlaysQueryVariables>;
-export const OverlayContentDocument = new TypedDocumentString(`
-    query OverlayContent($id: UUID!) {
-  cadOverlayContent(id: $id)
+    `) as unknown as TypedDocumentString<SceneQuery, SceneQueryVariables>;
+export const TerrainContentDocument = new TypedDocumentString(`
+    query TerrainContent($id: UUID!) {
+  projectTerrainContent(projectId: $id)
 }
-    `) as unknown as TypedDocumentString<OverlayContentQuery, OverlayContentQueryVariables>;
+    `) as unknown as TypedDocumentString<TerrainContentQuery, TerrainContentQueryVariables>;
+export const RefreshTerrainDocument = new TypedDocumentString(`
+    mutation RefreshTerrain($id: UUID!, $south: Float!, $north: Float!, $west: Float!, $east: Float!, $force: Boolean) {
+  refreshTerrain(
+    projectId: $id
+    south: $south
+    north: $north
+    west: $west
+    east: $east
+    force: $force
+  ) {
+    demtype
+    fetchedAt
+  }
+}
+    `) as unknown as TypedDocumentString<RefreshTerrainMutation, RefreshTerrainMutationVariables>;
 export const SurveyPointsDocument = new TypedDocumentString(`
     query SurveyPoints($id: UUID!, $search: String, $cat: UUID, $limit: Int, $offset: Int, $sort: String, $descending: Boolean) {
   surveyPoints(

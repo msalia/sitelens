@@ -50,6 +50,11 @@ The space an input coordinate is expressed in (GraphQL enum).
 enum CoordinateSpace {
 	GRID
 	PROJECTED
+	"""
+	Geographic input: `x` is longitude, `y` is latitude (degrees); `unit` is
+	ignored. Derives projected/grid/ground via the project's CRS + transform.
+	"""
+	GEOGRAPHIC
 }
 
 """
@@ -303,6 +308,13 @@ type MutationRoot {
 	"""
 	uploadDxf(projectId: UUID!, filename: String!, content: String!): CadOverlay!
 	"""
+	Fetches (if needed) and caches the OpenTopography DEM for a project's
+	bbox. Lazy: a cached terrain is reused unless `force`. A forced refresh is
+	blocked for 7 days after the last fetch (OpenTopography is rate-limited).
+	The DEM is fetched server-side here; the API key never reaches the client.
+	"""
+	refreshTerrain(projectId: UUID!, south: Float!, north: Float!, west: Float!, east: Float!, demtype: String, force: Boolean): ProjectTerrain!
+	"""
 	Updates an overlay's georeference / visibility. Editor role required.
 	"""
 	setCadGeoreference(id: UUID!, offsetE: Float, offsetN: Float, rotationDeg: Float, scale: Float, assumeRealWorld: Boolean, visible: Boolean): CadOverlay!
@@ -358,6 +370,20 @@ type Project {
 	siteOriginLon: Float
 	createdAt: DateTime!
 	updatedAt: DateTime!
+}
+
+"""
+Cached OpenTopography DEM metadata for a project (the GeoTIFF bytes live in
+storage; `storage_key` is intentionally not exposed via GraphQL).
+"""
+type ProjectTerrain {
+	projectId: UUID!
+	demtype: String!
+	south: Float!
+	north: Float!
+	west: Float!
+	east: Float!
+	fetchedAt: DateTime!
 }
 
 """
@@ -449,6 +475,15 @@ type QueryRoot {
 	The raw DXF text of an overlay (for client-side parsing/rendering).
 	"""
 	cadOverlayContent(id: UUID!): String!
+	"""
+	Cached OpenTopography terrain metadata for a project (null until first
+	fetched). Drives the "Refresh terrain" 7-day cooldown on the client.
+	"""
+	projectTerrain(projectId: UUID!): ProjectTerrain
+	"""
+	Base64-encoded cached DEM GeoTIFF for the project's terrain.
+	"""
+	projectTerrainContent(projectId: UUID!): String!
 	"""
 	Searches the EPSG coordinate-reference-system catalog by code or name.
 	"""

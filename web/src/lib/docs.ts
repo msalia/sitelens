@@ -68,7 +68,8 @@ export const docsOrder: DocMeta[] = [
     title: 'Converting & Exporting',
   },
   {
-    description: 'The Cesium scene, terrain backdrop, elevation, and point categories.',
+    description:
+      'The 3D scene, OpenTopography terrain, projecting onto terrain, camera views, and display toggles.',
     group: 'Visualization',
     href: '/docs/visualization',
     slug: 'visualization',

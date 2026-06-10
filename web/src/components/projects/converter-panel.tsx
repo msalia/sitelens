@@ -58,7 +58,7 @@ const CONVERT = graphql(`
   }
 `);
 
-type InputSpace = 'GRID' | 'PROJECTED';
+type InputSpace = 'GRID' | 'PROJECTED' | 'GEOGRAPHIC';
 
 /** A self-contained converter: type any coordinate, see every representation. */
 export function ConverterPanel({ project }: { project: Project }) {
@@ -70,8 +70,21 @@ export function ConverterPanel({ project }: { project: Project }) {
   const [busy, setBusy] = useState(false);
 
   const displayLabel = UNIT_LABELS[project.displayUnit];
-  const xLabel = space === 'GRID' ? 'Grid X' : 'Easting';
-  const yLabel = space === 'GRID' ? 'Grid Y' : 'Northing';
+  const isGeo = space === 'GEOGRAPHIC';
+  const xLabel = isGeo ? 'Longitude' : space === 'GRID' ? 'Grid X' : 'Easting';
+  const yLabel = isGeo ? 'Latitude' : space === 'GRID' ? 'Grid Y' : 'Northing';
+  // For geographic input, hint with the project's own site origin (falls back to
+  // the field name when the project has none set).
+  const xPlaceholder = isGeo
+    ? project.siteOriginLon !== null
+      ? String(project.siteOriginLon)
+      : 'Longitude'
+    : '0.000';
+  const yPlaceholder = isGeo
+    ? project.siteOriginLat !== null
+      ? String(project.siteOriginLat)
+      : 'Latitude'
+    : '0.000';
 
   async function onConvert(e: React.FormEvent) {
     e.preventDefault();
@@ -118,13 +131,14 @@ export function ConverterPanel({ project }: { project: Project }) {
                     <SelectLabel>Input space</SelectLabel>
                     <SelectItem value="PROJECTED">Projected (grid)</SelectItem>
                     <SelectItem value="GRID">Building grid</SelectItem>
+                    <SelectItem value="GEOGRAPHIC">Geographic (lat/long)</SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>
             </Field>
             <Field>
               <FieldLabel htmlFor="cv-unit">Input unit</FieldLabel>
-              <Select value={unit} onValueChange={(v) => setUnit(v as LengthUnit)}>
+              <Select value={unit} onValueChange={(v) => setUnit(v as LengthUnit)} disabled={isGeo}>
                 <SelectTrigger id="cv-unit" className="w-full">
                   <SelectValue placeholder="Select a unit" />
                 </SelectTrigger>
@@ -147,7 +161,7 @@ export function ConverterPanel({ project }: { project: Project }) {
                 inputMode="decimal"
                 value={x}
                 onChange={(e) => setX(e.target.value)}
-                placeholder="0.000"
+                placeholder={xPlaceholder}
               />
             </Field>
             <Field>
@@ -157,7 +171,7 @@ export function ConverterPanel({ project }: { project: Project }) {
                 inputMode="decimal"
                 value={y}
                 onChange={(e) => setY(e.target.value)}
-                placeholder="0.000"
+                placeholder={yPlaceholder}
               />
             </Field>
           </div>

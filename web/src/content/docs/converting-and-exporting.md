@@ -17,9 +17,18 @@ No manual math; the conversions are always live and consistent.
 
 ## The standalone converter
 
-For ad-hoc work not tied to a stored point, the standalone converter takes a
-coordinate in any system and unit and returns all the others at once. Useful for
-a quick check against a datasheet or a stakeout value.
+For ad-hoc work not tied to a stored point, the standalone converter (the
+**Converter** tab) takes a coordinate in any input space and returns all the
+others at once. Pick the input space:
+
+- **Projected (grid)** — easting/northing in the chosen unit.
+- **Building grid** — grid X/Y in the chosen unit.
+- **Geographic (lat/long)** — longitude/latitude in degrees (the unit selector is
+  ignored). The defaults shown are your project's own site origin.
+
+It returns the building grid, projected grid/ground, and latitude/longitude
+together — useful for a quick check against a datasheet or a stakeout value, or
+to find where a known lat/long lands on the site.
 
 ## Exporting
 
@@ -31,10 +40,7 @@ filter, or every point to:
   easting, elevation, description, latitude, longitude.
 - **LandXML** — for richer round-tripping with other survey tools.
 
-You can also capture an **image snapshot** — a PNG of the 3D view — from the 3D
-panel for reports.
-
 Because conversions are exact and round-trip cleanly, you can export in whatever
 system the next tool in your pipeline expects.
 
-Next: [Architecture](/docs/architecture).
+Next: [3D Visualization](/docs/visualization).
