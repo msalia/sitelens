@@ -15,13 +15,15 @@ use crate::auth::{
 };
 use crate::convert::{self, Space};
 use crate::crs;
+use crate::export::{self, ExportPoint};
 use crate::geo::{solve_helmert, Correspondence, HelmertParams};
 use crate::import::{self, CsvMapping};
 use crate::models::{
-    CadOverlay, ControlPoint, CoordinateSet, CoordinateSpace, CsvMappingInput, EpsgEntry, GridAxis,
-    GridAxisInput, GridAxisRow, ImportBatch, ImportFormat, ImportProfile, ImportProfileRow,
-    InviteResult, LoginRow, Org, PointCategory, PointGroup, Project, ProjectRow, SceneData,
-    SceneLine, ScenePoint, SignupResult, SurveyPoint, Transform, TransformResidual, User, UserRow,
+    CadOverlay, ControlPoint, CoordinateSet, CoordinateSpace, CsvMappingInput, EpsgEntry,
+    ExportColumn, ExportFormat, ExportSpace, GridAxis, GridAxisInput, GridAxisRow, ImportBatch,
+    ImportFormat, ImportProfile, ImportProfileRow, InviteResult, LoginRow, Org, PointCategory,
+    PointGroup, Project, ProjectRow, PublicConfig, SceneData, SceneLine, ScenePoint, SignupResult,
+    SurveyPoint, Transform, TransformResidual, User, UserRow,
 };
 use crate::storage::Storage;
 
@@ -158,6 +160,14 @@ impl QueryRoot {
             Ok(_) => "connected".to_string(),
             Err(_) => "disconnected".to_string(),
         }
+    }
+
+    /// Public runtime config the client needs (e.g. the shared Cesium Ion token).
+    async fn public_config(&self, ctx: &Context<'_>) -> Result<PublicConfig> {
+        let cfg = config(ctx)?;
+        Ok(PublicConfig {
+            cesium_ion_token: cfg.cesium_ion_token.clone(),
+        })
     }
 
     /// The currently authenticated user, or null if not logged in.
@@ -428,6 +438,135 @@ impl QueryRoot {
             .into_iter()
             .map(|(code, name)| EpsgEntry { code, name })
             .collect())
+    }
+
+    /// Exports points as CSV or LandXML in a chosen space + unit + column order.
+    /// Filter by explicit `pointIds` and/or `categoryId` (all points if neither).
+    async fn export_points(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        format: ExportFormat,
+        space: ExportSpace,
+        unit: LengthUnit,
+        columns: Option<Vec<ExportColumn>>,
+        point_ids: Option<Vec<Uuid>>,
+        category_id: Option<Uuid>,
+    ) -> Result<String> {
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+
+        let (epsg, csf): (i32, f64) =
+            sqlx::query_as("SELECT epsg_code, combined_scale_factor FROM projects WHERE id = $1")
+                .bind(project_id)
+                .fetch_one(pool)
+                .await?;
+        let params = load_transform_params(pool, project_id).await?;
+        if space == ExportSpace::Grid && params.is_none() {
+            return Err(async_graphql::Error::new(
+                "grid export requires a solved transform",
+            ));
+        }
+
+        type Row = (Uuid, String, f64, f64, Option<f64>, String);
+        let rows: Vec<Row> = sqlx::query_as(
+            "SELECT id, label, northing, easting, elevation, description FROM survey_points \
+             WHERE project_id = $1 \
+               AND ($2::uuid[] IS NULL OR id = ANY($2)) \
+               AND ($3::uuid IS NULL OR category_id = $3) \
+             ORDER BY created_at",
+        )
+        .bind(project_id)
+        .bind(point_ids.as_deref())
+        .bind(category_id)
+        .fetch_all(pool)
+        .await?;
+
+        let cols = columns.unwrap_or_else(|| {
+            vec![
+                ExportColumn::Point,
+                ExportColumn::Northing,
+                ExportColumn::Easting,
+                ExportColumn::Elevation,
+                ExportColumn::Description,
+            ]
+        });
+
+        let fmt_lin = |v: f64| format!("{v:.4}");
+        let fmt_deg = |v: f64| format!("{v:.8}");
+
+        // Northing/easting for the chosen space, in the export unit (degrees for geographic).
+        let space_ne = |e_m: f64, n_m: f64| -> (f64, f64) {
+            match space {
+                ExportSpace::ProjectedGrid => (unit.from_meters(n_m), unit.from_meters(e_m)),
+                ExportSpace::ProjectedGround => {
+                    (unit.from_meters(n_m / csf), unit.from_meters(e_m / csf))
+                }
+                ExportSpace::Grid => {
+                    let (x, y) = params.map(|t| t.inverse(e_m, n_m)).unwrap_or((0.0, 0.0));
+                    (unit.from_meters(y), unit.from_meters(x))
+                }
+                ExportSpace::Geographic => {
+                    let (lat, lon) =
+                        crs::projected_to_geographic(epsg, e_m, n_m).unwrap_or((0.0, 0.0));
+                    (lat, lon)
+                }
+            }
+        };
+
+        let mut csv_rows = Vec::with_capacity(rows.len());
+        let mut xml_points = Vec::with_capacity(rows.len());
+        for (_, label, n_m, e_m, z_m, description) in &rows {
+            let (north, east) = space_ne(*e_m, *n_m);
+            let latlon = crs::projected_to_geographic(epsg, *e_m, *n_m);
+            let z_unit = z_m.map(|z| unit.from_meters(z));
+            let is_geo = space == ExportSpace::Geographic;
+
+            let cells: Vec<String> = cols
+                .iter()
+                .map(|c| match c {
+                    ExportColumn::Point => label.clone(),
+                    ExportColumn::Description => description.clone(),
+                    ExportColumn::Northing => {
+                        if is_geo {
+                            fmt_deg(north)
+                        } else {
+                            fmt_lin(north)
+                        }
+                    }
+                    ExportColumn::Easting => {
+                        if is_geo {
+                            fmt_deg(east)
+                        } else {
+                            fmt_lin(east)
+                        }
+                    }
+                    ExportColumn::Elevation => z_unit.map(fmt_lin).unwrap_or_default(),
+                    ExportColumn::Latitude => latlon.map(|(la, _)| fmt_deg(la)).unwrap_or_default(),
+                    ExportColumn::Longitude => {
+                        latlon.map(|(_, lo)| fmt_deg(lo)).unwrap_or_default()
+                    }
+                })
+                .collect();
+            csv_rows.push(cells);
+
+            xml_points.push(ExportPoint {
+                name: label.clone(),
+                description: description.clone(),
+                northing: north,
+                easting: east,
+                elevation: z_unit,
+            });
+        }
+
+        Ok(match format {
+            ExportFormat::Csv => {
+                let headers: Vec<String> = cols.iter().map(column_header).collect();
+                export::to_csv(&headers, &csv_rows)
+            }
+            ExportFormat::Landxml => export::to_landxml(&xml_points),
+        })
     }
 
     /// Everything the 3D viewer needs, pre-projected to geographic coordinates.
@@ -1486,6 +1625,20 @@ impl MutationRoot {
         let _ = storage.delete(&key).await;
         Ok(true)
     }
+}
+
+/// CSV header label for an export column.
+fn column_header(c: &ExportColumn) -> String {
+    match c {
+        ExportColumn::Point => "Point",
+        ExportColumn::Northing => "Northing",
+        ExportColumn::Easting => "Easting",
+        ExportColumn::Elevation => "Elevation",
+        ExportColumn::Description => "Description",
+        ExportColumn::Latitude => "Latitude",
+        ExportColumn::Longitude => "Longitude",
+    }
+    .to_string()
 }
 
 /// Converts a GraphQL CSV mapping into the parser's mapping (validating indices).

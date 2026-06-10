@@ -17,6 +17,7 @@ fn schema(pool: PgPool) -> ApiSchema {
     let config = AuthConfig {
         jwt_secret: "test-secret".to_string(),
         cookie_secure: false,
+        cesium_ion_token: String::new(),
     };
     let storage: Arc<dyn Storage> = Arc::new(LocalStorage::new(
         std::env::temp_dir().join("sitelens-test-uploads"),
@@ -854,4 +855,51 @@ async fn dxf_overlay_upload_georef_delete(pool: PgPool) {
         exec_ok(&schema, &del, Some(admin_ctx(admin, org))).await["deleteCadOverlay"],
         Json::Bool(true)
     );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 8: export
+// ---------------------------------------------------------------------------
+
+#[sqlx::test(migrations = "./migrations")]
+async fn export_points_csv_and_landxml(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+
+    // Import two points in meters.
+    let content = "P,N,E,Z,D\n1,1000,2000,5,MON\n2,1001,2001,,IP\n";
+    let imp = r#"mutation ($id: UUID!, $c: String!, $m: CsvMappingInput!) {
+        importPoints(projectId: $id, format: CSV, content: $c, unit: METER, mapping: $m) { rowCount }
+    }"#;
+    exec_ok_vars(
+        &schema,
+        imp,
+        serde_json::json!({ "id": pid, "c": content,
+            "m": { "hasHeader": true, "labelCol": 0, "northingCol": 1, "eastingCol": 2, "elevationCol": 3, "descriptionCol": 4 } }),
+        admin_ctx(admin, org),
+    )
+    .await;
+
+    // CSV export (projected grid, meters, default PNEZD).
+    let csv_q = format!(
+        r#"{{ exportPoints(projectId: "{pid}", format: CSV, space: PROJECTED_GRID, unit: METER) }}"#
+    );
+    let csv = exec_ok(&schema, &csv_q, Some(admin_ctx(admin, org))).await["exportPoints"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(csv.contains("Point,Northing,Easting,Elevation,Description"));
+    assert!(csv.contains("1,1000.0000,2000.0000,5.0000,MON"));
+
+    // LandXML export.
+    let xml_q = format!(
+        r#"{{ exportPoints(projectId: "{pid}", format: LANDXML, space: PROJECTED_GRID, unit: METER) }}"#
+    );
+    let xml = exec_ok(&schema, &xml_q, Some(admin_ctx(admin, org))).await["exportPoints"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(xml.contains("<CgPoint"));
+    assert!(xml.contains("1000 2000 5"));
 }

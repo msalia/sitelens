@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 
 import { CategoryManagerDialog } from '@/components/projects/category-manager-dialog';
 import { CoordinateInspectorDialog } from '@/components/projects/coordinate-inspector-dialog';
+import { ExportDialog } from '@/components/projects/export-dialog';
 import { ImportDialog } from '@/components/projects/import-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -142,6 +143,11 @@ export function SurveyPointsPanel({
             </Button>
           )}
           <CategoryManagerDialog categories={categories} onChanged={onCategoriesChanged} />
+          <ExportDialog
+            project={project}
+            selectedIds={[...selected]}
+            categoryFilter={categoryFilter === ALL ? null : categoryFilter}
+          />
           <ImportDialog project={project} categories={categories} onImported={load} />
         </div>
       </CardHeader>

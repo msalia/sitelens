@@ -28,6 +28,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       COOKIE_SECURE: ${COOKIE_SECURE}
       STORAGE_DIR: ${STORAGE_DIR}
+      CESIUM_ION_TOKEN: ${CESIUM_ION_TOKEN:-}
     volumes:
       - uploads:${STORAGE_DIR}
     depends_on:

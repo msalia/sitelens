@@ -16,6 +16,7 @@ async fn main() {
     let config = AuthConfig {
         jwt_secret: "schema-only".to_string(),
         cookie_secure: false,
+        cesium_ion_token: String::new(),
     };
     let storage: Arc<dyn Storage> = Arc::new(LocalStorage::new("/tmp"));
     let schema = build_schema(pool, config, storage);

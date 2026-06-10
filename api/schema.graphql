@@ -80,6 +80,34 @@ type EpsgEntry {
 }
 
 """
+A selectable CSV column (caller chooses inclusion + order).
+"""
+enum ExportColumn {
+	POINT
+	NORTHING
+	EASTING
+	ELEVATION
+	DESCRIPTION
+	LATITUDE
+	LONGITUDE
+}
+
+enum ExportFormat {
+	CSV
+	LANDXML
+}
+
+"""
+Which coordinate space the exported northing/easting are in.
+"""
+enum ExportSpace {
+	PROJECTED_GRID
+	PROJECTED_GROUND
+	GRID
+	GEOGRAPHIC
+}
+
+"""
 A single grid axis. `position` is in meters (grid space).
 """
 type GridAxis {
@@ -318,6 +346,14 @@ type Project {
 	updatedAt: DateTime!
 }
 
+"""
+Public, non-secret runtime config the client needs (e.g. the shared Cesium
+Ion token used for World Terrain — Ion tokens are client-exposed by design).
+"""
+type PublicConfig {
+	cesiumIonToken: String!
+}
+
 type QueryRoot {
 	"""
 	Liveness check.
@@ -327,6 +363,10 @@ type QueryRoot {
 	Database connectivity check.
 	"""
 	dbStatus: String!
+	"""
+	Public runtime config the client needs (e.g. the shared Cesium Ion token).
+	"""
+	publicConfig: PublicConfig!
 	"""
 	The currently authenticated user, or null if not logged in.
 	"""
@@ -393,6 +433,11 @@ type QueryRoot {
 	Searches the EPSG coordinate-reference-system catalog by code or name.
 	"""
 	searchEpsg(query: String!, limit: Int): [EpsgEntry!]!
+	"""
+	Exports points as CSV or LandXML in a chosen space + unit + column order.
+	Filter by explicit `pointIds` and/or `categoryId` (all points if neither).
+	"""
+	exportPoints(projectId: UUID!, format: ExportFormat!, space: ExportSpace!, unit: LengthUnit!, columns: [ExportColumn!], pointIds: [UUID!], categoryId: UUID): String!
 	"""
 	Everything the 3D viewer needs, pre-projected to geographic coordinates.
 	"""

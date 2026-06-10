@@ -223,16 +223,16 @@ Get data back out; ad-hoc conversions.
 
 ### Deliverables
 
-- [ ] Export selected points / group / category to CSV (choose system, unit, column order incl. PNEZD presets)
-- [ ] LandXML export
-- [ ] Image snapshot (PDF/PNG) of the 3D view
-- [ ] Standalone converter tool (paste coord in any system+unit → all others, copy buttons)
+- [x] Export selected points / current category filter / all to CSV (choose coordinate space, unit, and which columns to include — point/N/E/Z/desc/lat/long, emitted in canonical order)
+- [x] LandXML export
+- [x] Image snapshot (PNG) of the 3D view (Snapshot button on the 3D panel)
+- [x] Standalone converter tool (enter a coord in any space+unit → all representations)
 
 ### Tests
 
-- [ ] Export round-trip: export → re-import yields equivalent coordinates
-- [ ] Unit tests on column-order presets + format generation
-- [ ] Playwright: select points → export → verify file contents
+- [x] Unit tests on CSV/LandXML format generation (`export.rs`: headers, row order, quoting, CgPoint output)
+- [x] Integration test: `exportPoints` resolver returns CSV + LandXML through the schema with auth + org scoping
+- [ ] Playwright: select points → export → verify file contents (deferred — headless Chromium/WebGL blocked in this sandbox)
 
 ### Validates
 

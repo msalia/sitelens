@@ -54,6 +54,8 @@ export interface RenderableOverlay {
 }
 
 export interface CesiumViewerProps {
+  /** When set, the viewer assigns a function that downloads the canvas as a PNG. */
+  captureRef?: React.MutableRefObject<(() => void) | null>;
   categories: PointCategory[];
   ionToken?: string;
   /** Called with a survey point id (the entity id) when picked in 3D. */
@@ -200,6 +202,8 @@ export function CesiumViewer(props: CesiumViewerProps) {
           new Cesium.OpenStreetMapImageryProvider({ url: 'https://tile.openstreetmap.org/' }),
         ),
         baseLayerPicker: false,
+        // preserveDrawingBuffer lets us read the canvas back for PNG snapshots.
+        contextOptions: { webgl: { preserveDrawingBuffer: true } },
         fullscreenButton: false,
         geocoder: false,
         homeButton: false,
@@ -211,6 +215,18 @@ export function CesiumViewer(props: CesiumViewerProps) {
         timeline: false,
       });
       viewerRef.current = viewer;
+
+      // Expose a snapshot function: force a render, then download the canvas.
+      if (propsRef.current.captureRef) {
+        propsRef.current.captureRef.current = () => {
+          viewer.render();
+          const url = viewer.canvas.toDataURL('image/png');
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'sitelens-scene.png';
+          a.click();
+        };
+      }
 
       viewer.selectedEntityChanged.addEventListener((entity: any) => {
         const id = entity?.id;
@@ -231,12 +247,16 @@ export function CesiumViewer(props: CesiumViewerProps) {
       populate(Cesium, viewer, propsRef.current);
     })();
 
+    const captureRef = propsRef.current.captureRef;
     return () => {
       disposed = true;
       if (viewer && !viewer.isDestroyed()) {
         viewer.destroy();
       }
       viewerRef.current = null;
+      if (captureRef) {
+        captureRef.current = null;
+      }
       link.remove();
     };
   }, []);

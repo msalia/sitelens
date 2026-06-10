@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { ControlPointsEditor } from '@/components/projects/control-points-editor';
+import { ConverterPanel } from '@/components/projects/converter-panel';
 import { EditProjectDialog } from '@/components/projects/edit-project-dialog';
 import { GridEditor } from '@/components/projects/grid-editor';
 import { SceneView } from '@/components/projects/scene-view';
@@ -149,6 +150,7 @@ export default function ProjectWorkspace() {
         <GridEditor project={project} axes={axes} onSaved={load} />
         <ControlPointsEditor project={project} points={points} onChanged={load} />
         <TransformPanel project={project} initialTransform={transform} />
+        <ConverterPanel project={project} />
         <SurveyPointsPanel project={project} categories={categories} onCategoriesChanged={load} />
         <SceneView project={project} categories={categories} />
       </div>

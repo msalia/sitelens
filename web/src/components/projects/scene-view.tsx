@@ -1,8 +1,8 @@
 'use client';
 
-import { IconCube } from '@tabler/icons-react';
+import { IconCamera, IconCube } from '@tabler/icons-react';
 import dynamic from 'next/dynamic';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { RenderableOverlay } from '@/components/projects/cesium-viewer';
@@ -27,6 +27,9 @@ const CesiumViewer = dynamic(
 
 const SCENE_QUERY = graphql(`
   query SceneAndOverlays($id: UUID!) {
+    publicConfig {
+      cesiumIonToken
+    }
     sceneData(projectId: $id) {
       origin {
         latitude
@@ -97,6 +100,8 @@ export function SceneView({
   const [shown, setShown] = useState(false);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [inspecting, setInspecting] = useState<InspectablePoint | null>(null);
+  const [ionToken, setIonToken] = useState<string | undefined>(undefined);
+  const captureRef = useRef<(() => void) | null>(null);
 
   const visibleCategoryIds = useMemo(
     () => new Set(categories.filter((c) => !hidden.has(c.id)).map((c) => c.id)),
@@ -108,6 +113,7 @@ export function SceneView({
       const data = await gql(SCENE_QUERY, { id: project.id });
       setScene(data.sceneData);
       setOverlayMeta(data.cadOverlays);
+      setIonToken(data.publicConfig.cesiumIonToken || undefined);
       setShown(true);
 
       // Fetch + parse DXF content for visible overlays.
@@ -163,10 +169,18 @@ export function SceneView({
     <Card className="lg:col-span-2">
       <CardHeader className="flex-row items-center justify-between">
         <CardTitle>3D view</CardTitle>
-        <Button size="sm" variant="outline" onClick={load}>
-          <IconCube className="mr-1 size-4" />
-          {shown ? 'Reload scene' : 'Show 3D view'}
-        </Button>
+        <div className="flex items-center gap-2">
+          {shown && scene ? (
+            <Button size="sm" variant="outline" onClick={() => captureRef.current?.()}>
+              <IconCamera className="mr-1 size-4" />
+              Snapshot
+            </Button>
+          ) : null}
+          <Button size="sm" variant="outline" onClick={load}>
+            <IconCube className="mr-1 size-4" />
+            {shown ? 'Reload scene' : 'Show 3D view'}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {!shown || !scene ? (
@@ -200,7 +214,8 @@ export function SceneView({
               visibleCategoryIds={visibleCategoryIds}
               onSelectPoint={onSelectPoint}
               overlays={renderables}
-              ionToken={process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN || undefined}
+              ionToken={ionToken}
+              captureRef={captureRef}
             />
             <CadOverlayPanel project={project} overlays={overlayMeta} onChanged={load} />
           </>

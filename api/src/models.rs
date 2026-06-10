@@ -439,3 +439,41 @@ pub struct CadOverlay {
     pub assume_real_world: bool,
     pub visible: bool,
 }
+
+// ---------------------------------------------------------------------------
+// Phase 8: export
+// ---------------------------------------------------------------------------
+
+#[derive(Enum, Copy, Clone, Eq, PartialEq, Debug)]
+pub enum ExportFormat {
+    Csv,
+    Landxml,
+}
+
+/// Which coordinate space the exported northing/easting are in.
+#[derive(Enum, Copy, Clone, Eq, PartialEq, Debug)]
+pub enum ExportSpace {
+    ProjectedGrid,
+    ProjectedGround,
+    Grid,
+    Geographic,
+}
+
+/// A selectable CSV column (caller chooses inclusion + order).
+#[derive(Enum, Copy, Clone, Eq, PartialEq, Debug)]
+pub enum ExportColumn {
+    Point,
+    Northing,
+    Easting,
+    Elevation,
+    Description,
+    Latitude,
+    Longitude,
+}
+
+/// Public, non-secret runtime config the client needs (e.g. the shared Cesium
+/// Ion token used for World Terrain — Ion tokens are client-exposed by design).
+#[derive(SimpleObject)]
+pub struct PublicConfig {
+    pub cesium_ion_token: String,
+}

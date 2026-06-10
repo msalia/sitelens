@@ -4,6 +4,11 @@ type Exact<T extends { [key: string]: unknown }> = { [K in keyof T]: T[K] };
 /** Internal type. DO NOT USE DIRECTLY. */
 export type Incremental<T> = T | { [P in keyof T]?: P extends ' $fragmentName' | '__typename' ? T[P] : never };
 import { DocumentTypeDecoration } from '@graphql-typed-document-node/core';
+/** The space an input coordinate is expressed in (GraphQL enum). */
+export type CoordinateSpace =
+  | 'GRID'
+  | 'PROJECTED';
+
 /** CSV column mapping (0-based indices). */
 export type CsvMappingInput = {
   descriptionCol?: number | null | undefined;
@@ -13,6 +18,27 @@ export type CsvMappingInput = {
   labelCol?: number | null | undefined;
   northingCol: number;
 };
+
+/** A selectable CSV column (caller chooses inclusion + order). */
+export type ExportColumn =
+  | 'DESCRIPTION'
+  | 'EASTING'
+  | 'ELEVATION'
+  | 'LATITUDE'
+  | 'LONGITUDE'
+  | 'NORTHING'
+  | 'POINT';
+
+export type ExportFormat =
+  | 'CSV'
+  | 'LANDXML';
+
+/** Which coordinate space the exported northing/easting are in. */
+export type ExportSpace =
+  | 'GEOGRAPHIC'
+  | 'GRID'
+  | 'PROJECTED_GRID'
+  | 'PROJECTED_GROUND';
 
 /** Input for replacing the grid. `position` is expressed in `unit`. */
 export type GridAxisInput = {
@@ -155,6 +181,17 @@ export type DeleteControlPointMutationVariables = Exact<{
 
 export type DeleteControlPointMutation = { deleteControlPoint: boolean };
 
+export type StandaloneConvertQueryVariables = Exact<{
+  id: string;
+  space: CoordinateSpace;
+  x: number;
+  y: number;
+  unit: LengthUnit;
+}>;
+
+
+export type StandaloneConvertQuery = { convertCoordinate: { gridX: number | null, gridY: number | null, projectedGridE: number | null, projectedGridN: number | null, projectedGroundE: number | null, projectedGroundN: number | null, latitude: number | null, longitude: number | null } };
+
 export type ConvertCoordinateQueryVariables = Exact<{
   id: string;
   x: number;
@@ -214,6 +251,19 @@ export type SearchEpsgQueryVariables = Exact<{
 
 export type SearchEpsgQuery = { searchEpsg: Array<{ code: number, name: string }> };
 
+export type ExportPointsQueryVariables = Exact<{
+  id: string;
+  format: ExportFormat;
+  space: ExportSpace;
+  unit: LengthUnit;
+  columns?: Array<ExportColumn> | ExportColumn | null | undefined;
+  pointIds?: Array<string> | string | null | undefined;
+  categoryId?: string | null | undefined;
+}>;
+
+
+export type ExportPointsQuery = { exportPoints: string };
+
 export type SetGridAxesMutationVariables = Exact<{
   id: string;
   unit: LengthUnit;
@@ -242,7 +292,7 @@ export type SceneAndOverlaysQueryVariables = Exact<{
 }>;
 
 
-export type SceneAndOverlaysQuery = { sceneData: { originProjectedE: number | null, originProjectedN: number | null, origin: { latitude: number, longitude: number, height: number } | null, controlPoints: Array<{ id: string | null, label: string, latitude: number, longitude: number, height: number, easting: number, northing: number, categoryId: string | null }>, surveyPoints: Array<{ id: string | null, label: string, latitude: number, longitude: number, height: number, easting: number, northing: number, categoryId: string | null }>, gridLines: Array<{ label: string, coordinates: Array<{ latitude: number, longitude: number, height: number }> }> }, cadOverlays: Array<{ id: string, projectId: string, originalFilename: string, offsetE: number, offsetN: number, rotationDeg: number, scale: number, assumeRealWorld: boolean, visible: boolean }> };
+export type SceneAndOverlaysQuery = { publicConfig: { cesiumIonToken: string }, sceneData: { originProjectedE: number | null, originProjectedN: number | null, origin: { latitude: number, longitude: number, height: number } | null, controlPoints: Array<{ id: string | null, label: string, latitude: number, longitude: number, height: number, easting: number, northing: number, categoryId: string | null }>, surveyPoints: Array<{ id: string | null, label: string, latitude: number, longitude: number, height: number, easting: number, northing: number, categoryId: string | null }>, gridLines: Array<{ label: string, coordinates: Array<{ latitude: number, longitude: number, height: number }> }> }, cadOverlays: Array<{ id: string, projectId: string, originalFilename: string, offsetE: number, offsetN: number, rotationDeg: number, scale: number, assumeRealWorld: boolean, visible: boolean }> };
 
 export type OverlayContentQueryVariables = Exact<{
   id: string;
@@ -471,6 +521,20 @@ export const DeleteControlPointDocument = new TypedDocumentString(`
   deleteControlPoint(id: $id)
 }
     `) as unknown as TypedDocumentString<DeleteControlPointMutation, DeleteControlPointMutationVariables>;
+export const StandaloneConvertDocument = new TypedDocumentString(`
+    query StandaloneConvert($id: UUID!, $space: CoordinateSpace!, $x: Float!, $y: Float!, $unit: LengthUnit!) {
+  convertCoordinate(projectId: $id, space: $space, x: $x, y: $y, unit: $unit) {
+    gridX
+    gridY
+    projectedGridE
+    projectedGridN
+    projectedGroundE
+    projectedGroundN
+    latitude
+    longitude
+  }
+}
+    `) as unknown as TypedDocumentString<StandaloneConvertQuery, StandaloneConvertQueryVariables>;
 export const ConvertCoordinateDocument = new TypedDocumentString(`
     query ConvertCoordinate($id: UUID!, $x: Float!, $y: Float!) {
   convertCoordinate(projectId: $id, space: PROJECTED, x: $x, y: $y, unit: METER) {
@@ -541,6 +605,19 @@ export const SearchEpsgDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SearchEpsgQuery, SearchEpsgQueryVariables>;
+export const ExportPointsDocument = new TypedDocumentString(`
+    query ExportPoints($id: UUID!, $format: ExportFormat!, $space: ExportSpace!, $unit: LengthUnit!, $columns: [ExportColumn!], $pointIds: [UUID!], $categoryId: UUID) {
+  exportPoints(
+    projectId: $id
+    format: $format
+    space: $space
+    unit: $unit
+    columns: $columns
+    pointIds: $pointIds
+    categoryId: $categoryId
+  )
+}
+    `) as unknown as TypedDocumentString<ExportPointsQuery, ExportPointsQueryVariables>;
 export const SetGridAxesDocument = new TypedDocumentString(`
     mutation SetGridAxes($id: UUID!, $unit: LengthUnit!, $axes: [GridAxisInput!]!) {
   setGridAxes(projectId: $id, unit: $unit, axes: $axes) {
@@ -566,6 +643,9 @@ export const ImportPointsDocument = new TypedDocumentString(`
     `) as unknown as TypedDocumentString<ImportPointsMutation, ImportPointsMutationVariables>;
 export const SceneAndOverlaysDocument = new TypedDocumentString(`
     query SceneAndOverlays($id: UUID!) {
+  publicConfig {
+    cesiumIonToken
+  }
   sceneData(projectId: $id) {
     origin {
       latitude

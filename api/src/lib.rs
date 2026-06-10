@@ -2,6 +2,7 @@ pub mod auth;
 pub mod convert;
 pub mod crs;
 pub mod db;
+pub mod export;
 pub mod geo;
 pub mod import;
 pub mod models;
@@ -109,6 +110,7 @@ pub async fn run() {
         .map(|v| v != "false")
         .unwrap_or(true);
     let storage_dir = std::env::var("STORAGE_DIR").unwrap_or_else(|_| "./data/uploads".to_string());
+    let cesium_ion_token = std::env::var("CESIUM_ION_TOKEN").unwrap_or_default();
 
     let pool = connect_with_retry(&database_url).await;
     db::run_migrations(&pool).await.expect("migrations failed");
@@ -116,6 +118,7 @@ pub async fn run() {
     let config = AuthConfig {
         jwt_secret,
         cookie_secure,
+        cesium_ion_token,
     };
     let storage: Arc<dyn Storage> = Arc::new(LocalStorage::new(storage_dir));
     let schema = build_schema(pool.clone(), config.clone(), storage);

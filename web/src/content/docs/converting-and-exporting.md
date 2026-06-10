@@ -18,17 +18,21 @@ No manual math; the conversions are always live and consistent.
 ## The standalone converter
 
 For ad-hoc work not tied to a stored point, the standalone converter takes a
-coordinate in any system and unit and returns all the others, with copy buttons.
-Useful for a quick check against a datasheet or a stakeout value.
+coordinate in any system and unit and returns all the others at once. Useful for
+a quick check against a datasheet or a stakeout value.
 
 ## Exporting
 
-Export a selection, a group, or a whole category to:
+From the survey-points panel, export your current selection, the active category
+filter, or every point to:
 
-- **CSV** — choose the target system, unit, and column order, including common
-  presets like PNEZD that match survey machines.
-- **LandXML** — for richer round-tripping.
-- **Image snapshot** — a PNG/PDF of the 3D view for reports.
+- **CSV** — choose the coordinate space (projected grid/ground, building grid, or
+  lat/long), the unit, and exactly which columns to include — point, northing,
+  easting, elevation, description, latitude, longitude.
+- **LandXML** — for richer round-tripping with other survey tools.
+
+You can also capture an **image snapshot** — a PNG of the 3D view — from the 3D
+panel for reports.
 
 Because conversions are exact and round-trip cleanly, you can export in whatever
 system the next tool in your pipeline expects.

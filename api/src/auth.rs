@@ -43,6 +43,8 @@ impl Role {
 pub struct AuthConfig {
     pub jwt_secret: String,
     pub cookie_secure: bool,
+    /// Shared Cesium Ion token served to all clients (empty disables Ion terrain).
+    pub cesium_ion_token: String,
 }
 
 pub const SESSION_COOKIE: &str = "session";
