@@ -1,10 +1,15 @@
-# Local development overrides — auto-merged by `docker compose up`.
-# Dokploy deploys with `-f docker-compose.yml`, so these ports are local-only.
+# Template for local Docker overrides. Copy to `docker-compose.override.yml`
+# (gitignored) — Docker auto-merges it on `docker compose up`. Dokploy deploys
+# with `-f docker-compose.yml`, so everything here is local-only.
+#
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+#
 services:
   db:
     # arm64-native PostGIS for Apple Silicon — the official postgis/postgis:16-3.4
-    # is amd64-only and runs under slow emulation locally. Same upstream PostGIS,
-    # PG16-compatible. Local-only: prod (docker-compose.yml) keeps the official image.
+    # is amd64-only and runs under slow emulation locally. `imresamu/postgis` is
+    # multi-arch (same upstream PostGIS, PG16-compatible). Drop this line to use
+    # the official image. Prod (docker-compose.yml) keeps the official image.
     image: imresamu/postgis:16-3.4
     ports:
       - '5432:5432'
