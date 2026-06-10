@@ -23,6 +23,7 @@ and geographic systems.
 ## Quick start
 
 ```bash
+cp .env.example .env   # local config; add secrets here (gitignored)
 docker compose up --build
 # Web:  http://localhost:3000
 # Docs: http://localhost:3000/docs

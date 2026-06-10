@@ -8,8 +8,10 @@
 **/.next/
 **/out/
 
-# env files (root .env holds safe local defaults and IS committed;
-# ignore local/production override files)
+# env files — .env is gitignored (it may hold real local secrets, e.g. the
+# Cesium Ion token). Copy .env.example → .env to set up locally; production
+# values live in the Dokploy env. Only .env.example is committed.
+/.env
 .env.local
 .env*.local
 **/.env.local

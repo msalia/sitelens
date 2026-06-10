@@ -12,10 +12,11 @@
 ```bash
 git clone git@github.com:msalia/sitelens.git
 cd sitelens
+cp .env.example .env   # local config + secrets (gitignored)
 docker compose up --build
 ```
 
-This starts three services (ports from `docker-compose.override.yml`):
+This starts the services (ports from `docker-compose.override.yml`):
 
 | Service     | URL                           | Check                                     |
 | ----------- | ----------------------------- | ----------------------------------------- |
@@ -66,9 +67,10 @@ cd api && cargo test
 
 ```
 sitelens/
-├── docker-compose.yml            # web + api + db (production-shaped)
+├── docker-compose.yml            # web + api + db + redis (production-shaped)
 ├── docker-compose.override.yml   # local host ports (auto-merged)
-├── .env                          # safe local defaults (committed)
+├── .env.example                  # safe defaults (committed); copy to .env
+├── .env                          # local config + secrets (gitignored)
 ├── db/
 │   └── init.sql                  # enables PostGIS + uuid-ossp
 ├── web/                          # Next.js frontend + docs site

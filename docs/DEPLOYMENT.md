@@ -69,9 +69,10 @@ CESIUM_ION_TOKEN=<cesium ion token>     # optional; enables Ion World Terrain
 ```
 
 Secrets (`POSTGRES_PASSWORD`, `JWT_SECRET`, `CESIUM_ION_TOKEN`) live **only** in
-the Dokploy env, never in git. The committed root `.env` holds only safe
-local-dev defaults (and leaves the secrets empty/insecure). `COOKIE_SECURE=true`
-is required in production so the session cookie is only sent over HTTPS.
+the Dokploy env, never in git. The local `.env` is **gitignored**; copy
+`.env.example` (committed, safe defaults with empty secrets) to `.env` for local
+runs. `COOKIE_SECURE=true` is required in production so the session cookie is
+only sent over HTTPS.
 
 ## Monitoring a Deploy
 
