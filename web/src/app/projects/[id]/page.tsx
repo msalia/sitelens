@@ -11,6 +11,7 @@ import { ConverterPanel } from '@/components/projects/converter-panel';
 import { EditProjectDialog } from '@/components/projects/edit-project-dialog';
 import { GridEditor } from '@/components/projects/grid-editor';
 import { SceneView } from '@/components/projects/scene-view';
+import { SetupChecklist } from '@/components/projects/setup-checklist';
 import { SurveyPointsPanel } from '@/components/projects/survey-points-panel';
 import { TransformPanel } from '@/components/projects/transform-panel';
 import { graphql } from '@/lib/gql';
@@ -79,6 +80,7 @@ const WORKSPACE_QUERY = graphql(`
       icon
       isDefault
     }
+    surveyPointCount(projectId: $id)
   }
 `);
 
@@ -89,6 +91,7 @@ export default function ProjectWorkspace() {
   const [points, setPoints] = useState<ControlPoint[]>([]);
   const [transform, setTransform] = useState<Transform | null>(null);
   const [categories, setCategories] = useState<PointCategory[]>([]);
+  const [pointCount, setPointCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -99,6 +102,7 @@ export default function ProjectWorkspace() {
       setPoints(data.controlPoints);
       setTransform(data.transform);
       setCategories(data.categories);
+      setPointCount(data.surveyPointCount);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load project');
     } finally {
@@ -147,11 +151,25 @@ export default function ProjectWorkspace() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <GridEditor project={project} axes={axes} onSaved={load} />
-        <ControlPointsEditor project={project} points={points} onChanged={load} />
-        <TransformPanel project={project} initialTransform={transform} />
+        <SetupChecklist
+          axesCount={axes.length}
+          controlPointsWithGrid={points.filter((p) => p.gridX !== null && p.gridY !== null).length}
+          transformSolved={transform !== null}
+          pointCount={pointCount}
+        />
+        <section id="panel-grid" className="scroll-mt-6 lg:col-span-1">
+          <GridEditor project={project} axes={axes} onSaved={load} />
+        </section>
+        <section id="panel-control" className="scroll-mt-6 lg:col-span-1">
+          <ControlPointsEditor project={project} points={points} onChanged={load} />
+        </section>
+        <section id="panel-transform" className="scroll-mt-6 lg:col-span-2">
+          <TransformPanel project={project} initialTransform={transform} />
+        </section>
         <ConverterPanel project={project} />
-        <SurveyPointsPanel project={project} categories={categories} onCategoriesChanged={load} />
+        <section id="panel-points" className="scroll-mt-6 lg:col-span-2">
+          <SurveyPointsPanel project={project} categories={categories} onCategoriesChanged={load} />
+        </section>
         <SceneView project={project} categories={categories} />
       </div>
     </div>
