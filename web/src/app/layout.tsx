@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 
 import { Geist_Mono, Inter } from 'next/font/google';
+import { Toaster } from 'sonner';
 
 import { ThemeProvider } from '@/components/theme-provider';
 
@@ -33,7 +34,10 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="flex min-h-full flex-col">
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          {children}
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

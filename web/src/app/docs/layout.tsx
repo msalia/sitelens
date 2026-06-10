@@ -1,5 +1,3 @@
-import { Toaster } from 'sonner';
-
 import { AppShell } from '@/components/app-shell';
 import { DocsNav } from '@/components/docs-nav';
 import { getDocsNav } from '@/lib/docs';
@@ -15,7 +13,6 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
         <DocsNav items={items} />
         <div className="flex w-full max-w-3xl min-w-0 flex-col">{children}</div>
       </div>
-      <Toaster />
     </AppShell>
   );
 }

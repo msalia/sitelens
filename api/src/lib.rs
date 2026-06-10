@@ -33,9 +33,21 @@ use crate::storage::{LocalStorage, Storage};
 
 pub type ApiSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
 
-/// Auth rate-limit policy: 10 login/signup attempts per IP per minute.
-const RL_MAX: u64 = 10;
-const RL_WINDOW_SECS: u64 = 60;
+/// Auth rate-limit policy: defaults to 10 login/signup attempts per IP per
+/// minute. Overridable via env (e.g. raised for local E2E runs); prod leaves
+/// the env unset and keeps the defaults.
+fn rl_max() -> u64 {
+    std::env::var("AUTH_RATE_LIMIT_MAX")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10)
+}
+fn rl_window_secs() -> u64 {
+    std::env::var("AUTH_RATE_LIMIT_WINDOW_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(60)
+}
 
 /// Builds the GraphQL schema with an in-process auth rate limiter. Used by tests,
 /// the schema printer, and as the fallback when Redis is unconfigured.
@@ -44,7 +56,7 @@ pub fn build_schema(pool: PgPool, config: AuthConfig, storage: Arc<dyn Storage>)
         pool,
         config,
         storage,
-        RateLimiter::memory(RL_MAX as usize, Duration::from_secs(RL_WINDOW_SECS)),
+        RateLimiter::memory(rl_max() as usize, Duration::from_secs(rl_window_secs())),
     )
 }
 
@@ -158,7 +170,7 @@ pub async fn run() {
     // instances); fall back to in-process if REDIS_URL is unset or unreachable.
     let limiter = match std::env::var("REDIS_URL") {
         Ok(url) if !url.is_empty() => {
-            match RateLimiter::connect_redis(&url, RL_MAX, RL_WINDOW_SECS).await {
+            match RateLimiter::connect_redis(&url, rl_max(), rl_window_secs()).await {
                 Ok(rl) => {
                     println!("auth rate limiter: redis ({url})");
                     rl
@@ -167,11 +179,11 @@ pub async fn run() {
                     eprintln!(
                         "WARNING: REDIS_URL set but unreachable ({e}); using in-process rate limiter"
                     );
-                    RateLimiter::memory(RL_MAX as usize, Duration::from_secs(RL_WINDOW_SECS))
+                    RateLimiter::memory(rl_max() as usize, Duration::from_secs(rl_window_secs()))
                 }
             }
         }
-        _ => RateLimiter::memory(RL_MAX as usize, Duration::from_secs(RL_WINDOW_SECS)),
+        _ => RateLimiter::memory(rl_max() as usize, Duration::from_secs(rl_window_secs())),
     };
     let schema = build_schema_with(pool.clone(), config.clone(), storage, limiter);
     let state = AppState {

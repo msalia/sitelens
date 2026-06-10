@@ -1,40 +1,47 @@
 import { expect, test } from '@playwright/test';
 
-// This flow needs the full stack (web + api + db). When only the web dev server
-// is running (no API), it self-skips. Run `docker compose up` then `npm run test:e2e`.
+import { chooseSelect, signUpAndLogin } from './helpers';
+
+// Project lifecycle on the new 3-column create/edit form + delete confirm.
 test.beforeEach(async ({ request }) => {
-  const res = await request.post('/api/graphql', {
-    data: { query: '{ __typename }' },
-  });
+  const res = await request.post('/api/graphql', { data: { query: '{ __typename }' } });
   test.skip(!res.ok(), 'API not reachable — start the full stack to run this test');
 });
 
-test('sign up, verify, create a project, and see it listed', async ({ page }) => {
-  const stamp = Date.now();
-  const email = `e2e+${stamp}@sitelens.test`;
-
-  // Sign up.
-  await page.goto('/signup');
-  await page.getByLabel('Organization name').fill(`E2E Org ${stamp}`);
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill('password123');
-  await page.getByRole('button', { name: 'Create account' }).click();
-
-  // Verify (token shown on the page since email delivery is deferred).
-  await page.getByRole('button', { name: 'Verify & continue' }).click();
-  await expect(page).toHaveURL(/\/login$/);
-
-  // Log in.
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill('password123');
-  await page.getByRole('button', { name: 'Login' }).click();
-  await expect(page).toHaveURL(/\/projects$/);
-
-  // Create a project.
+test('create a project with a chosen display unit', async ({ page }) => {
+  await signUpAndLogin(page, 'proj-create');
   await page.getByRole('button', { name: 'New project' }).click();
-  await page.getByLabel('Name').fill('E2E Tower');
+  await page.getByLabel('Name').fill('Tower A');
+  await page.getByLabel('Description').fill('A test high-rise.');
+  await chooseSelect(page, 'cp-unit', 'Meter');
   await page.getByRole('button', { name: 'Create project' }).click();
+  await expect(page.getByRole('link', { name: 'Tower A' })).toBeVisible();
+});
 
-  // It appears in the list.
-  await expect(page.getByRole('link', { name: 'E2E Tower' })).toBeVisible();
+test('edit a project name from the workspace', async ({ page }) => {
+  await signUpAndLogin(page, 'proj-edit');
+  await page.getByRole('button', { name: 'New project' }).click();
+  await page.getByLabel('Name').fill('Old Name');
+  await page.getByRole('button', { name: 'Create project' }).click();
+  await page.getByRole('link', { name: 'Old Name' }).click();
+
+  await page.getByRole('button', { name: 'Edit project' }).click();
+  await page.getByLabel('Name').fill('New Name');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'New Name' })).toBeVisible();
+});
+
+test('delete a project requires confirmation', async ({ page }) => {
+  await signUpAndLogin(page, 'proj-delete');
+  await page.getByRole('button', { name: 'New project' }).click();
+  await page.getByLabel('Name').fill('Doomed Site');
+  await page.getByRole('button', { name: 'Create project' }).click();
+  await expect(page.getByRole('link', { name: 'Doomed Site' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Delete project' }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog.getByText(/Delete Doomed Site\?/)).toBeVisible();
+  await dialog.getByRole('button', { name: 'Delete' }).click();
+
+  await expect(page.getByRole('link', { name: 'Doomed Site' })).toBeHidden();
 });

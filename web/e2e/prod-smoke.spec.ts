@@ -13,10 +13,11 @@ const PROD_URL = process.env.SITELENS_PROD_URL ?? 'https://sitelens.msalia.org';
 test.use({ baseURL: PROD_URL });
 
 test.describe('production smoke', () => {
-  test('home page is live and links to docs', async ({ page }) => {
+  test('home page is live and links to auth', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { level: 1, name: 'SiteLens' })).toBeVisible();
-    await expect(page.getByRole('link', { name: /docs/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Log in' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Sign up' })).toBeVisible();
   });
 
   test('docs are behind the auth wall in prod', async ({ page }) => {
