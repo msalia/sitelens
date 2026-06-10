@@ -26,7 +26,7 @@ in 3D opens its coordinate inspector.
 After about ten seconds without interaction the camera begins a slow, continuous
 orbit around the site — a gentle "attract" motion for dashboards and screens. Any
 interaction stops it immediately, and it resumes after you're idle again. It is
-disabled automatically if your system is set to *reduce motion*.
+disabled automatically if your system is set to _reduce motion_.
 
 ## Terrain
 

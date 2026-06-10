@@ -11,7 +11,11 @@ test.beforeEach(async ({ request }) => {
 async function openCategories(page: import('@playwright/test').Page) {
   await createProjectAndOpen(page, `Cat ${Date.now()}`);
   await gotoTab(page, 'Points');
-  await page.getByRole('button', { name: /Categories/ }).click();
+  // Scope to the points panel — the 3D view also has a "Categories" control.
+  await page
+    .locator('#panel-points')
+    .getByRole('button', { name: /Categories/ })
+    .click();
   return page.getByRole('dialog');
 }
 
