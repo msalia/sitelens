@@ -159,7 +159,46 @@ fn require_editor<'a>(ctx: &'a Context) -> Result<&'a AuthContext> {
 }
 
 const PROJECT_COLUMNS: &str = "id, org_id, name, description, epsg_code, display_unit, \
-    combined_scale_factor, site_origin_lat, site_origin_lon, created_at, updated_at";
+    combined_scale_factor, site_origin_lat, site_origin_lon, site_origin_rotation_deg, \
+    created_at, updated_at";
+
+/// Builds the site rotation about a given projected pivot, or None when there's
+/// no rotation or no pivot. The pivot is the centroid of the project's points
+/// (see `points_centroid`) so the site spins about the middle of the survey
+/// rather than an arbitrary origin. Rotation is purely in the easting/northing
+/// plane — i.e. about the vertical (Z) axis — so elevations are unaffected, and
+/// only the points and grid turn (terrain/buildings are placed geographically).
+fn site_rotation(pivot: Option<(f64, f64)>, rotation_deg: f64) -> Option<convert::SiteRotation> {
+    if rotation_deg == 0.0 {
+        return None;
+    }
+    let (pivot_e, pivot_n) = pivot?;
+    Some(convert::SiteRotation {
+        pivot_e,
+        pivot_n,
+        theta_rad: rotation_deg.to_radians(),
+    })
+}
+
+/// Centroid (projected easting/northing) of every control and survey point in
+/// the project — the pivot the site rotation turns about. None when the project
+/// has no points yet (nothing to rotate about).
+async fn points_centroid(pool: &PgPool, project_id: Uuid) -> Result<Option<(f64, f64)>> {
+    let row: (Option<f64>, Option<f64>) = sqlx::query_as(
+        "SELECT AVG(easting), AVG(northing) FROM ( \
+            SELECT easting, northing FROM control_points WHERE project_id = $1 \
+            UNION ALL \
+            SELECT easting, northing FROM survey_points WHERE project_id = $1 \
+         ) pts",
+    )
+    .bind(project_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(match row {
+        (Some(e), Some(n)) => Some((e, n)),
+        _ => None,
+    })
+}
 
 const CONTROL_POINT_COLUMNS: &str =
     "id, project_id, label, northing, easting, elevation, grid_x, grid_y, source";
@@ -330,12 +369,15 @@ impl QueryRoot {
         let pool = pool(ctx)?;
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
 
-        let (epsg, csf): (i32, f64) =
-            sqlx::query_as("SELECT epsg_code, combined_scale_factor FROM projects WHERE id = $1")
-                .bind(project_id)
-                .fetch_one(pool)
-                .await?;
+        let (epsg, csf, rot_deg): (i32, f64, f64) = sqlx::query_as(
+            "SELECT epsg_code, combined_scale_factor, site_origin_rotation_deg \
+             FROM projects WHERE id = $1",
+        )
+        .bind(project_id)
+        .fetch_one(pool)
+        .await?;
         let params = load_transform_params(pool, project_id).await?;
+        let rotation = site_rotation(points_centroid(pool, project_id).await?, rot_deg);
 
         let space = match space {
             CoordinateSpace::Grid => Space::Grid,
@@ -348,7 +390,7 @@ impl QueryRoot {
             Space::Geographic => (x, y),
             _ => (unit.to_meters(x), unit.to_meters(y)),
         };
-        let result = convert::convert(space, cx, cy, params, epsg, csf);
+        let result = convert::convert_with_rotation(space, cx, cy, params, epsg, csf, rotation);
         Ok(result.into())
     }
 
@@ -643,12 +685,15 @@ impl QueryRoot {
         let pool = pool(ctx)?;
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
 
-        let (epsg, csf): (i32, f64) =
-            sqlx::query_as("SELECT epsg_code, combined_scale_factor FROM projects WHERE id = $1")
-                .bind(project_id)
-                .fetch_one(pool)
-                .await?;
+        let (epsg, csf, rot_deg): (i32, f64, f64) = sqlx::query_as(
+            "SELECT epsg_code, combined_scale_factor, site_origin_rotation_deg \
+             FROM projects WHERE id = $1",
+        )
+        .bind(project_id)
+        .fetch_one(pool)
+        .await?;
         let params = load_transform_params(pool, project_id).await?;
+        let rotation = site_rotation(points_centroid(pool, project_id).await?, rot_deg);
         if space == ExportSpace::Grid && params.is_none() {
             return Err(async_graphql::Error::new(
                 "grid export requires a solved transform",
@@ -694,8 +739,9 @@ impl QueryRoot {
                     (unit.from_meters(y), unit.from_meters(x))
                 }
                 ExportSpace::Geographic => {
+                    let (te, tn) = rotation.map_or((e_m, n_m), |r| r.to_true(e_m, n_m));
                     let (lat, lon) =
-                        crs::projected_to_geographic(epsg, e_m, n_m).unwrap_or((0.0, 0.0));
+                        crs::projected_to_geographic(epsg, te, tn).unwrap_or((0.0, 0.0));
                     (lat, lon)
                 }
             }
@@ -705,7 +751,8 @@ impl QueryRoot {
         let mut xml_points = Vec::with_capacity(rows.len());
         for (_, label, n_m, e_m, z_m, description) in &rows {
             let (north, east) = space_ne(*e_m, *n_m);
-            let latlon = crs::projected_to_geographic(epsg, *e_m, *n_m);
+            let (te, tn) = rotation.map_or((*e_m, *n_m), |r| r.to_true(*e_m, *n_m));
+            let latlon = crs::projected_to_geographic(epsg, te, tn);
             let z_unit = z_m.map(|z| unit.from_meters(z));
             let is_geo = space == ExportSpace::Geographic;
 
@@ -756,18 +803,36 @@ impl QueryRoot {
     }
 
     /// Everything the 3D viewer needs, pre-projected to geographic coordinates.
-    async fn scene_data(&self, ctx: &Context<'_>, project_id: Uuid) -> Result<SceneData> {
+    ///
+    /// The optional `site_origin_*` arguments override the stored project
+    /// georeference so the overlays-panel "Georeference" card can preview slider
+    /// edits live in the 3D view before they're committed with `updateProject`.
+    async fn scene_data(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        site_origin_lat: Option<f64>,
+        site_origin_lon: Option<f64>,
+        site_origin_rotation_deg: Option<f64>,
+    ) -> Result<SceneData> {
         let auth = require_auth(ctx)?;
         let pool = pool(ctx)?;
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
 
-        let (epsg, lat, lon): (i32, Option<f64>, Option<f64>) = sqlx::query_as(
-            "SELECT epsg_code, site_origin_lat, site_origin_lon FROM projects WHERE id = $1",
+        let (epsg, db_lat, db_lon, db_rot): (i32, Option<f64>, Option<f64>, f64) = sqlx::query_as(
+            "SELECT epsg_code, site_origin_lat, site_origin_lon, site_origin_rotation_deg \
+             FROM projects WHERE id = $1",
         )
         .bind(project_id)
         .fetch_one(pool)
         .await?;
+        // Live-preview overrides fall back to the saved values when omitted.
+        let lat = site_origin_lat.or(db_lat);
+        let lon = site_origin_lon.or(db_lon);
+        let rot_deg = site_origin_rotation_deg.unwrap_or(db_rot);
         let params = load_transform_params(pool, project_id).await?;
+        // The site spins about the centroid of all points, not the origin.
+        let rotation = site_rotation(points_centroid(pool, project_id).await?, rot_deg);
 
         let to_scene = |id: Option<Uuid>,
                         label: String,
@@ -776,7 +841,11 @@ impl QueryRoot {
                         z: Option<f64>,
                         cat: Option<Uuid>|
          -> Option<ScenePoint> {
-            crs::projected_to_geographic(epsg, e, n).map(|(latitude, longitude)| ScenePoint {
+            // Rotate the stored projected coords to true earth for placement, but
+            // keep the stored easting/northing on the point (the converter applies
+            // the same rotation, so the inspector stays consistent).
+            let (te, tn) = rotation.map_or((e, n), |r| r.to_true(e, n));
+            crs::projected_to_geographic(epsg, te, tn).map(|(latitude, longitude)| ScenePoint {
                 id,
                 label,
                 latitude,
@@ -853,7 +922,8 @@ impl QueryRoot {
                     .iter()
                     .filter_map(|&(gx, gy)| {
                         let (e, n) = t.apply(gx, gy);
-                        crs::projected_to_geographic(epsg, e, n).map(|(latitude, longitude)| {
+                        let (te, tn) = rotation.map_or((e, n), |r| r.to_true(e, n));
+                        crs::projected_to_geographic(epsg, te, tn).map(|(latitude, longitude)| {
                             crate::models::LatLng {
                                 latitude,
                                 longitude,
@@ -898,6 +968,7 @@ impl QueryRoot {
             origin,
             origin_projected_e: origin_proj.map(|(e, _)| e),
             origin_projected_n: origin_proj.map(|(_, n)| n),
+            site_rotation_deg: rot_deg,
             control_points,
             survey_points,
             grid_lines,
@@ -1168,6 +1239,7 @@ impl MutationRoot {
         combined_scale_factor: Option<f64>,
         site_origin_lat: Option<f64>,
         site_origin_lon: Option<f64>,
+        site_origin_rotation_deg: Option<f64>,
     ) -> Result<Project> {
         let auth = require_editor(ctx)?;
         if name.trim().is_empty() {
@@ -1176,8 +1248,8 @@ impl MutationRoot {
         let row: ProjectRow = sqlx::query_as(&format!(
             "INSERT INTO projects \
              (org_id, name, description, epsg_code, display_unit, combined_scale_factor, \
-              site_origin_lat, site_origin_lon) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING {PROJECT_COLUMNS}"
+              site_origin_lat, site_origin_lon, site_origin_rotation_deg) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING {PROJECT_COLUMNS}"
         ))
         .bind(auth.org_id)
         .bind(name.trim())
@@ -1187,6 +1259,7 @@ impl MutationRoot {
         .bind(combined_scale_factor.unwrap_or(1.0))
         .bind(site_origin_lat)
         .bind(site_origin_lon)
+        .bind(site_origin_rotation_deg.unwrap_or(0.0))
         .fetch_one(pool(ctx)?)
         .await?;
         Ok(row.into())
@@ -1204,6 +1277,7 @@ impl MutationRoot {
         combined_scale_factor: Option<f64>,
         site_origin_lat: Option<f64>,
         site_origin_lon: Option<f64>,
+        site_origin_rotation_deg: Option<f64>,
     ) -> Result<Project> {
         let auth = require_editor(ctx)?;
         let pool = pool(ctx)?;
@@ -1218,6 +1292,7 @@ impl MutationRoot {
                combined_scale_factor = COALESCE($6, combined_scale_factor), \
                site_origin_lat = COALESCE($7, site_origin_lat), \
                site_origin_lon = COALESCE($8, site_origin_lon), \
+               site_origin_rotation_deg = COALESCE($10, site_origin_rotation_deg), \
                updated_at = now() \
              WHERE id = $1 AND org_id = $9 RETURNING {PROJECT_COLUMNS}"
         ))
@@ -1230,6 +1305,7 @@ impl MutationRoot {
         .bind(site_origin_lat)
         .bind(site_origin_lon)
         .bind(auth.org_id)
+        .bind(site_origin_rotation_deg)
         .fetch_one(pool)
         .await?;
         Ok(row.into())
@@ -1822,9 +1898,9 @@ impl MutationRoot {
         let auth = require_editor(ctx)?;
         let pool = pool(ctx)?;
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
-        if content.len() > import::MAX_BYTES {
+        if content.len() > import::MAX_DXF_BYTES {
             return Err(async_graphql::Error::new(
-                "DXF exceeds the maximum allowed size",
+                "DXF exceeds the maximum allowed size (10 MB)",
             ));
         }
         if content.trim().is_empty() {

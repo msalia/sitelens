@@ -22,6 +22,7 @@ export interface ProjectFormValues {
   lat: string;
   lon: string;
   name: string;
+  rotation: string;
   scale: string;
 }
 
@@ -33,6 +34,7 @@ export function emptyProjectForm(): ProjectFormValues {
     lat: '',
     lon: '',
     name: '',
+    rotation: '0',
     scale: '1.0',
   };
 }
@@ -45,6 +47,7 @@ export function projectToForm(p: Project): ProjectFormValues {
     lat: p.siteOriginLat?.toString() ?? '',
     lon: p.siteOriginLon?.toString() ?? '',
     name: p.name,
+    rotation: String(p.siteOriginRotationDeg ?? 0),
     scale: String(p.combinedScaleFactor),
   };
 }
@@ -57,6 +60,7 @@ export function projectFormVariables(v: ProjectFormValues) {
     lat: v.lat ? parseFloat(v.lat) : null,
     lon: v.lon ? parseFloat(v.lon) : null,
     name: v.name,
+    rot: v.rotation ? parseFloat(v.rotation) : null,
     scale: v.scale ? parseFloat(v.scale) : null,
     unit: v.displayUnit,
   };
@@ -75,6 +79,8 @@ export function ProjectFormFields({ idPrefix, onChange, values }: ProjectFormFie
   );
   const scaleNum = parseFloat(values.scale) || 1;
   const scaleClamped = Math.min(1.1, Math.max(0.9, scaleNum));
+  const rotNum = parseFloat(values.rotation) || 0;
+  const rotClamped = Math.min(360, Math.max(0, rotNum));
   return (
     <div className="grid gap-6 sm:grid-cols-3">
       {/* Column 1 — identity + unit */}
@@ -179,6 +185,29 @@ export function ProjectFormFields({ idPrefix, onChange, values }: ProjectFormFie
             />
           </Field>
         </div>
+        <Field>
+          <FieldLabel className="w-full">
+            Site rotation
+            <span className="text-muted-foreground ml-auto text-sm tabular-nums">
+              {rotNum.toFixed(1)}°
+            </span>
+          </FieldLabel>
+          <Slider
+            className="py-2"
+            min={0}
+            max={360}
+            step={0.1}
+            value={[rotClamped]}
+            onValueChange={(v) => onChange({ rotation: String(Array.isArray(v) ? v[0] : v) })}
+          />
+          <div className="text-muted-foreground flex justify-between text-xs">
+            <span>0° (min)</span>
+            <span>360° (max)</span>
+          </div>
+          <FieldDescription>
+            Rotation (counter-clockwise) of the site about its origin.
+          </FieldDescription>
+        </Field>
       </div>
     </div>
   );

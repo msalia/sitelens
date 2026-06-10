@@ -19,6 +19,34 @@ import { gql } from '@/lib/graphql';
 import { type ControlPoint, type Project, UNIT_OPTIONS } from '@/lib/types';
 import { fromMeters } from '@/lib/units';
 
+const ADD_CONTROL_POINT = graphql(`
+  mutation AddControlPoint(
+    $id: UUID!
+    $label: String!
+    $n: Float!
+    $e: Float!
+    $z: Float
+    $gx: Float
+    $gy: Float
+    $unit: LengthUnit!
+    $src: String
+  ) {
+    addControlPoint(
+      projectId: $id
+      label: $label
+      northing: $n
+      easting: $e
+      elevation: $z
+      gridX: $gx
+      gridY: $gy
+      unit: $unit
+      source: $src
+    ) {
+      id
+    }
+  }
+`);
+
 const UPDATE_CONTROL_POINT = graphql(`
   mutation UpdateControlPoint(
     $id: UUID!
@@ -51,17 +79,23 @@ const optional = (
   <span className="text-muted-foreground ml-auto text-xs font-normal">Optional</span>
 );
 
-export function EditControlPointDialog({
-  onClose,
+/** Add/edit a control point. `point === null` while `open` is add mode; passing
+ * a `point` switches it to edit mode and seeds the form from that point. */
+export function ControlPointDialog({
+  onOpenChange,
   onSaved,
+  open,
   point,
   project,
 }: {
   project: Project;
+  /** The point being edited, or null for add mode. */
   point: ControlPoint | null;
-  onClose: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }) {
+  const isEdit = point !== null;
   const unitName = UNIT_OPTIONS.find((u) => u.value === project.displayUnit)?.label ?? '';
   const [label, setLabel] = useState('');
   const [northing, setNorthing] = useState('');
@@ -72,69 +106,82 @@ export function EditControlPointDialog({
   const [source, setSource] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // Seed the form when the dialog opens: from the point in edit mode, blank for
+  // add. Keyed on `open` so reopening add mode always starts clean.
   useEffect(() => {
-    if (!point) {
+    if (!open) {
       return;
     }
-    const unit = project.displayUnit;
-    const fmt = (m: number | null) => (m === null ? '' : fromMeters(m, unit).toFixed(4));
-    setLabel(point.label);
-    setNorthing(fromMeters(point.northing, unit).toFixed(4));
-    setEasting(fromMeters(point.easting, unit).toFixed(4));
-    setElevation(fmt(point.elevation));
-    setGridX(fmt(point.gridX));
-    setGridY(fmt(point.gridY));
-    setSource(point.source);
-  }, [point, project.displayUnit]);
+    if (point) {
+      const unit = project.displayUnit;
+      const fmt = (m: number | null) => (m === null ? '' : fromMeters(m, unit).toFixed(4));
+      setLabel(point.label);
+      setNorthing(fromMeters(point.northing, unit).toFixed(4));
+      setEasting(fromMeters(point.easting, unit).toFixed(4));
+      setElevation(fmt(point.elevation));
+      setGridX(fmt(point.gridX));
+      setGridY(fmt(point.gridY));
+      setSource(point.source);
+    } else {
+      setLabel('');
+      setNorthing('');
+      setEasting('');
+      setElevation('');
+      setGridX('');
+      setGridY('');
+      setSource('');
+    }
+  }, [open, point, project.displayUnit]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!point) {
-      return;
-    }
     setBusy(true);
     try {
-      await gql(UPDATE_CONTROL_POINT, {
+      const common = {
         e: parseFloat(easting),
         gx: gridX ? parseFloat(gridX) : null,
         gy: gridY ? parseFloat(gridY) : null,
-        id: point.id,
         label,
         n: parseFloat(northing),
-        src: source,
         unit: project.displayUnit,
         z: elevation ? parseFloat(elevation) : null,
-      });
-      toast.success('Control point updated');
+      };
+      if (point) {
+        await gql(UPDATE_CONTROL_POINT, { ...common, id: point.id, src: source });
+        toast.success('Control point updated');
+      } else {
+        await gql(ADD_CONTROL_POINT, { ...common, id: project.id, src: source || null });
+        toast.success('Control point added');
+      }
       onSaved();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Update failed');
+      toast.error(err instanceof Error ? err.message : isEdit ? 'Update failed' : 'Add failed');
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Dialog open={point !== null} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Edit control point</DialogTitle>
+          <DialogTitle>{isEdit ? 'Edit control point' : 'Add control point'}</DialogTitle>
           <DialogDescription>N, E, Z and grid offsets are in {unitName}.</DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="grid grid-cols-2 gap-4">
           <Field className="col-span-2">
-            <FieldLabel htmlFor="ecp-label">Label</FieldLabel>
+            <FieldLabel htmlFor="cpd-label">Label</FieldLabel>
             <Input
-              id="ecp-label"
+              id="cpd-label"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               required
             />
           </Field>
           <Field>
-            <FieldLabel htmlFor="ecp-northing">Northing</FieldLabel>
+            <FieldLabel htmlFor="cpd-northing">Northing</FieldLabel>
             <Input
-              id="ecp-northing"
+              id="cpd-northing"
               type="number"
               value={northing}
               onChange={(e) => setNorthing(e.target.value)}
@@ -143,9 +190,9 @@ export function EditControlPointDialog({
             <FieldDescription>{unitName}</FieldDescription>
           </Field>
           <Field>
-            <FieldLabel htmlFor="ecp-easting">Easting</FieldLabel>
+            <FieldLabel htmlFor="cpd-easting">Easting</FieldLabel>
             <Input
-              id="ecp-easting"
+              id="cpd-easting"
               type="number"
               value={easting}
               onChange={(e) => setEasting(e.target.value)}
@@ -154,34 +201,34 @@ export function EditControlPointDialog({
             <FieldDescription>{unitName}</FieldDescription>
           </Field>
           <Field>
-            <FieldLabel htmlFor="ecp-gridx" className="w-full">
+            <FieldLabel htmlFor="cpd-gridx" className="w-full">
               Grid X{optional}
             </FieldLabel>
             <Input
-              id="ecp-gridx"
+              id="cpd-gridx"
               type="number"
               value={gridX}
               onChange={(e) => setGridX(e.target.value)}
             />
           </Field>
           <Field>
-            <FieldLabel htmlFor="ecp-gridy" className="w-full">
+            <FieldLabel htmlFor="cpd-gridy" className="w-full">
               Grid Y{optional}
             </FieldLabel>
             <Input
-              id="ecp-gridy"
+              id="cpd-gridy"
               type="number"
               value={gridY}
               onChange={(e) => setGridY(e.target.value)}
             />
           </Field>
           <Field>
-            <FieldLabel htmlFor="ecp-elevation" className="w-full">
+            <FieldLabel htmlFor="cpd-elevation" className="w-full">
               Elevation
               {optional}
             </FieldLabel>
             <Input
-              id="ecp-elevation"
+              id="cpd-elevation"
               type="number"
               value={elevation}
               onChange={(e) => setElevation(e.target.value)}
@@ -189,15 +236,21 @@ export function EditControlPointDialog({
             <FieldDescription>{unitName}</FieldDescription>
           </Field>
           <Field>
-            <FieldLabel htmlFor="ecp-source" className="w-full">
+            <FieldLabel htmlFor="cpd-source" className="w-full">
               Source
               {optional}
             </FieldLabel>
-            <Input id="ecp-source" value={source} onChange={(e) => setSource(e.target.value)} />
+            <Input id="cpd-source" value={source} onChange={(e) => setSource(e.target.value)} />
           </Field>
           <DialogFooter className="col-span-2">
             <Button type="submit" className="w-full" disabled={busy}>
-              {busy ? 'Saving…' : 'Save changes'}
+              {busy
+                ? isEdit
+                  ? 'Saving…'
+                  : 'Adding…'
+                : isEdit
+                  ? 'Save changes'
+                  : 'Add control point'}
             </Button>
           </DialogFooter>
         </form>

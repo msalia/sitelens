@@ -34,6 +34,7 @@ const UPDATE_PROJECT = graphql(`
     $scale: Float
     $lat: Float
     $lon: Float
+    $rot: Float
   ) {
     updateProject(
       id: $id
@@ -44,6 +45,7 @@ const UPDATE_PROJECT = graphql(`
       combinedScaleFactor: $scale
       siteOriginLat: $lat
       siteOriginLon: $lon
+      siteOriginRotationDeg: $rot
     ) {
       id
     }

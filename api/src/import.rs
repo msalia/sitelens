@@ -5,6 +5,10 @@
 pub const MAX_BYTES: usize = 5 * 1024 * 1024;
 pub const MAX_ROWS: usize = 100_000;
 
+/// DXF overlays carry full architectural linework and run larger than the
+/// point-list imports above, so they get their own, more generous size cap.
+pub const MAX_DXF_BYTES: usize = 10 * 1024 * 1024;
+
 /// One parsed point, in the source file's unit (not yet meters).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParsedPoint {

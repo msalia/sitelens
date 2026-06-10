@@ -24,6 +24,7 @@ const PROJECTS_QUERY = graphql(`
       combinedScaleFactor
       siteOriginLat
       siteOriginLon
+      siteOriginRotationDeg
       createdAt
       updatedAt
     }

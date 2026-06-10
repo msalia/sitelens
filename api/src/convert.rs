@@ -17,6 +17,39 @@ pub enum Space {
     Geographic,
 }
 
+/// A site rotation about a pivot in projected space, used to georeference an
+/// assumed-datum survey to true earth. The stored/assumed projected coordinates
+/// are rotated by `theta_rad` (CCW) about `(pivot_e, pivot_n)` to obtain the true
+/// projected position before converting to geographic — and the inverse when
+/// going the other way. Grid and projected reps stay in the stored frame.
+#[derive(Debug, Clone, Copy)]
+pub struct SiteRotation {
+    pub pivot_e: f64,
+    pub pivot_n: f64,
+    pub theta_rad: f64,
+}
+
+impl SiteRotation {
+    /// Stored/assumed projected → true projected (CCW by `theta_rad`).
+    pub fn to_true(&self, e: f64, n: f64) -> (f64, f64) {
+        let (s, c) = self.theta_rad.sin_cos();
+        let (de, dn) = (e - self.pivot_e, n - self.pivot_n);
+        (
+            self.pivot_e + de * c - dn * s,
+            self.pivot_n + de * s + dn * c,
+        )
+    }
+    /// True projected → stored/assumed projected (the inverse rotation).
+    fn to_stored(&self, e: f64, n: f64) -> (f64, f64) {
+        let (s, c) = (-self.theta_rad).sin_cos();
+        let (de, dn) = (e - self.pivot_e, n - self.pivot_n);
+        (
+            self.pivot_e + de * c - dn * s,
+            self.pivot_n + de * s + dn * c,
+        )
+    }
+}
+
 /// Every representation we can derive from the input (None where not derivable —
 /// e.g. grid requires a solved transform; geographic requires a known CRS).
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -46,15 +79,32 @@ pub fn convert(
     epsg: i32,
     csf: f64,
 ) -> CoordinateSet {
+    convert_with_rotation(space, x_m, y_m, transform, epsg, csf, None)
+}
+
+/// Like [`convert`], but with an optional [`SiteRotation`] applied at the
+/// projected↔geographic boundary so geographic output reflects the site's
+/// georeferencing. Grid and projected reps remain in the stored/assumed frame.
+pub fn convert_with_rotation(
+    space: Space,
+    x_m: f64,
+    y_m: f64,
+    transform: Option<HelmertParams>,
+    epsg: i32,
+    csf: f64,
+    rotation: Option<SiteRotation>,
+) -> CoordinateSet {
     let mut set = CoordinateSet::default();
 
-    // Resolve grid (x, y) and projected-grid (E, N) from the input.
+    // Resolve grid (x, y) and projected-grid (E, N) — both in the stored frame.
     let (grid, projected_grid): (Option<Point>, Option<Point>) = match space {
         Space::Grid => (Some((x_m, y_m)), transform.map(|t| t.apply(x_m, y_m))),
         Space::Projected => (transform.map(|t| t.inverse(x_m, y_m)), Some((x_m, y_m))),
         Space::Geographic => {
-            // x = longitude, y = latitude (degrees) → projected, then grid.
-            let proj = crs::geographic_to_projected(epsg, y_m, x_m);
+            // x = longitude, y = latitude (degrees) → true projected → stored
+            // projected (un-rotate) → grid.
+            let proj = crs::geographic_to_projected(epsg, y_m, x_m)
+                .map(|(e, n)| rotation.map_or((e, n), |r| r.to_stored(e, n)));
             let grid = proj.and_then(|(e, n)| transform.map(|t| t.inverse(e, n)));
             (grid, proj)
         }
@@ -71,7 +121,9 @@ pub fn convert(
             set.projected_ground_e = Some(e / csf);
             set.projected_ground_n = Some(n / csf);
         }
-        if let Some((lat, lon)) = crs::projected_to_geographic(epsg, e, n) {
+        // Stored projected → true projected (rotate) → geographic.
+        let (te, tn) = rotation.map_or((e, n), |r| r.to_true(e, n));
+        if let Some((lat, lon)) = crs::projected_to_geographic(epsg, te, tn) {
             set.latitude = Some(lat);
             set.longitude = Some(lon);
         }

@@ -19,7 +19,13 @@ import type {
   RenderableOverlay,
   TerrainData,
 } from '@/components/projects/terrain-viewer';
-import type { InspectablePoint, PointCategory, Project, SceneData } from '@/lib/types';
+import type {
+  GeorefPreview,
+  InspectablePoint,
+  PointCategory,
+  Project,
+  SceneData,
+} from '@/lib/types';
 
 import { CoordinateInspectorDialog } from '@/components/projects/coordinate-inspector-dialog';
 import { CAMERA_VIEWS } from '@/components/projects/terrain-viewer';
@@ -129,6 +135,57 @@ const SCENE_QUERY = graphql(`
   }
 `);
 
+// Lightweight scene-only refetch with georeference overrides — drives the live
+// preview while the Georeference card's sliders move (terrain / buildings /
+// parsed DXF linework are unaffected and stay put, repositioning off the new
+// origin). Mirrors the `sceneData` selection in SCENE_QUERY.
+const PREVIEW_SCENE = graphql(`
+  query PreviewScene($id: UUID!, $lat: Float, $lon: Float, $rot: Float) {
+    sceneData(
+      projectId: $id
+      siteOriginLat: $lat
+      siteOriginLon: $lon
+      siteOriginRotationDeg: $rot
+    ) {
+      origin {
+        latitude
+        longitude
+        height
+      }
+      originProjectedE
+      originProjectedN
+      controlPoints {
+        id
+        label
+        latitude
+        longitude
+        height
+        easting
+        northing
+        categoryId
+      }
+      surveyPoints {
+        id
+        label
+        latitude
+        longitude
+        height
+        easting
+        northing
+        categoryId
+      }
+      gridLines {
+        label
+        coordinates {
+          latitude
+          longitude
+          height
+        }
+      }
+    }
+  }
+`);
+
 const TERRAIN_CONTENT = graphql(`
   query TerrainContent($id: UUID!) {
     projectTerrainContent(projectId: $id)
@@ -229,6 +286,7 @@ function sceneBbox(
 export function SceneView({
   categories,
   focus,
+  preview,
   project,
   reloadNonce,
   stats,
@@ -237,6 +295,8 @@ export function SceneView({
   categories: PointCategory[];
   /** Request from the table to fly to a point; `nonce` re-triggers. */
   focus?: { id: string; nonce: number } | null;
+  /** Live georeference draft from the Georeference card; null = saved scene. */
+  preview?: GeorefPreview | null;
   /** Bumped by the parent to force a scene reload (e.g. after a DXF upload). */
   reloadNonce?: number;
   /** Live stats overlaid on the viewer (bottom-left), as a label: value list. */
@@ -409,6 +469,38 @@ export function SceneView({
   useEffect(() => {
     void load();
   }, [load, reloadNonce]);
+
+  // Re-fetch just the scene geometry with the draft georeference so the viewer
+  // tracks the Georeference card's sliders live. Debounced so a drag doesn't
+  // spam the API. When the preview clears (save/reset), restore the saved scene.
+  const previewLoad = useCallback(
+    async (p: GeorefPreview) => {
+      try {
+        const data = await gql(PREVIEW_SCENE, {
+          id: project.id,
+          lat: p.lat,
+          lon: p.lon,
+          rot: p.rotationDeg,
+        });
+        setScene(data.sceneData);
+      } catch {
+        // Ignore transient preview errors — the next slider move retries.
+      }
+    },
+    [project.id],
+  );
+  const wasPreviewing = useRef(false);
+  useEffect(() => {
+    if (preview) {
+      wasPreviewing.current = true;
+      const t = setTimeout(() => void previewLoad(preview), 120);
+      return () => clearTimeout(t);
+    }
+    if (wasPreviewing.current) {
+      wasPreviewing.current = false;
+      void load();
+    }
+  }, [preview, previewLoad, load]);
 
   function toggleLayer(layer: string) {
     setHiddenLayers((h) => {

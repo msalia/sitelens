@@ -30,6 +30,7 @@ export interface Project {
   name: string;
   siteOriginLat: number | null;
   siteOriginLon: number | null;
+  siteOriginRotationDeg: number;
   updatedAt: string;
 }
 
@@ -111,6 +112,15 @@ export interface SceneData {
   originProjectedE: number | null;
   originProjectedN: number | null;
   surveyPoints: ScenePoint[];
+}
+
+/** Draft georeference emitted by the overlays "Georeference" card so the 3D
+ * scene can preview unsaved slider edits. `null` lat/lon mean "fall back to the
+ * saved origin / first point" server-side. */
+export interface GeorefPreview {
+  lat: number | null;
+  lon: number | null;
+  rotationDeg: number;
 }
 
 export interface EpsgEntry {

@@ -96,6 +96,9 @@ pub struct Project {
     pub combined_scale_factor: f64,
     pub site_origin_lat: Option<f64>,
     pub site_origin_lon: Option<f64>,
+    /// Rotation (degrees, CCW) applied about the site origin to georeference an
+    /// assumed-datum survey to true earth. 0 for properly-tied projects.
+    pub site_origin_rotation_deg: f64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -111,6 +114,7 @@ pub struct ProjectRow {
     pub combined_scale_factor: f64,
     pub site_origin_lat: Option<f64>,
     pub site_origin_lon: Option<f64>,
+    pub site_origin_rotation_deg: f64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -127,6 +131,7 @@ impl From<ProjectRow> for Project {
             combined_scale_factor: r.combined_scale_factor,
             site_origin_lat: r.site_origin_lat,
             site_origin_lon: r.site_origin_lon,
+            site_origin_rotation_deg: r.site_origin_rotation_deg,
             created_at: r.created_at,
             updated_at: r.updated_at,
         }
@@ -409,6 +414,10 @@ pub struct SceneData {
     /// DXF overlays in a local east-north frame anchored at the origin.
     pub origin_projected_e: Option<f64>,
     pub origin_projected_n: Option<f64>,
+    /// Site rotation (degrees, CCW about the origin) already applied to the points
+    /// and grid below. The client reuses it to rotate DXF overlays — which it
+    /// places in the projected frame itself — so overlays track the survey.
+    pub site_rotation_deg: f64,
     pub control_points: Vec<ScenePoint>,
     pub survey_points: Vec<ScenePoint>,
     pub grid_lines: Vec<SceneLine>,

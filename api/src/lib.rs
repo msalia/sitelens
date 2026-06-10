@@ -17,7 +17,7 @@ use std::time::Duration;
 use async_graphql::{EmptySubscription, Schema};
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::{
-    extract::State,
+    extract::{DefaultBodyLimit, State},
     http::{header, HeaderMap, StatusCode},
     response::{Html, IntoResponse},
     routing::get,
@@ -196,6 +196,9 @@ pub async fn run() {
         .route("/", get(|| async { "SiteLens API" }))
         .route("/health", get(health))
         .route("/graphql", get(graphiql).post(graphql_handler))
+        // Axum defaults to a 2 MB request body; a 10 MB DXF (plus JSON-string
+        // escaping) needs headroom, so lift the cap well above MAX_DXF_BYTES.
+        .layer(DefaultBodyLimit::max(32 * 1024 * 1024))
         .with_state(state);
 
     let addr = "0.0.0.0:4000";

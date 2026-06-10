@@ -13,9 +13,10 @@ import {
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import type { CadOverlay, Project } from '@/lib/types';
+import type { CadOverlay, GeorefPreview, Project } from '@/lib/types';
 
 import { ConfirmDialog } from '@/components/projects/confirm-dialog';
+import { GeoreferenceCard } from '@/components/projects/georeference-card';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -84,6 +85,9 @@ const SITE_PROJECTED = graphql(`
   }
 `);
 
+// Mirror of the API's `MAX_DXF_BYTES` so oversized files fail fast client-side.
+const MAX_DXF_BYTES = 10 * 1024 * 1024;
+
 const OVERLAY_DXF = graphql(`
   query CadOverlayDxf($id: UUID!) {
     cadOverlayContent(id: $id)
@@ -107,12 +111,15 @@ const SCENE_POINTS = graphql(`
 
 export function CadOverlayPanel({
   onChanged,
+  onPreview,
   overlays,
   project,
 }: {
   project: Project;
   overlays: CadOverlay[];
   onChanged: () => void;
+  /** Live georeference draft for the 3D scene (from the Georeference card). */
+  onPreview: (preview: GeorefPreview | null) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -120,6 +127,11 @@ export function CadOverlayPanel({
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) {
+      return;
+    }
+    if (file.size > MAX_DXF_BYTES) {
+      toast.error('That DXF is larger than 10 MB.');
+      e.target.value = '';
       return;
     }
     setBusy(true);
@@ -146,6 +158,8 @@ export function CadOverlayPanel({
 
   return (
     <div className="flex flex-col gap-4">
+      <GeoreferenceCard project={project} onPreview={onPreview} onSaved={onChanged} />
+
       <Card className="gap-0 overflow-hidden py-0">
         <CardHeader className="p-4">
           <CardTitle>DXF overlays</CardTitle>
@@ -164,7 +178,7 @@ export function CadOverlayPanel({
             <span className="space-y-0.5">
               <span className="block text-sm font-medium">Click to upload a DXF</span>
               <span className="text-muted-foreground block text-xs">
-                Vector linework only — export DWG to DXF first
+                Vector linework only — export DWG to DXF first · up to 10 MB
               </span>
             </span>
           </label>
