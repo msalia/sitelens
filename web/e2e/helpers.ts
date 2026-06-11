@@ -63,16 +63,19 @@ export async function addControlPoint(
   point: { label: string; n: number; e: number; gx?: number; gy?: number },
 ): Promise<void> {
   await gotoTab(page, 'Grid');
-  await page.locator('#cp-label').fill(point.label);
-  await page.locator('#cp-northing').fill(String(point.n));
-  await page.locator('#cp-easting').fill(String(point.e));
+  // The card footer button opens the add/edit dialog.
+  await page.locator('#panel-control').getByRole('button', { name: 'Add control point' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('#cpd-label').fill(point.label);
+  await dialog.locator('#cpd-northing').fill(String(point.n));
+  await dialog.locator('#cpd-easting').fill(String(point.e));
   if (point.gx !== undefined) {
-    await page.locator('#cp-gridx').fill(String(point.gx));
+    await dialog.locator('#cpd-gridx').fill(String(point.gx));
   }
   if (point.gy !== undefined) {
-    await page.locator('#cp-gridy').fill(String(point.gy));
+    await dialog.locator('#cpd-gridy').fill(String(point.gy));
   }
-  await page.locator('#panel-control').getByRole('button', { name: 'Add control point' }).click();
+  await dialog.getByRole('button', { name: 'Add control point' }).click();
   await expect(page.getByRole('cell', { exact: true, name: point.label })).toBeVisible();
 }
 

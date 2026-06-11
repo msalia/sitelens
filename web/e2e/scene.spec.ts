@@ -36,5 +36,5 @@ test('the camera view selector defaults to isometric and terrain can be loaded',
 
   const scene = page.locator('#panel-scene');
   await expect(scene.getByText('Isometric')).toBeVisible();
-  await expect(scene.getByRole('button', { name: /Load terrain/ })).toBeVisible();
+  await expect(scene.getByRole('button', { name: /Load site data/ })).toBeVisible();
 });

@@ -23,7 +23,7 @@ test('edit a control point from the row dropdown', async ({ page }) => {
   await page.getByRole('button', { name: 'Control point actions' }).click();
   await page.getByRole('menuitem', { name: 'Edit' }).click();
   await expect(page.getByRole('heading', { name: 'Edit control point' })).toBeVisible();
-  await page.locator('#ecp-label').fill('NEWCP');
+  await page.locator('#cpd-label').fill('NEWCP');
   await page.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByRole('cell', { exact: true, name: 'NEWCP' })).toBeVisible();
 });
