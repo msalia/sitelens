@@ -20,11 +20,6 @@ const SIGNUP = graphql(`
     }
   }
 `);
-const VERIFY_EMAIL = graphql(`
-  mutation VerifyEmail($t: String!) {
-    verifyEmail(token: $t)
-  }
-`);
 
 export default function SignupPage() {
   const router = useRouter();
@@ -32,34 +27,19 @@ export default function SignupPage() {
   const [password, setPassword] = useState('');
   const [orgName, setOrgName] = useState('');
   const [busy, setBusy] = useState(false);
-  // No email provider yet: the verification token is surfaced so you can verify here.
-  const [token, setToken] = useState<string | null>(null);
+  // After signup we show a "check your email" screen; the verification link is
+  // emailed (see /verify), not surfaced in-app.
+  const [done, setDone] = useState(false);
 
   async function onSignup(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
-      const data = await gql(SIGNUP, { e: email, o: orgName, p: password });
-      setToken(data.signup.verificationToken);
-      toast.success('Account created. Verify to continue.');
+      await gql(SIGNUP, { e: email, o: orgName, p: password });
+      setDone(true);
+      toast.success('Account created — check your email to verify.');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Signup failed');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onVerify() {
-    if (!token) {
-      return;
-    }
-    setBusy(true);
-    try {
-      await gql(VERIFY_EMAIL, { t: token });
-      toast.success('Email verified. Please log in.');
-      router.replace('/login');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Verification failed');
     } finally {
       setBusy(false);
     }
@@ -80,19 +60,25 @@ export default function SignupPage() {
             <CardHeader className="text-center">
               <CardTitle className="text-xl">Create your organization</CardTitle>
               <CardDescription>
-                {token
-                  ? 'Verify your email to finish — email delivery isn’t wired up yet.'
+                {done
+                  ? 'Check your email to verify your account.'
                   : 'Sign up to create an organization. You become its admin.'}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {token ? (
+              {done ? (
                 <div className="flex flex-col gap-4">
-                  <div className="bg-muted text-muted-foreground rounded-md p-3 text-xs break-all">
-                    Verification token: <span className="text-foreground font-mono">{token}</span>
+                  <div className="bg-muted text-muted-foreground rounded-md p-3 text-sm">
+                    We sent a verification link to{' '}
+                    <span className="text-foreground font-medium break-all">{email}</span>. Click it
+                    to finish setting up your account, then log in.
                   </div>
-                  <Button onClick={onVerify} disabled={busy} className="w-full">
-                    {busy ? 'Verifying…' : 'Verify & continue'}
+                  <Button
+                    variant="outline"
+                    onClick={() => router.replace('/login')}
+                    className="w-full"
+                  >
+                    Go to login
                   </Button>
                 </div>
               ) : (

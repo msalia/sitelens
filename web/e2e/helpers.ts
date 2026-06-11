@@ -13,12 +13,17 @@ export async function signUpAndLogin(page: Page, tag: string): Promise<string> {
   await page.getByLabel('Organization name').fill(`E2E ${tag} ${stamp}`);
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill('password123');
+  // Verification is emailed; capture the token from the signup response (the
+  // mutation still returns it) and visit the verify link directly.
+  const signupResp = page.waitForResponse(
+    (r) => r.url().includes('/api/graphql') && (r.request().postData() ?? '').includes('Signup'),
+  );
   await page.getByRole('button', { name: 'Create account' }).click();
+  const token = (await (await signupResp).json()).data.signup.verificationToken as string;
+  await page.goto(`/verify?token=${token}`);
+  await expect(page.getByRole('button', { name: 'Continue to login' })).toBeVisible();
 
-  // Email delivery is deferred; the verification token is surfaced in-app.
-  await page.getByRole('button', { name: 'Verify & continue' }).click();
-  await expect(page).toHaveURL(/\/login$/);
-
+  await page.goto('/login');
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill('password123');
   await page.getByRole('button', { exact: true, name: 'Login' }).click();

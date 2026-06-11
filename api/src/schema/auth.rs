@@ -1,5 +1,6 @@
 #![allow(clippy::too_many_arguments)]
 use super::*;
+use crate::mail::Mailer;
 
 #[derive(Default)]
 pub struct AuthQuery;
@@ -91,8 +92,9 @@ impl AuthMutation {
         })?;
 
         let user: User = sqlx::query_as::<_, UserRow>(&format!(
-            "INSERT INTO users (org_id, email, password_hash, role, verification_token) \
-             VALUES ($1, $2, $3, 'admin', $4) RETURNING {USER_COLUMNS}"
+            "INSERT INTO users \
+               (org_id, email, password_hash, role, verification_token, verification_token_expires) \
+             VALUES ($1, $2, $3, 'admin', $4, now() + interval '7 days') RETURNING {USER_COLUMNS}"
         ))
         .bind(org.id)
         .bind(&email)
@@ -118,6 +120,14 @@ impl AuthMutation {
 
         tx.commit().await?;
 
+        // Email the verification link. A send failure must not fail signup — the
+        // user can request a new link via `resendVerification`.
+        let mailer = ctx.data::<Mailer>()?;
+        let link = format!("{}/verify?token={}", mailer.app_url(), verification_token);
+        if let Err(e) = mailer.send_verification(&email, &link).await {
+            eprintln!("signup: failed to send verification email to {email}: {e}");
+        }
+
         Ok(SignupResult {
             user,
             org,
@@ -127,13 +137,48 @@ impl AuthMutation {
 
     /// Verifies an email address using the token issued at signup.
     async fn verify_email(&self, ctx: &Context<'_>, token: String) -> Result<bool> {
-        let result =
-            sqlx::query("UPDATE users SET email_verified = true, verification_token = NULL WHERE verification_token = $1")
-                .bind(&token)
-                .execute(pool(ctx)?)
-                .await?;
+        let result = sqlx::query(
+            "UPDATE users SET email_verified = true, verification_token = NULL, \
+               verification_token_expires = NULL \
+             WHERE verification_token = $1 \
+               AND (verification_token_expires IS NULL OR verification_token_expires > now())",
+        )
+        .bind(&token)
+        .execute(pool(ctx)?)
+        .await?;
         if result.rows_affected() == 0 {
             return Err(async_graphql::Error::new("invalid or expired token"));
+        }
+        Ok(true)
+    }
+
+    /// Re-issues + re-sends a verification email for an unverified account. Always
+    /// returns true (no account-existence leak). Rate-limited.
+    async fn resend_verification(&self, ctx: &Context<'_>, email: String) -> Result<bool> {
+        enforce_rate_limit(ctx, "resend_verification").await?;
+        let email = normalize_email(&email);
+        let pool = pool(ctx)?;
+        let row: Option<(Uuid, String)> = sqlx::query_as(
+            "SELECT id, email FROM users WHERE lower(email) = $1 AND email_verified = false",
+        )
+        .bind(&email)
+        .fetch_optional(pool)
+        .await?;
+        if let Some((id, addr)) = row {
+            let token = gen_token();
+            sqlx::query(
+                "UPDATE users SET verification_token = $1, \
+                   verification_token_expires = now() + interval '7 days' WHERE id = $2",
+            )
+            .bind(&token)
+            .bind(id)
+            .execute(pool)
+            .await?;
+            let mailer = ctx.data::<Mailer>()?;
+            let link = format!("{}/verify?token={}", mailer.app_url(), token);
+            if let Err(e) = mailer.send_verification(&addr, &link).await {
+                eprintln!("resend_verification: send failed for {addr}: {e}");
+            }
         }
         Ok(true)
     }

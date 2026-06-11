@@ -124,6 +124,65 @@ async fn signup_verify_login_me(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn verify_email_rejects_reused_and_invalid_tokens(pool: PgPool) {
+    let schema = schema(pool);
+    let (_id, _org, token) = signup(&schema, "v@example.com", "Org").await;
+
+    // First verification works.
+    let q = format!(r#"mutation {{ verifyEmail(token: "{token}") }}"#);
+    assert_eq!(
+        exec_ok(&schema, &q, None).await["verifyEmail"],
+        Json::Bool(true)
+    );
+
+    // The same token can't be reused (cleared on use).
+    let msg = exec_err(&schema, &q, None).await;
+    assert!(msg.contains("invalid or expired"), "reuse: {msg}");
+
+    // A bogus token is rejected too.
+    let bad = r#"mutation { verifyEmail(token: "nope-not-real") }"#;
+    let msg = exec_err(&schema, bad, None).await;
+    assert!(msg.contains("invalid or expired"), "bogus: {msg}");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn resend_verification_reissues_token_and_is_always_truthy(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (user_id, _org, token1) = signup(&schema, "r@example.com", "Org").await;
+
+    // Always returns true — even for an address that doesn't exist (no enumeration).
+    let resend = |email: &str| format!(r#"mutation {{ resendVerification(email: "{email}") }}"#);
+    assert_eq!(
+        exec_ok(&schema, &resend("r@example.com"), None).await["resendVerification"],
+        Json::Bool(true)
+    );
+    assert_eq!(
+        exec_ok(&schema, &resend("nobody@example.com"), None).await["resendVerification"],
+        Json::Bool(true)
+    );
+
+    // The original token was replaced by the resend.
+    let stale = format!(r#"mutation {{ verifyEmail(token: "{token1}") }}"#);
+    assert!(exec_err(&schema, &stale, None)
+        .await
+        .contains("invalid or expired"));
+
+    // The freshly-issued token (read from the DB) verifies and enables login.
+    let token2: String = sqlx::query_scalar("SELECT verification_token FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let verify2 = format!(r#"mutation {{ verifyEmail(token: "{token2}") }}"#);
+    assert_eq!(
+        exec_ok(&schema, &verify2, None).await["verifyEmail"],
+        Json::Bool(true)
+    );
+    let login = r#"mutation { login(email: "r@example.com", password: "password123") { id } }"#;
+    assert!(schema.execute(Request::new(login)).await.errors.is_empty());
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn login_is_rate_limited(pool: PgPool) {
     let schema = schema(pool);
     // A real account so attempts reach the credential check, not a missing user.

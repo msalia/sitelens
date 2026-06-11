@@ -19,23 +19,44 @@ const LOGIN = graphql(`
     }
   }
 `);
+const RESEND_VERIFICATION = graphql(`
+  mutation ResendVerification($e: String!) {
+    resendVerification(email: $e)
+  }
+`);
 
 export function LoginForm({ className, ...props }: React.ComponentProps<'form'>) {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  // Shown when login fails because the email isn't verified yet.
+  const [needsVerification, setNeedsVerification] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
+    setNeedsVerification(false);
     try {
       await gql(LOGIN, { e: email, p: password });
       router.replace('/projects');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Login failed');
+      const msg = err instanceof Error ? err.message : 'Login failed';
+      if (/not verified/i.test(msg)) {
+        setNeedsVerification(true);
+      }
+      toast.error(msg);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function resendVerification() {
+    try {
+      await gql(RESEND_VERIFICATION, { e: email });
+      toast.success('Verification email sent — check your inbox.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not resend');
     }
   }
 
@@ -82,6 +103,18 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'form'>)
         <Button type="submit" className="w-full" disabled={busy}>
           {busy ? 'Logging in…' : 'Login'}
         </Button>
+        {needsVerification ? (
+          <div className="bg-muted text-muted-foreground rounded-md p-3 text-center text-sm">
+            Your email isn’t verified yet.{' '}
+            <button
+              type="button"
+              onClick={resendVerification}
+              className="text-foreground underline underline-offset-4"
+            >
+              Resend verification email
+            </button>
+          </div>
+        ) : null}
         <div className="after:border-border relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t">
           <span className="bg-background text-muted-foreground relative z-10 px-2">
             Or continue with

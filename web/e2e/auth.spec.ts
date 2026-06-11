@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { signUpAndLogin } from './helpers';
+
 // Auth surfaces: login (login-02 split), signup (login-03 card), and the
 // docs-behind-auth gate. Layout checks are static; the verify flow needs the API.
 
@@ -47,18 +49,7 @@ test.describe('full auth flow', () => {
   });
 
   test('sign up → verify → log in lands on projects', async ({ page }) => {
-    const stamp = Date.now();
-    const email = `e2e+auth-${stamp}@sitelens.test`;
-    await page.goto('/signup');
-    await page.getByLabel('Organization name').fill(`E2E Auth ${stamp}`);
-    await page.getByLabel('Email').fill(email);
-    await page.getByLabel('Password').fill('password123');
-    await page.getByRole('button', { name: 'Create account' }).click();
-    await page.getByRole('button', { name: 'Verify & continue' }).click();
-    await expect(page).toHaveURL(/\/login$/);
-    await page.getByLabel('Email').fill(email);
-    await page.getByLabel('Password').fill('password123');
-    await page.getByRole('button', { exact: true, name: 'Login' }).click();
+    await signUpAndLogin(page, 'auth');
     await expect(page).toHaveURL(/\/projects$/);
     await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
   });

@@ -10,7 +10,7 @@
 | Phase | Focus                                                  | Depends On | Status      |
 | ----- | ------------------------------------------------------ | ---------- | ----------- |
 | 1     | Mail infrastructure (resend-rs)                        | —          | ✅ Done      |
-| 2     | Email verification                                     | 1          | Not started |
+| 2     | Email verification                                     | 1          | ✅ Done      |
 | 3     | Self-service password reset                            | 1          | Not started |
 | 4     | Org user management (`/settings/users`) + operator CLI | 1          | Not started |
 | 5     | WebSocket subscription infra                           | —          | Not started |
@@ -62,16 +62,17 @@ Turn signup verification into a real emailed link.
 
 ### Deliverables
 
-- [ ] Migration: `verification_token_expires` on `users`.
-- [ ] `signup` sends a verification email with `…/verify?token=`.
-- [ ] `resendVerification(email)` mutation (always returns true; rate-limited).
-- [ ] Verify page consumes the emailed token; login surfaces a "resend" affordance
+- [x] Migration: `verification_token_expires` on `users`.
+- [x] `signup` sends a verification email with `…/verify?token=`.
+- [x] `resendVerification(email)` mutation (always returns true; rate-limited).
+- [x] Verify page consumes the emailed token; login surfaces a "resend" affordance
       when the user is unverified.
 
 ### Tests
 
-- [ ] Unit: expired/invalid/already-used verification token paths.
-- [ ] e2e: signup → (capture token) → verify → login.
+- [x] Integration: reused + invalid token rejected; resend reissues + lets login.
+- [x] e2e: signup → (capture token) → verify → login; invalid token rejected;
+      unverified login shows resend.
 
 ### Validates
 

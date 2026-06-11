@@ -215,6 +215,11 @@ type MutationRoot {
 	"""
 	verifyEmail(token: String!): Boolean!
 	"""
+	Re-issues + re-sends a verification email for an unverified account. Always
+	returns true (no account-existence leak). Rate-limited.
+	"""
+	resendVerification(email: String!): Boolean!
+	"""
 	Logs in with email + password. Sets an HTTP-only session cookie.
 	"""
 	login(email: String!, password: String!): User!
