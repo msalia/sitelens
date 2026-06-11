@@ -6,17 +6,7 @@ import { toast } from 'sonner';
 
 import type { PointGroup, Project } from '@/lib/types';
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
+import { ConfirmDialog } from '@/components/projects/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -38,7 +28,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { graphql } from '@/lib/gql';
-import { gql } from '@/lib/graphql';
+import { gql, useMutation } from '@/lib/graphql';
 
 const POINT_GROUPS = graphql(`
   query GroupManagerGroups($id: UUID!) {
@@ -82,7 +72,7 @@ export function GroupManagerDialog({
   const [open, setOpen] = useState(false);
   const [groups, setGroups] = useState<PointGroup[]>([]);
   const [name, setName] = useState('');
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useMutation();
 
   async function load() {
     try {
@@ -107,29 +97,29 @@ export function GroupManagerDialog({
     if (selectedIds.length === 0 || !name.trim()) {
       return;
     }
-    setBusy(true);
-    try {
-      await gql(CREATE_POINT_GROUP, { id: project.id, ids: selectedIds, name: name.trim() });
-      toast.success('Group created');
-      setName('');
-      void load();
-      onChanged?.();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Create failed');
-    } finally {
-      setBusy(false);
-    }
+    await run(
+      () => gql(CREATE_POINT_GROUP, { id: project.id, ids: selectedIds, name: name.trim() }),
+      {
+        error: 'Create failed',
+        onDone: () => {
+          setName('');
+          void load();
+          onChanged?.();
+        },
+        success: 'Group created',
+      },
+    );
   }
 
   async function remove(id: string) {
-    try {
-      await gql(DELETE_POINT_GROUP, { id });
-      toast.success('Group deleted');
-      void load();
-      onChanged?.();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Delete failed');
-    }
+    await run(() => gql(DELETE_POINT_GROUP, { id }), {
+      error: 'Delete failed',
+      onDone: () => {
+        void load();
+        onChanged?.();
+      },
+      success: 'Group deleted',
+    });
   }
 
   return (
@@ -179,29 +169,16 @@ export function GroupManagerDialog({
                     {g.memberIds.length}
                   </TableCell>
                   <TableCell className="text-right">
-                    <AlertDialog>
-                      <AlertDialogTrigger
-                        render={
-                          <Button variant="ghost" size="icon-sm" aria-label={`Delete ${g.name}`}>
-                            <IconTrash className="size-4" />
-                          </Button>
-                        }
-                      />
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Delete “{g.name}”?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            The group is removed; the points themselves are not affected.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction variant="destructive" onClick={() => remove(g.id)}>
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    <ConfirmDialog
+                      title={`Delete “${g.name}”?`}
+                      description="The group is removed; the points themselves are not affected."
+                      onConfirm={() => remove(g.id)}
+                      trigger={
+                        <Button variant="ghost" size="icon-sm" aria-label={`Delete ${g.name}`}>
+                          <IconTrash className="size-4" />
+                        </Button>
+                      }
+                    />
                   </TableCell>
                 </TableRow>
               ))}

@@ -2,21 +2,11 @@
 
 import { IconTag, IconTrash } from '@tabler/icons-react';
 import { useMemo, useState } from 'react';
-import { toast } from 'sonner';
 
 import type { PointCategory } from '@/lib/types';
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
+import { CategoryChip } from '@/components/projects/category-chip';
+import { ConfirmDialog } from '@/components/projects/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -39,7 +29,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { graphql } from '@/lib/gql';
-import { gql } from '@/lib/graphql';
+import { gql, useMutation } from '@/lib/graphql';
 
 const CREATE_CATEGORY = graphql(`
   mutation CreateCategory($name: String!, $color: String!, $icon: String!) {
@@ -69,34 +59,29 @@ export function CategoryManagerDialog({
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [color, setColor] = useState('#3b82f6');
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useMutation();
 
   const customs = useMemo(() => categories.filter((c) => !c.isDefault), [categories]);
   const defaults = useMemo(() => categories.filter((c) => c.isDefault), [categories]);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    try {
-      await gql(CREATE_CATEGORY, { color, icon: 'point', name });
-      toast.success('Category created');
-      setName('');
-      onChanged();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Create failed');
-    } finally {
-      setBusy(false);
-    }
+    await run(() => gql(CREATE_CATEGORY, { color, icon: 'point', name }), {
+      error: 'Create failed',
+      onDone: () => {
+        setName('');
+        onChanged();
+      },
+      success: 'Category created',
+    });
   }
 
   async function remove(id: string) {
-    try {
-      await gql(DELETE_CATEGORY, { id });
-      toast.success('Category deleted');
-      onChanged();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Delete failed');
-    }
+    await run(() => gql(DELETE_CATEGORY, { id }), {
+      error: 'Delete failed',
+      onDone: onChanged,
+      success: 'Category deleted',
+    });
   }
 
   return (
@@ -210,37 +195,20 @@ function CategoryList({
             {pageItems.map((c) => (
               <TableRow key={c.id}>
                 <TableCell>
-                  <span className="inline-flex items-center gap-2">
-                    <span className="size-2.5 rounded-full" style={{ backgroundColor: c.color }} />
-                    {c.name}
-                  </span>
+                  <CategoryChip color={c.color} name={c.name} />
                 </TableCell>
                 {deletable && (
                   <TableCell className="text-right">
-                    <AlertDialog>
-                      <AlertDialogTrigger
-                        render={
-                          <Button variant="ghost" size="icon-sm" aria-label={`Delete ${c.name}`}>
-                            <IconTrash className="size-4" />
-                          </Button>
-                        }
-                      />
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Delete “{c.name}”?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Points in this category will become uncategorized. This can&rsquo;t be
-                            undone.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction variant="destructive" onClick={() => onDelete?.(c.id)}>
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    <ConfirmDialog
+                      title={`Delete “${c.name}”?`}
+                      description="Points in this category will become uncategorized. This can’t be undone."
+                      onConfirm={() => onDelete?.(c.id)}
+                      trigger={
+                        <Button variant="ghost" size="icon-sm" aria-label={`Delete ${c.name}`}>
+                          <IconTrash className="size-4" />
+                        </Button>
+                      }
+                    />
                   </TableCell>
                 )}
               </TableRow>
