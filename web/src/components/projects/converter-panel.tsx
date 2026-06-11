@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { graphql } from '@/lib/gql';
-import { gql } from '@/lib/graphql';
+import { gql, useMutation } from '@/lib/graphql';
 import {
   type CoordinateSet,
   type LengthUnit,
@@ -67,7 +67,7 @@ export function ConverterPanel({ project }: { project: Project }) {
   const [x, setX] = useState('');
   const [y, setY] = useState('');
   const [set, setSet] = useState<CoordinateSet | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useMutation();
 
   const displayLabel = UNIT_LABELS[project.displayUnit];
   const isGeo = space === 'GEOGRAPHIC';
@@ -94,15 +94,10 @@ export function ConverterPanel({ project }: { project: Project }) {
       toast.error('Enter numeric X and Y values');
       return;
     }
-    setBusy(true);
-    try {
-      const data = await gql(CONVERT, { id: project.id, space, unit, x: xn, y: yn });
-      setSet(data.convertCoordinate);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Convert failed');
-    } finally {
-      setBusy(false);
-    }
+    await run(() => gql(CONVERT, { id: project.id, space, unit, x: xn, y: yn }), {
+      error: 'Convert failed',
+      onDone: (data) => setSet(data.convertCoordinate),
+    });
   }
 
   const u = (m: number | null) =>

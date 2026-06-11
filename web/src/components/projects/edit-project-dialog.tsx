@@ -2,7 +2,6 @@
 
 import { IconPencil } from '@tabler/icons-react';
 import { useState } from 'react';
-import { toast } from 'sonner';
 
 import type { Project } from '@/lib/types';
 
@@ -22,7 +21,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { graphql } from '@/lib/gql';
-import { gql } from '@/lib/graphql';
+import { gql, useMutation } from '@/lib/graphql';
 
 const UPDATE_PROJECT = graphql(`
   mutation UpdateProject(
@@ -55,21 +54,18 @@ const UPDATE_PROJECT = graphql(`
 export function EditProjectDialog({ onSaved, project }: { project: Project; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(() => projectToForm(project));
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useMutation();
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    try {
-      await gql(UPDATE_PROJECT, { id: project.id, ...projectFormVariables(form) });
-      toast.success('Project updated');
-      setOpen(false);
-      onSaved();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Update failed');
-    } finally {
-      setBusy(false);
-    }
+    await run(() => gql(UPDATE_PROJECT, { id: project.id, ...projectFormVariables(form) }), {
+      error: 'Update failed',
+      onDone: () => {
+        setOpen(false);
+        onSaved();
+      },
+      success: 'Project updated',
+    });
   }
 
   return (

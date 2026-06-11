@@ -2,7 +2,6 @@
 
 import { IconPlus } from '@tabler/icons-react';
 import { useState } from 'react';
-import { toast } from 'sonner';
 
 import {
   emptyProjectForm,
@@ -20,7 +19,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { graphql } from '@/lib/gql';
-import { gql } from '@/lib/graphql';
+import { gql, useMutation } from '@/lib/graphql';
 
 const CREATE_PROJECT = graphql(`
   mutation CreateProject(
@@ -51,22 +50,19 @@ const CREATE_PROJECT = graphql(`
 export function CreateProjectDialog({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyProjectForm());
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useMutation();
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    try {
-      await gql(CREATE_PROJECT, projectFormVariables(form));
-      toast.success('Project created');
-      setForm(emptyProjectForm());
-      setOpen(false);
-      onCreated();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Create failed');
-    } finally {
-      setBusy(false);
-    }
+    await run(() => gql(CREATE_PROJECT, projectFormVariables(form)), {
+      error: 'Create failed',
+      onDone: () => {
+        setForm(emptyProjectForm());
+        setOpen(false);
+        onCreated();
+      },
+      success: 'Project created',
+    });
   }
 
   return (

@@ -2,7 +2,6 @@
 
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 import { useState } from 'react';
-import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -32,7 +31,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { graphql } from '@/lib/gql';
-import { gql } from '@/lib/graphql';
+import { gql, useMutation } from '@/lib/graphql';
 import { type GridAxis, type GridFamily, type Project } from '@/lib/types';
 import { fromMeters, unitName } from '@/lib/units';
 
@@ -57,7 +56,7 @@ export function GridEditor({
 }) {
   const unitLabel = unitName(project.displayUnit);
   const [draft, setDraft] = useState<AxisDraft[]>([]);
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useMutation();
 
   // Rebuild the editable draft from the saved axes whenever they (or the display
   // unit) change. Done during render rather than in an effect.
@@ -78,24 +77,19 @@ export function GridEditor({
   }
 
   async function save() {
-    setBusy(true);
-    try {
-      await gql(SET_GRID_AXES, {
-        axes: draft.map((r) => ({
-          family: r.family,
-          label: r.label,
-          position: parseFloat(r.position) || 0,
-        })),
-        id: project.id,
-        unit: project.displayUnit,
-      });
-      toast.success('Grid saved');
-      onSaved();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Save failed');
-    } finally {
-      setBusy(false);
-    }
+    await run(
+      () =>
+        gql(SET_GRID_AXES, {
+          axes: draft.map((r) => ({
+            family: r.family,
+            label: r.label,
+            position: parseFloat(r.position) || 0,
+          })),
+          id: project.id,
+          unit: project.displayUnit,
+        }),
+      { error: 'Save failed', onDone: onSaved, success: 'Grid saved' },
+    );
   }
 
   return (

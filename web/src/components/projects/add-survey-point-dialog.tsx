@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { graphql } from '@/lib/gql';
-import { gql } from '@/lib/graphql';
+import { gql, useMutation } from '@/lib/graphql';
 import { type PointCategory, type Project } from '@/lib/types';
 import { unitName } from '@/lib/units';
 
@@ -87,7 +87,7 @@ export function AddSurveyPointDialog({
   const [elevation, setElevation] = useState('');
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState<string>(NONE);
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useMutation();
 
   const isGeo = space === 'GEOGRAPHIC';
   const xLabel = isGeo ? 'Longitude' : space === 'GRID' ? 'Grid X' : 'Easting';
@@ -110,28 +110,29 @@ export function AddSurveyPointDialog({
       toast.error(`Label, ${xLabel.toLowerCase()}, and ${yLabel.toLowerCase()} are required.`);
       return;
     }
-    setBusy(true);
-    try {
-      await gql(ADD_SURVEY_POINT, {
-        categoryId: categoryId === NONE ? null : categoryId,
-        description: description.trim() || null,
-        elevation: elevation.trim() === '' ? null : parseFloat(elevation),
-        label: label.trim(),
-        projectId: project.id,
-        space,
-        unit: project.displayUnit,
-        x: parseFloat(x),
-        y: parseFloat(y),
-      });
-      toast.success(`Added “${label.trim()}”.`);
-      reset();
-      setOpen(false);
-      onAdded();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not add point');
-    } finally {
-      setBusy(false);
-    }
+    await run(
+      () =>
+        gql(ADD_SURVEY_POINT, {
+          categoryId: categoryId === NONE ? null : categoryId,
+          description: description.trim() || null,
+          elevation: elevation.trim() === '' ? null : parseFloat(elevation),
+          label: label.trim(),
+          projectId: project.id,
+          space,
+          unit: project.displayUnit,
+          x: parseFloat(x),
+          y: parseFloat(y),
+        }),
+      {
+        error: 'Could not add point',
+        onDone: () => {
+          reset();
+          setOpen(false);
+          onAdded();
+        },
+        success: `Added “${label.trim()}”.`,
+      },
+    );
   }
 
   return (

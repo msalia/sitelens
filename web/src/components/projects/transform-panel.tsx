@@ -2,7 +2,6 @@
 
 import { IconBolt } from '@tabler/icons-react';
 import { useState } from 'react';
-import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -22,7 +21,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { graphql } from '@/lib/gql';
-import { gql } from '@/lib/graphql';
+import { gql, useMutation } from '@/lib/graphql';
 import { type Project, type Transform, UNIT_LABELS } from '@/lib/types';
 import { fromMeters } from '@/lib/units';
 import { cn } from '@/lib/utils';
@@ -55,21 +54,16 @@ export function TransformPanel({
 }) {
   const unitLabel = UNIT_LABELS[project.displayUnit];
   const [transform, setTransform] = useState<Transform | null>(initialTransform);
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useMutation();
 
   const inUnit = (meters: number) => fromMeters(meters, project.displayUnit).toFixed(4);
 
   async function solve() {
-    setBusy(true);
-    try {
-      const data = await gql(SOLVE_TRANSFORM, { id: project.id });
-      setTransform(data.solveTransform);
-      toast.success('Transform solved');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Solve failed');
-    } finally {
-      setBusy(false);
-    }
+    await run(() => gql(SOLVE_TRANSFORM, { id: project.id }), {
+      error: 'Solve failed',
+      onDone: (data) => setTransform(data.solveTransform),
+      success: 'Transform solved',
+    });
   }
 
   return (

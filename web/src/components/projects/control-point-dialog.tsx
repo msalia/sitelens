@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -15,7 +14,7 @@ import {
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { graphql } from '@/lib/gql';
-import { gql } from '@/lib/graphql';
+import { gql, useMutation } from '@/lib/graphql';
 import { type ControlPoint, type Project } from '@/lib/types';
 import { fromMeters, unitName } from '@/lib/units';
 
@@ -102,7 +101,7 @@ export function ControlPointDialog({
   const [gridX, setGridX] = useState('');
   const [gridY, setGridY] = useState('');
   const [source, setSource] = useState('');
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useMutation();
 
   // Seed the form when the dialog opens: from the point in edit mode, blank for
   // add. Done during render (not an effect) and keyed on open/point/unit so
@@ -136,30 +135,29 @@ export function ControlPointDialog({
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    try {
-      const common = {
-        e: parseFloat(easting),
-        gx: gridX ? parseFloat(gridX) : null,
-        gy: gridY ? parseFloat(gridY) : null,
-        label,
-        n: parseFloat(northing),
-        unit: project.displayUnit,
-        z: elevation ? parseFloat(elevation) : null,
-      };
-      if (point) {
-        await gql(UPDATE_CONTROL_POINT, { ...common, id: point.id, src: source });
-        toast.success('Control point updated');
-      } else {
-        await gql(ADD_CONTROL_POINT, { ...common, id: project.id, src: source || null });
-        toast.success('Control point added');
-      }
-      onSaved();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : isEdit ? 'Update failed' : 'Add failed');
-    } finally {
-      setBusy(false);
-    }
+    const common = {
+      e: parseFloat(easting),
+      gx: gridX ? parseFloat(gridX) : null,
+      gy: gridY ? parseFloat(gridY) : null,
+      label,
+      n: parseFloat(northing),
+      unit: project.displayUnit,
+      z: elevation ? parseFloat(elevation) : null,
+    };
+    await run(
+      async () => {
+        if (point) {
+          await gql(UPDATE_CONTROL_POINT, { ...common, id: point.id, src: source });
+        } else {
+          await gql(ADD_CONTROL_POINT, { ...common, id: project.id, src: source || null });
+        }
+      },
+      {
+        error: isEdit ? 'Update failed' : 'Add failed',
+        onDone: onSaved,
+        success: point ? 'Control point updated' : 'Control point added',
+      },
+    );
   }
 
   return (
