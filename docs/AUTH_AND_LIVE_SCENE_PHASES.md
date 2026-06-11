@@ -9,8 +9,8 @@
 
 | Phase | Focus                                                  | Depends On | Status      |
 | ----- | ------------------------------------------------------ | ---------- | ----------- |
-| 1     | Mail infrastructure (resend-rs)                        | —          | ✅ Done      |
-| 2     | Email verification                                     | 1          | ✅ Done      |
+| 1     | Mail infrastructure (resend-rs)                        | —          | ✅ Done     |
+| 2     | Email verification                                     | 1          | ✅ Done     |
 | 3     | Self-service password reset                            | 1          | Not started |
 | 4     | Org user management (`/settings/users`) + operator CLI | 1          | Not started |
 | 5     | WebSocket subscription infra                           | —          | Not started |

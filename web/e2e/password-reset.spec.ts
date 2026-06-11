@@ -24,6 +24,9 @@ test('signup triggers a verification email (captured, not sent)', async ({ page,
 test('forgot password → emailed link → new password → login', async ({ page, request }) => {
   const email = await signUpAndLogin(page, 'reset');
 
+  // Sign out — auth pages redirect logged-in users to the app.
+  await page.context().clearCookies();
+
   // Request a reset from the public page (no account-enumeration in the copy).
   await page.goto('/forgot-password');
   await page.getByLabel('Email').fill(email);

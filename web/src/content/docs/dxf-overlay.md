@@ -52,4 +52,5 @@ to show — **none are shown by default**, so you opt in only the layers you wan
 Each overlay also has a **Visible** switch to show or hide the whole drawing at
 once.
 
-Next: [Converting & Exporting](/docs/converting-and-exporting).
+That's the end of the guide — head back to the [docs home](/docs) for anything
+you want to revisit.

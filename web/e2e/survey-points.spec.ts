@@ -57,6 +57,9 @@ test('bulk select and delete with confirmation', async ({ page }) => {
   await createProjectAndOpen(page, 'SP Bulk');
   await importCsv(page, CSV);
 
+  // Wait for the imported rows to load before selecting all (avoids checking the
+  // box while the page list is still empty).
+  await expect(page.getByText('MON1', { exact: true })).toBeVisible();
   await page.getByRole('checkbox', { name: 'Select all on page' }).check();
   await expect(page.getByText('3 selected')).toBeVisible();
   await page.getByRole('button', { exact: true, name: 'Actions' }).click();

@@ -64,6 +64,10 @@ test('resetting a user from the roster prompts for confirmation and emails a lin
   await expect(dialog.getByText(/send a password reset link/i)).toBeVisible();
   await dialog.getByRole('button', { name: 'Send reset link' }).click();
 
+  // Wait for the success toast so the reset mutation has completed before we
+  // read the captured mailbox.
+  await expect(page.getByText(/sent a reset link to/i)).toBeVisible();
+
   // A reset email was produced for the admin.
   const link = await emailLinkTo(request, adminEmail, /reset/i);
   expect(link).toContain('/reset-password?token=');

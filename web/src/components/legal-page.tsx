@@ -3,6 +3,8 @@ import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import { LegalBackLink } from '@/components/legal-back-link';
+
 /** Public (no-auth) chrome for legal documents — Terms, Privacy — rendered from
  *  markdown with the same prose styling as the docs site. */
 export function LegalPage({
@@ -23,9 +25,7 @@ export function LegalPage({
           </div>
           <span className="tracking-tight">SiteLens</span>
         </Link>
-        <Link href="/login" className="text-muted-foreground hover:text-foreground text-sm">
-          Back to login
-        </Link>
+        <LegalBackLink className="text-muted-foreground hover:text-foreground text-sm" />
       </header>
 
       <main className="mx-auto max-w-3xl px-6 py-12">

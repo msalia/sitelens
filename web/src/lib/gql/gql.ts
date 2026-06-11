@@ -13,12 +13,9 @@ import * as types from './graphql';
  * Learn more about it here: https://the-guild.dev/graphql/codegen/plugins/presets/preset-client#reducing-bundle-size
  */
 type Documents = {
-  '\n  mutation AcceptInvite($t: String!, $p: String!) {\n    acceptInvite(token: $t, password: $p) {\n      id\n    }\n  }\n': typeof types.AcceptInviteDocument;
-  '\n  mutation RequestPasswordReset($e: String!) {\n    requestPasswordReset(email: $e)\n  }\n': typeof types.RequestPasswordResetDocument;
   '\n  query Workspace($id: UUID!) {\n    project(id: $id) {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      siteOriginRotationDeg\n      createdAt\n      updatedAt\n    }\n    gridAxes(projectId: $id) {\n      id\n      projectId\n      family\n      label\n      position\n    }\n    controlPoints(projectId: $id) {\n      id\n      projectId\n      label\n      northing\n      easting\n      elevation\n      gridX\n      gridY\n      source\n    }\n    transform(projectId: $id) {\n      translationE\n      translationN\n      rotationDegrees\n      scale\n      rmsError\n      pointCount\n      residuals {\n        label\n        deltaEasting\n        deltaNorthing\n        magnitude\n      }\n    }\n    categories {\n      id\n      orgId\n      name\n      color\n      icon\n      isDefault\n    }\n    cadOverlays(projectId: $id) {\n      id\n      projectId\n      originalFilename\n      offsetE\n      offsetN\n      rotationDeg\n      scale\n      elevation\n      assumeRealWorld\n      visible\n    }\n    surveyPointCount(projectId: $id)\n  }\n': typeof types.WorkspaceDocument;
   '\n  query Projects {\n    projects {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      siteOriginRotationDeg\n      createdAt\n      updatedAt\n    }\n  }\n': typeof types.ProjectsDocument;
   '\n  mutation DeleteProject($id: UUID!) {\n    deleteProject(id: $id)\n  }\n': typeof types.DeleteProjectDocument;
-  '\n  mutation ResetPassword($t: String!, $p: String!) {\n    resetPassword(token: $t, newPassword: $p)\n  }\n': typeof types.ResetPasswordDocument;
   '\n  query SettingsData {\n    me {\n      id\n      orgId\n      email\n      role\n      emailVerified\n    }\n    organization {\n      id\n      name\n    }\n  }\n': typeof types.SettingsDataDocument;
   '\n  mutation DeleteOrganization {\n    deleteOrganization\n  }\n': typeof types.DeleteOrganizationDocument;
   '\n  query UsersMe {\n    me {\n      id\n      orgId\n      email\n      role\n      emailVerified\n    }\n  }\n': typeof types.UsersMeDocument;
@@ -27,10 +24,11 @@ type Documents = {
   '\n  mutation UpdateUserRole($userId: UUID!, $role: Role!) {\n    updateUserRole(userId: $userId, role: $role) {\n      id\n    }\n  }\n': typeof types.UpdateUserRoleDocument;
   '\n  mutation AdminResetPassword($userId: UUID!) {\n    adminResetPassword(userId: $userId)\n  }\n': typeof types.AdminResetPasswordDocument;
   '\n  mutation RemoveUser($userId: UUID!) {\n    removeUser(userId: $userId)\n  }\n': typeof types.RemoveUserDocument;
-  '\n  mutation Signup($e: String!, $p: String!, $o: String!) {\n    signup(email: $e, password: $p, orgName: $o) {\n      verificationToken\n    }\n  }\n': typeof types.SignupDocument;
-  '\n  mutation VerifyEmail($t: String!) {\n    verifyEmail(token: $t)\n  }\n': typeof types.VerifyEmailDocument;
+  '\n  mutation AcceptInvite($t: String!, $p: String!) {\n    acceptInvite(token: $t, password: $p) {\n      id\n    }\n  }\n': typeof types.AcceptInviteDocument;
   '\n  query Me {\n    me {\n      id\n      orgId\n      email\n      role\n      emailVerified\n    }\n  }\n': typeof types.MeDocument;
   '\n  mutation Logout {\n    logout\n  }\n': typeof types.LogoutDocument;
+  '\n  mutation RequestPasswordReset($e: String!) {\n    requestPasswordReset(email: $e)\n  }\n': typeof types.RequestPasswordResetDocument;
+  '\n  query LegalMe {\n    me {\n      id\n    }\n  }\n': typeof types.LegalMeDocument;
   '\n  mutation Login($e: String!, $p: String!) {\n    login(email: $e, password: $p) {\n      id\n    }\n  }\n': typeof types.LoginDocument;
   '\n  mutation ResendVerification($e: String!) {\n    resendVerification(email: $e)\n  }\n': typeof types.ResendVerificationDocument;
   '\n  mutation UploadDxf($id: UUID!, $f: String!, $c: String!) {\n    uploadDxf(projectId: $id, filename: $f, content: $c) {\n      id\n    }\n  }\n': typeof types.UploadDxfDocument;
@@ -72,20 +70,17 @@ type Documents = {
   '\n  query PointGroups($id: UUID!) {\n    pointGroups(projectId: $id) {\n      id\n      projectId\n      name\n      memberIds\n    }\n  }\n': typeof types.PointGroupsDocument;
   '\n  mutation AddPointsToGroup($groupId: UUID!, $ids: [UUID!]!) {\n    addPointsToGroup(groupId: $groupId, memberIds: $ids) {\n      id\n      memberIds\n    }\n  }\n': typeof types.AddPointsToGroupDocument;
   '\n  mutation SolveTransform($id: UUID!) {\n    solveTransform(projectId: $id) {\n      translationE\n      translationN\n      rotationDegrees\n      scale\n      rmsError\n      pointCount\n      residuals {\n        label\n        deltaEasting\n        deltaNorthing\n        magnitude\n      }\n    }\n  }\n': typeof types.SolveTransformDocument;
+  '\n  mutation ResetPassword($t: String!, $p: String!) {\n    resetPassword(token: $t, newPassword: $p)\n  }\n': typeof types.ResetPasswordDocument;
+  '\n  mutation Signup($e: String!, $p: String!, $o: String!) {\n    signup(email: $e, password: $p, orgName: $o) {\n      verificationToken\n    }\n  }\n': typeof types.SignupDocument;
+  '\n  mutation VerifyEmail($t: String!) {\n    verifyEmail(token: $t)\n  }\n': typeof types.VerifyEmailDocument;
 };
 const documents: Documents = {
-  '\n  mutation AcceptInvite($t: String!, $p: String!) {\n    acceptInvite(token: $t, password: $p) {\n      id\n    }\n  }\n':
-    types.AcceptInviteDocument,
-  '\n  mutation RequestPasswordReset($e: String!) {\n    requestPasswordReset(email: $e)\n  }\n':
-    types.RequestPasswordResetDocument,
   '\n  query Workspace($id: UUID!) {\n    project(id: $id) {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      siteOriginRotationDeg\n      createdAt\n      updatedAt\n    }\n    gridAxes(projectId: $id) {\n      id\n      projectId\n      family\n      label\n      position\n    }\n    controlPoints(projectId: $id) {\n      id\n      projectId\n      label\n      northing\n      easting\n      elevation\n      gridX\n      gridY\n      source\n    }\n    transform(projectId: $id) {\n      translationE\n      translationN\n      rotationDegrees\n      scale\n      rmsError\n      pointCount\n      residuals {\n        label\n        deltaEasting\n        deltaNorthing\n        magnitude\n      }\n    }\n    categories {\n      id\n      orgId\n      name\n      color\n      icon\n      isDefault\n    }\n    cadOverlays(projectId: $id) {\n      id\n      projectId\n      originalFilename\n      offsetE\n      offsetN\n      rotationDeg\n      scale\n      elevation\n      assumeRealWorld\n      visible\n    }\n    surveyPointCount(projectId: $id)\n  }\n':
     types.WorkspaceDocument,
   '\n  query Projects {\n    projects {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      siteOriginRotationDeg\n      createdAt\n      updatedAt\n    }\n  }\n':
     types.ProjectsDocument,
   '\n  mutation DeleteProject($id: UUID!) {\n    deleteProject(id: $id)\n  }\n':
     types.DeleteProjectDocument,
-  '\n  mutation ResetPassword($t: String!, $p: String!) {\n    resetPassword(token: $t, newPassword: $p)\n  }\n':
-    types.ResetPasswordDocument,
   '\n  query SettingsData {\n    me {\n      id\n      orgId\n      email\n      role\n      emailVerified\n    }\n    organization {\n      id\n      name\n    }\n  }\n':
     types.SettingsDataDocument,
   '\n  mutation DeleteOrganization {\n    deleteOrganization\n  }\n':
@@ -102,13 +97,14 @@ const documents: Documents = {
     types.AdminResetPasswordDocument,
   '\n  mutation RemoveUser($userId: UUID!) {\n    removeUser(userId: $userId)\n  }\n':
     types.RemoveUserDocument,
-  '\n  mutation Signup($e: String!, $p: String!, $o: String!) {\n    signup(email: $e, password: $p, orgName: $o) {\n      verificationToken\n    }\n  }\n':
-    types.SignupDocument,
-  '\n  mutation VerifyEmail($t: String!) {\n    verifyEmail(token: $t)\n  }\n':
-    types.VerifyEmailDocument,
+  '\n  mutation AcceptInvite($t: String!, $p: String!) {\n    acceptInvite(token: $t, password: $p) {\n      id\n    }\n  }\n':
+    types.AcceptInviteDocument,
   '\n  query Me {\n    me {\n      id\n      orgId\n      email\n      role\n      emailVerified\n    }\n  }\n':
     types.MeDocument,
   '\n  mutation Logout {\n    logout\n  }\n': types.LogoutDocument,
+  '\n  mutation RequestPasswordReset($e: String!) {\n    requestPasswordReset(email: $e)\n  }\n':
+    types.RequestPasswordResetDocument,
+  '\n  query LegalMe {\n    me {\n      id\n    }\n  }\n': types.LegalMeDocument,
   '\n  mutation Login($e: String!, $p: String!) {\n    login(email: $e, password: $p) {\n      id\n    }\n  }\n':
     types.LoginDocument,
   '\n  mutation ResendVerification($e: String!) {\n    resendVerification(email: $e)\n  }\n':
@@ -191,20 +187,14 @@ const documents: Documents = {
     types.AddPointsToGroupDocument,
   '\n  mutation SolveTransform($id: UUID!) {\n    solveTransform(projectId: $id) {\n      translationE\n      translationN\n      rotationDegrees\n      scale\n      rmsError\n      pointCount\n      residuals {\n        label\n        deltaEasting\n        deltaNorthing\n        magnitude\n      }\n    }\n  }\n':
     types.SolveTransformDocument,
+  '\n  mutation ResetPassword($t: String!, $p: String!) {\n    resetPassword(token: $t, newPassword: $p)\n  }\n':
+    types.ResetPasswordDocument,
+  '\n  mutation Signup($e: String!, $p: String!, $o: String!) {\n    signup(email: $e, password: $p, orgName: $o) {\n      verificationToken\n    }\n  }\n':
+    types.SignupDocument,
+  '\n  mutation VerifyEmail($t: String!) {\n    verifyEmail(token: $t)\n  }\n':
+    types.VerifyEmailDocument,
 };
 
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: '\n  mutation AcceptInvite($t: String!, $p: String!) {\n    acceptInvite(token: $t, password: $p) {\n      id\n    }\n  }\n',
-): typeof import('./graphql').AcceptInviteDocument;
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: '\n  mutation RequestPasswordReset($e: String!) {\n    requestPasswordReset(email: $e)\n  }\n',
-): typeof import('./graphql').RequestPasswordResetDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -223,12 +213,6 @@ export function graphql(
 export function graphql(
   source: '\n  mutation DeleteProject($id: UUID!) {\n    deleteProject(id: $id)\n  }\n',
 ): typeof import('./graphql').DeleteProjectDocument;
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: '\n  mutation ResetPassword($t: String!, $p: String!) {\n    resetPassword(token: $t, newPassword: $p)\n  }\n',
-): typeof import('./graphql').ResetPasswordDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -281,14 +265,8 @@ export function graphql(
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
-  source: '\n  mutation Signup($e: String!, $p: String!, $o: String!) {\n    signup(email: $e, password: $p, orgName: $o) {\n      verificationToken\n    }\n  }\n',
-): typeof import('./graphql').SignupDocument;
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: '\n  mutation VerifyEmail($t: String!) {\n    verifyEmail(token: $t)\n  }\n',
-): typeof import('./graphql').VerifyEmailDocument;
+  source: '\n  mutation AcceptInvite($t: String!, $p: String!) {\n    acceptInvite(token: $t, password: $p) {\n      id\n    }\n  }\n',
+): typeof import('./graphql').AcceptInviteDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -301,6 +279,18 @@ export function graphql(
 export function graphql(
   source: '\n  mutation Logout {\n    logout\n  }\n',
 ): typeof import('./graphql').LogoutDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  mutation RequestPasswordReset($e: String!) {\n    requestPasswordReset(email: $e)\n  }\n',
+): typeof import('./graphql').RequestPasswordResetDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  query LegalMe {\n    me {\n      id\n    }\n  }\n',
+): typeof import('./graphql').LegalMeDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -547,6 +537,24 @@ export function graphql(
 export function graphql(
   source: '\n  mutation SolveTransform($id: UUID!) {\n    solveTransform(projectId: $id) {\n      translationE\n      translationN\n      rotationDegrees\n      scale\n      rmsError\n      pointCount\n      residuals {\n        label\n        deltaEasting\n        deltaNorthing\n        magnitude\n      }\n    }\n  }\n',
 ): typeof import('./graphql').SolveTransformDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  mutation ResetPassword($t: String!, $p: String!) {\n    resetPassword(token: $t, newPassword: $p)\n  }\n',
+): typeof import('./graphql').ResetPasswordDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  mutation Signup($e: String!, $p: String!, $o: String!) {\n    signup(email: $e, password: $p, orgName: $o) {\n      verificationToken\n    }\n  }\n',
+): typeof import('./graphql').SignupDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  mutation VerifyEmail($t: String!) {\n    verifyEmail(token: $t)\n  }\n',
+): typeof import('./graphql').VerifyEmailDocument;
 
 export function graphql(source: string) {
   return (documents as any)[source] ?? {};

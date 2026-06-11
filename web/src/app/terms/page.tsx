@@ -43,7 +43,15 @@ You retain all rights to the data and content you upload ("Your Data"). You gran
 us the limited rights needed to host, process, and display Your Data solely to
 provide the Service to you and your organization. We do not sell Your Data.
 
-## 5. Accuracy and professional responsibility
+## 5. Data protection and privacy
+
+Our handling of personal data is described in the [Privacy Policy](/privacy),
+which forms part of these Terms. We process personal data in line with the GDPR
+and UK GDPR. Where your organization is the controller of personal data and
+SiteLens acts as a processor, a Data Processing Addendum (DPA) reflecting GDPR
+Article 28 is available on request.
+
+## 6. Accuracy and professional responsibility
 
 SiteLens assists with coordinate computation and visualization, but **you are
 responsible for verifying all results** against your source data and professional
@@ -52,38 +60,38 @@ only and are **not survey-grade**. The elevations and coordinates you enter rema
 the source of truth. Do not rely on the Service as the sole basis for any
 construction, legal, or safety decision.
 
-## 6. Availability and changes
+## 7. Availability and changes
 
 We may update, improve, or change the Service over time. We may also suspend or
 discontinue features. We will make reasonable efforts to avoid disruption but do
 not guarantee uninterrupted availability.
 
-## 7. Termination
+## 8. Termination
 
 You may stop using the Service at any time. We may suspend or terminate access if
 you violate these Terms or use the Service in a way that risks harm to others or
 to the Service.
 
-## 8. Disclaimer of warranties
+## 9. Disclaimer of warranties
 
 The Service is provided "as is" and "as available," without warranties of any
 kind, whether express or implied, including fitness for a particular purpose and
 non-infringement, to the fullest extent permitted by law.
 
-## 9. Limitation of liability
+## 10. Limitation of liability
 
 To the fullest extent permitted by law, SiteLens and its operators will not be
 liable for any indirect, incidental, special, consequential, or punitive damages,
 or for any loss of data, profits, or business, arising out of or related to your
 use of the Service.
 
-## 10. Changes to these Terms
+## 11. Changes to these Terms
 
 We may revise these Terms from time to time. If we make material changes, we will
 update the date above and, where appropriate, provide notice. Your continued use
 of the Service after changes take effect constitutes acceptance.
 
-## 11. Contact
+## 12. Contact
 
 Questions about these Terms? Contact your organization's administrator or reach
 out to SiteLens support.

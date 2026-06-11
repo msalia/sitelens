@@ -58,19 +58,6 @@ export type LengthUnit = 'INTERNATIONAL_FOOT' | 'METER' | 'US_SURVEY_FOOT';
 /** In-org role. The string values match the `users.role` CHECK constraint. */
 export type Role = 'ADMIN' | 'SURVEYOR' | 'VIEWER';
 
-export type AcceptInviteMutationVariables = Exact<{
-  t: string;
-  p: string;
-}>;
-
-export type AcceptInviteMutation = { acceptInvite: { id: string } };
-
-export type RequestPasswordResetMutationVariables = Exact<{
-  e: string;
-}>;
-
-export type RequestPasswordResetMutation = { requestPasswordReset: boolean };
-
 export type WorkspaceQueryVariables = Exact<{
   id: string;
 }>;
@@ -170,13 +157,6 @@ export type DeleteProjectMutationVariables = Exact<{
 
 export type DeleteProjectMutation = { deleteProject: boolean };
 
-export type ResetPasswordMutationVariables = Exact<{
-  t: string;
-  p: string;
-}>;
-
-export type ResetPasswordMutation = { resetPassword: boolean };
-
 export type SettingsDataQueryVariables = Exact<{ [key: string]: never }>;
 
 export type SettingsDataQuery = {
@@ -226,19 +206,12 @@ export type RemoveUserMutationVariables = Exact<{
 
 export type RemoveUserMutation = { removeUser: boolean };
 
-export type SignupMutationVariables = Exact<{
-  e: string;
-  p: string;
-  o: string;
-}>;
-
-export type SignupMutation = { signup: { verificationToken: string } };
-
-export type VerifyEmailMutationVariables = Exact<{
+export type AcceptInviteMutationVariables = Exact<{
   t: string;
+  p: string;
 }>;
 
-export type VerifyEmailMutation = { verifyEmail: boolean };
+export type AcceptInviteMutation = { acceptInvite: { id: string } };
 
 export type MeQueryVariables = Exact<{ [key: string]: never }>;
 
@@ -249,6 +222,16 @@ export type MeQuery = {
 export type LogoutMutationVariables = Exact<{ [key: string]: never }>;
 
 export type LogoutMutation = { logout: boolean };
+
+export type RequestPasswordResetMutationVariables = Exact<{
+  e: string;
+}>;
+
+export type RequestPasswordResetMutation = { requestPasswordReset: boolean };
+
+export type LegalMeQueryVariables = Exact<{ [key: string]: never }>;
+
+export type LegalMeQuery = { me: { id: string } | null };
 
 export type LoginMutationVariables = Exact<{
   e: string;
@@ -695,6 +678,27 @@ export type SolveTransformMutation = {
   };
 };
 
+export type ResetPasswordMutationVariables = Exact<{
+  t: string;
+  p: string;
+}>;
+
+export type ResetPasswordMutation = { resetPassword: boolean };
+
+export type SignupMutationVariables = Exact<{
+  e: string;
+  p: string;
+  o: string;
+}>;
+
+export type SignupMutation = { signup: { verificationToken: string } };
+
+export type VerifyEmailMutationVariables = Exact<{
+  t: string;
+}>;
+
+export type VerifyEmailMutation = { verifyEmail: boolean };
+
 export class TypedDocumentString<TResult, TVariables>
   extends String
   implements DocumentTypeDecoration<TResult, TVariables>
@@ -714,21 +718,6 @@ export class TypedDocumentString<TResult, TVariables>
   }
 }
 
-export const AcceptInviteDocument = new TypedDocumentString(`
-    mutation AcceptInvite($t: String!, $p: String!) {
-  acceptInvite(token: $t, password: $p) {
-    id
-  }
-}
-    `) as unknown as TypedDocumentString<AcceptInviteMutation, AcceptInviteMutationVariables>;
-export const RequestPasswordResetDocument = new TypedDocumentString(`
-    mutation RequestPasswordReset($e: String!) {
-  requestPasswordReset(email: $e)
-}
-    `) as unknown as TypedDocumentString<
-  RequestPasswordResetMutation,
-  RequestPasswordResetMutationVariables
->;
 export const WorkspaceDocument = new TypedDocumentString(`
     query Workspace($id: UUID!) {
   project(id: $id) {
@@ -823,11 +812,6 @@ export const DeleteProjectDocument = new TypedDocumentString(`
   deleteProject(id: $id)
 }
     `) as unknown as TypedDocumentString<DeleteProjectMutation, DeleteProjectMutationVariables>;
-export const ResetPasswordDocument = new TypedDocumentString(`
-    mutation ResetPassword($t: String!, $p: String!) {
-  resetPassword(token: $t, newPassword: $p)
-}
-    `) as unknown as TypedDocumentString<ResetPasswordMutation, ResetPasswordMutationVariables>;
 export const SettingsDataDocument = new TypedDocumentString(`
     query SettingsData {
   me {
@@ -902,18 +886,13 @@ export const RemoveUserDocument = new TypedDocumentString(`
   removeUser(userId: $userId)
 }
     `) as unknown as TypedDocumentString<RemoveUserMutation, RemoveUserMutationVariables>;
-export const SignupDocument = new TypedDocumentString(`
-    mutation Signup($e: String!, $p: String!, $o: String!) {
-  signup(email: $e, password: $p, orgName: $o) {
-    verificationToken
+export const AcceptInviteDocument = new TypedDocumentString(`
+    mutation AcceptInvite($t: String!, $p: String!) {
+  acceptInvite(token: $t, password: $p) {
+    id
   }
 }
-    `) as unknown as TypedDocumentString<SignupMutation, SignupMutationVariables>;
-export const VerifyEmailDocument = new TypedDocumentString(`
-    mutation VerifyEmail($t: String!) {
-  verifyEmail(token: $t)
-}
-    `) as unknown as TypedDocumentString<VerifyEmailMutation, VerifyEmailMutationVariables>;
+    `) as unknown as TypedDocumentString<AcceptInviteMutation, AcceptInviteMutationVariables>;
 export const MeDocument = new TypedDocumentString(`
     query Me {
   me {
@@ -930,6 +909,21 @@ export const LogoutDocument = new TypedDocumentString(`
   logout
 }
     `) as unknown as TypedDocumentString<LogoutMutation, LogoutMutationVariables>;
+export const RequestPasswordResetDocument = new TypedDocumentString(`
+    mutation RequestPasswordReset($e: String!) {
+  requestPasswordReset(email: $e)
+}
+    `) as unknown as TypedDocumentString<
+  RequestPasswordResetMutation,
+  RequestPasswordResetMutationVariables
+>;
+export const LegalMeDocument = new TypedDocumentString(`
+    query LegalMe {
+  me {
+    id
+  }
+}
+    `) as unknown as TypedDocumentString<LegalMeQuery, LegalMeQueryVariables>;
 export const LoginDocument = new TypedDocumentString(`
     mutation Login($e: String!, $p: String!) {
   login(email: $e, password: $p) {
@@ -1442,3 +1436,20 @@ export const SolveTransformDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SolveTransformMutation, SolveTransformMutationVariables>;
+export const ResetPasswordDocument = new TypedDocumentString(`
+    mutation ResetPassword($t: String!, $p: String!) {
+  resetPassword(token: $t, newPassword: $p)
+}
+    `) as unknown as TypedDocumentString<ResetPasswordMutation, ResetPasswordMutationVariables>;
+export const SignupDocument = new TypedDocumentString(`
+    mutation Signup($e: String!, $p: String!, $o: String!) {
+  signup(email: $e, password: $p, orgName: $o) {
+    verificationToken
+  }
+}
+    `) as unknown as TypedDocumentString<SignupMutation, SignupMutationVariables>;
+export const VerifyEmailDocument = new TypedDocumentString(`
+    mutation VerifyEmail($t: String!) {
+  verifyEmail(token: $t)
+}
+    `) as unknown as TypedDocumentString<VerifyEmailMutation, VerifyEmailMutationVariables>;

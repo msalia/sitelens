@@ -4,10 +4,12 @@ import {
   IconBook2,
   IconChevronDown,
   IconCompass,
+  IconFileText,
   IconLayoutGrid,
   IconLogout,
   IconSearch,
   IconSettings,
+  IconShieldLock,
   IconUsers,
 } from '@tabler/icons-react';
 import Link from 'next/link';
@@ -43,6 +45,8 @@ const LOGOUT = graphql(`
 const NAV = [
   { href: '/projects', icon: IconLayoutGrid, label: 'Projects' },
   { href: '/docs', icon: IconBook2, label: 'Docs' },
+  { href: '/terms', icon: IconFileText, label: 'Terms of Service' },
+  { href: '/privacy', icon: IconShieldLock, label: 'Privacy Policy' },
 ] as const;
 
 /** Guards a route: redirects unauthenticated users to /login, then renders the
@@ -256,6 +260,21 @@ function UserMenu({ me, onLogout }: { me: Me; onLogout: () => void }) {
           >
             <IconSettings className="size-4" /> Settings
           </Link>
+          <Link
+            href="/terms"
+            onClick={() => setOpen(false)}
+            className="hover:bg-muted flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
+          >
+            <IconFileText className="size-4" /> Terms of Service
+          </Link>
+          <Link
+            href="/privacy"
+            onClick={() => setOpen(false)}
+            className="hover:bg-muted flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
+          >
+            <IconShieldLock className="size-4" /> Privacy Policy
+          </Link>
+          <div className="bg-border my-1 h-px" />
           <button
             type="button"
             onClick={onLogout}
