@@ -370,6 +370,7 @@ async fn email_taken(pool: &PgPool, email: &str) -> Result<bool> {
 }
 
 mod auth;
+mod billing;
 mod coords;
 mod grid;
 mod overlays;
@@ -405,6 +406,7 @@ pub struct MutationRoot(
     points::PointsMutation,
     overlays::OverlayMutation,
     terrain::TerrainMutation,
+    billing::BillingMutation,
 );
 
 /// Row shape for reading a persisted transform.

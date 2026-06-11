@@ -1,5 +1,6 @@
 pub mod archive;
 pub mod auth;
+pub mod billing;
 pub mod convert;
 pub mod crs;
 pub mod db;
@@ -21,16 +22,18 @@ use async_graphql::http::ALL_WEBSOCKET_PROTOCOLS;
 use async_graphql::{Data, Schema};
 use async_graphql_axum::{GraphQLProtocol, GraphQLRequest, GraphQLResponse, GraphQLWebSocket};
 use axum::{
+    body::Bytes,
     extract::{ws::WebSocketUpgrade, DefaultBodyLimit, FromRequestParts, Request, State},
     http::{header, HeaderMap, StatusCode},
     response::{Html, IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use serde_json::json;
 use sqlx::PgPool;
 
 use crate::auth::{auth_context_from_token, session_token_from_cookie_header, AuthConfig};
+use crate::billing::StripeConfig;
 use crate::mail::Mailer;
 use crate::pubsub::ScenePubSub;
 use crate::ratelimit::{ClientIp, RateLimiter};
@@ -84,6 +87,7 @@ pub fn build_schema_with(
     .data(limiter)
     .data(Mailer::from_env())
     .data(ScenePubSub::new())
+    .data(StripeConfig::from_env())
     .finish()
 }
 
@@ -92,6 +96,7 @@ struct AppState {
     schema: ApiSchema,
     config: AuthConfig,
     pool: PgPool,
+    stripe: StripeConfig,
 }
 
 /// Derives the authenticated principal (if any) from the request's session
@@ -174,6 +179,35 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
     }
 }
 
+/// Stripe webhook endpoint. Verifies the signature, then updates the org's billing
+/// state from checkout/subscription events. 200 on success (Stripe stops retrying),
+/// 400 on a bad signature, 500 on a transient apply error (Stripe retries).
+async fn stripe_webhook(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> StatusCode {
+    if !state.stripe.enabled() {
+        return StatusCode::OK;
+    }
+    let sig = headers
+        .get("stripe-signature")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default();
+    if billing::verify_signature(&state.stripe.webhook_secret, &body, sig).is_err() {
+        return StatusCode::BAD_REQUEST;
+    }
+    let event: serde_json::Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(_) => return StatusCode::BAD_REQUEST,
+    };
+    if let Err(e) = billing::apply_event(&state.pool, &event).await {
+        eprintln!("stripe webhook apply error: {e}");
+        return StatusCode::INTERNAL_SERVER_ERROR;
+    }
+    StatusCode::OK
+}
+
 async fn connect_with_retry(database_url: &str) -> PgPool {
     let mut attempt = 0;
     loop {
@@ -235,12 +269,14 @@ pub async fn run() {
         schema,
         config,
         pool,
+        stripe: StripeConfig::from_env(),
     };
 
     let app = Router::new()
         .route("/", get(|| async { "SiteLens API" }))
         .route("/health", get(health))
         .route("/graphql", get(graphql_get).post(graphql_handler))
+        .route("/stripe/webhook", post(stripe_webhook))
         // Axum defaults to a 2 MB request body; a 10 MB DXF (plus JSON-string
         // escaping) needs headroom, so lift the cap well above MAX_DXF_BYTES.
         .layer(DefaultBodyLimit::max(32 * 1024 * 1024))
