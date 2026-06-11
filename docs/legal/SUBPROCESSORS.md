@@ -6,10 +6,16 @@
 > sub-processor so they can object (see [DPA.md](./DPA.md) §5).
 > Last updated: June 11, 2026.
 
-| Sub-processor                | Purpose                                                                  | Data processed                            | Location       | Transfer safeguard                                                                                          |
-| ---------------------------- | ------------------------------------------------------------------------ | ----------------------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------- |
-| **Resend**                   | Transactional email delivery (verification, password reset, invitations) | Recipient email address + message content | United States  | DPA + EU SCCs (Module 3, processor→processor); UK IDTA where applicable. [TODO: confirm signed DPA on file] |
-| **[TODO: HOSTING PROVIDER]** | Application + database hosting and file storage                          | All Customer data at rest                 | [TODO: REGION] | [TODO: provider DPA + SCCs/adequacy]                                                                        |
+| Sub-processor | Purpose                                                                  | Data processed                            | Location      | Transfer safeguard                                                                                                 |
+| ------------- | ------------------------------------------------------------------------ | ----------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Resend**    | Transactional email delivery (verification, password reset, invitations) | Recipient email address + message content | United States | DPA + EU SCCs (Module 3, processor→processor); UK IDTA where applicable. [TODO: confirm signed Resend DPA on file] |
+
+## Hosting
+
+SiteLens is **self-hosted on KeshavTech's own infrastructure in the United States**
+(on-premise). There is **no third-party hosting provider** with access to Customer
+data, so hosting is not a sub-processor. Because data is processed in the US,
+transfers from the EEA/UK rely on the EU SCCs / UK IDTA (see the DPA).
 
 ## Not sub-processors of personal data
 
@@ -25,6 +31,6 @@ may object on reasonable data-protection grounds within that window.
 
 ## To do before publishing
 
-- [TODO: confirm and name the hosting/storage provider + region]
-- [TODO: sign and file each sub-processor's DPA/SCCs]
-- [TODO: complete a Transfer Impact Assessment for US transfers (Resend)]
+- [TODO: sign and file the Resend DPA/SCCs]
+- [TODO: complete a Transfer Impact Assessment for US processing (KeshavTech is
+  US-based) and the Resend transfer]

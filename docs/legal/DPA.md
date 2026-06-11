@@ -7,8 +7,8 @@
 This Data Processing Agreement ("DPA") forms part of the Terms of Service (the
 "Agreement") between:
 
-- **Processor:** KeshavTech, [TODO: ENTITY ADDRESS] ("KeshavTech", "we"), operator
-  of the SiteLens service (the "Service"); and
+- **Processor:** KeshavTech, 510 Perrineville Road, Hightstown, NJ 08520, USA
+  ("KeshavTech", "we"), operator of the SiteLens service (the "Service"); and
 - **Controller:** the customer organization that uses the Service (the "Customer").
 
 Where KeshavTech processes personal data on the Customer's behalf, the Customer is
@@ -112,12 +112,16 @@ the Agreement.
 - **Rectification** — users can edit their account details.
 - **Portability** — projects can be exported as a portable archive.
 - **Access/restriction/objection** — supported on request via the Customer's admin
-  or KeshavTech support at [TODO: CONTACT EMAIL].
+  or KeshavTech support at privacy@msalia.org.
 
 ## 10. Liability and governing law
 
 Liability is subject to the limitations in the Agreement. This DPA is governed by
-[TODO: GOVERNING LAW].
+the laws of the State of New Jersey, USA, without regard to its conflict-of-laws
+rules. This choice does not override the governing law of the EU SCCs (an EU
+member-state law, for EU transfers) or the UK International Data Transfer Addendum
+(the laws of England & Wales), which apply to those transfer mechanisms as set out
+in Section 6.
 
 ---
 
@@ -142,8 +146,10 @@ Liability is subject to the limitations in the Agreement. This DPA is governed b
   sensitive endpoints.
 - **Authorization.** Role-based access (Admin / Surveyor / Viewer) and strict
   **per-organization (tenant) isolation** enforced server-side on every query.
+- **Hosting.** Self-hosted on KeshavTech's own infrastructure in the United States
+  (on-premise); no third-party hosting provider has access to Customer data.
 - **Encryption.** TLS in transit. [TODO: confirm encryption at rest for the
-  database and uploaded files at the hosting/storage layer.]
+  database and uploaded files on the on-premise storage.]
 - **Data minimization.** Only an email + organization name are collected as
   identity data; no tracking/advertising cookies.
 - **Segregation.** The application API is not exposed publicly; only the web tier
@@ -158,6 +164,14 @@ Liability is subject to the limitations in the Agreement. This DPA is governed b
 
 ## Annex III — Authorized sub-processors
 
-See [SUBPROCESSORS.md](./SUBPROCESSORS.md) / **/subprocessors** for the live list,
-including each sub-processor's purpose, location, and transfer mechanism (SCC
-module / adequacy).
+SiteLens is **self-hosted on KeshavTech's own infrastructure in the United States**,
+so there is no third-party hosting sub-processor. The only sub-processor is:
+
+| Sub-processor | Purpose                      | Location      | Transfer mechanism                                                |
+| ------------- | ---------------------------- | ------------- | ----------------------------------------------------------------- |
+| Resend        | Transactional email delivery | United States | EU SCCs (Module 3, processor→processor); UK IDTA where applicable |
+
+See [SUBPROCESSORS.md](./SUBPROCESSORS.md) / **/subprocessors** for the live list.
+Because KeshavTech processes Customer data in the United States, transfers from the
+EEA/UK to KeshavTech itself rely on the EU SCCs (Module 2, controller→processor) /
+UK IDTA under Section 6.

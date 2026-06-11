@@ -123,7 +123,8 @@ we will update the date above and, where appropriate, provide notice.
 ## Contact
 
 Questions about your data or this policy, or to exercise your rights? Contact your
-organization's administrator or reach out to SiteLens support.
+organization's administrator or reach out to SiteLens support at
+[support@msalia.org](mailto:support@msalia.org).
 `;
 
 export default function PrivacyPage() {

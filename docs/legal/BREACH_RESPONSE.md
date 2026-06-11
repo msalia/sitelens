@@ -6,8 +6,7 @@
 
 ## Key facts
 
-- **Owner / incident lead:** [TODO: NAMED PERSON + ROLE]
-- **Security contact (intake):** [TODO: SECURITY CONTACT]
+- **Owner / incident lead:** Mukund Salia — security@msalia.org, (650) 334-5493
 - **Roles:** KeshavTech is a **processor** for Customer project/account data, and a
   **controller** for its own account/identity data.
 - **The 72-hour clock** starts when KeshavTech (or the controller) becomes "aware"
@@ -74,7 +73,7 @@ confidentiality, etc.). Classify:
 > - **Nature of the breach & data involved:** [TODO]
 > - **Likely consequences:** [TODO]
 > - **Measures taken / proposed:** [TODO]
-> - **Contact for more information:** [TODO: CONTACT EMAIL]
+> - **Contact for more information:** privacy@msalia.org
 >
 > We will provide updates as our investigation continues.
 

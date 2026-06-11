@@ -11,17 +11,24 @@
 | [BREACH_RESPONSE.md](./BREACH_RESPONSE.md) | Incident runbook + notification templates + register         | Art. 33–34               |
 | [ROPA.md](./ROPA.md)                       | Records of processing (SiteLens as processor)                | Art. 30(2)               |
 
-## Placeholders to fill everywhere
+## Operator details (filled in)
 
-The operating entity is **KeshavTech** (already filled in). Remaining placeholders:
+- **Entity:** KeshavTech
+- **Registered address:** 510 Perrineville Road, Hightstown, NJ 08520, USA
+- **Privacy/legal contact:** privacy@msalia.org
+- **Security contact / incident lead:** Mukund Salia — security@msalia.org,
+  (650) 334-5493
+- **Data Protection Officer:** Mukund Salia — privacy@msalia.org
+- **Hosting:** self-hosted on KeshavTech's own infrastructure in the **United
+  States** (on-premise) — there is **no third-party hosting sub-processor**.
 
-- `[TODO: ENTITY ADDRESS]` — KeshavTech's registered address
-- `[TODO: CONTACT EMAIL]` — privacy/legal contact (e.g. `privacy@…`)
-- `[TODO: SECURITY CONTACT]` — where breaches are reported/handled
-- `[TODO: HOSTING PROVIDER + REGION]`
-- `[TODO: GOVERNING LAW]` — jurisdiction for the DPA
-- `[TODO: EU/UK REPRESENTATIVE]` — only if KeshavTech is not established in the EU/UK (Art. 27)
-- `[TODO: DPO]` — only if a DPO has been appointed (Art. 37)
+- **Governing law (DPA):** State of New Jersey, USA. (The EU SCCs remain governed
+  by an EU member-state law for EU transfers, and the UK IDTA by England & Wales.)
+
+## Remaining decisions
+
+- `[TODO: EU/UK REPRESENTATIVE]` — KeshavTech is US-based; an Art. 27 representative
+  is required **if** the Service is offered to data subjects in the EU/UK.
 
 ## How these connect to the app
 

@@ -94,7 +94,7 @@ of the Service after changes take effect constitutes acceptance.
 ## 12. Contact
 
 Questions about these Terms? Contact your organization's administrator or reach
-out to SiteLens support.
+out to SiteLens support at [support@msalia.org](mailto:support@msalia.org).
 `;
 
 export default function TermsPage() {

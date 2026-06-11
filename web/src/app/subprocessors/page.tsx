@@ -17,7 +17,11 @@ data-protection grounds.
 | Sub-processor | Purpose | Location | Transfer safeguard |
 | --- | --- | --- | --- |
 | Resend | Transactional email (verification, password reset, invitations) | United States | DPA + EU Standard Contractual Clauses |
-| Hosting provider | Application, database, and file storage | _to be published_ | Provider DPA + appropriate safeguards |
+
+## Hosting
+
+SiteLens is self-hosted on KeshavTech's own infrastructure in the United States.
+No third-party hosting provider has access to your data.
 
 ## What is **not** shared
 

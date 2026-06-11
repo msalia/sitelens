@@ -6,10 +6,11 @@
 
 ## 1. Processor identity
 
-- **Processor:** KeshavTech, [TODO: ENTITY ADDRESS]
-- **Contact:** [TODO: CONTACT EMAIL]
-- **EU/UK representative (Art. 27):** [TODO: only if not established in EU/UK]
-- **Data Protection Officer (Art. 37):** [TODO: only if appointed]
+- **Processor:** KeshavTech, 510 Perrineville Road, Hightstown, NJ 08520, USA
+- **Contact:** privacy@msalia.org (privacy/legal); security@msalia.org (security)
+- **Data Protection Officer:** Mukund Salia — privacy@msalia.org, (650) 334-5493
+- **EU/UK representative (Art. 27):** [TODO: required only if the Service is offered
+  to data subjects in the EU/UK — decide and appoint if so]
 
 ## 2. Controllers on whose behalf we process
 
@@ -37,12 +38,16 @@ No special-category data is intended or requested.
 
 ## 5. Sub-processors & international transfers
 
-See [SUBPROCESSORS.md](./SUBPROCESSORS.md). Summary:
+SiteLens is self-hosted on KeshavTech's own infrastructure in the **United States**
+(no third-party hosting sub-processor). See [SUBPROCESSORS.md](./SUBPROCESSORS.md).
+Summary:
 
-| Recipient                | Country        | Safeguard                                          |
-| ------------------------ | -------------- | -------------------------------------------------- |
-| Resend (email)           | United States  | DPA + EU SCCs (Module 3); UK IDTA where applicable |
-| [TODO: HOSTING PROVIDER] | [TODO: REGION] | [TODO: DPA + SCCs/adequacy]                        |
+| Recipient      | Country       | Safeguard                                          |
+| -------------- | ------------- | -------------------------------------------------- |
+| Resend (email) | United States | DPA + EU SCCs (Module 3); UK IDTA where applicable |
+
+Because KeshavTech itself processes data in the US, EEA/UK→US transfers to
+KeshavTech rely on the EU SCCs (Module 2) / UK IDTA.
 
 ## 6. Retention
 
