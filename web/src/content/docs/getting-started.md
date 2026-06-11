@@ -13,8 +13,17 @@ A **project** represents one building site. When you create it you set:
   a State Plane zone.
 - **Display unit** — US survey foot, international foot, or meter. This is how
   coordinates are shown and exported; internally everything is meters.
+- **Scale factor** — the combined grid-to-ground scale factor (usually very close
+  to 1.0). See [Coordinate Systems](/docs/coordinate-systems) for grid vs. ground.
 - **Site origin** — an approximate latitude/longitude so the 3D scene can fetch
   terrain and center the view.
+- **Site rotation** — leave at **0** for a properly-tied survey. For an
+  assumed-datum survey (a local grid with no real-world tie), it rotates the site
+  to true-north orientation about the points' centroid.
+
+You can revisit all of these later: the project's **Edit** dialog changes the same
+fields, and the **Georeference** card in the Overlays tab lets you fine-tune the
+scale, origin, and rotation, then save to refresh the scene.
 
 ## Choosing the right CRS
 

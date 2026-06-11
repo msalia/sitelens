@@ -307,6 +307,13 @@ export type ExportPointsQueryVariables = Exact<{
 
 export type ExportPointsQuery = { exportPoints: string };
 
+export type ProjectExportQueryVariables = Exact<{
+  id: string;
+}>;
+
+
+export type ProjectExportQuery = { projectExport: string };
+
 export type UpdateGeoreferenceMutationVariables = Exact<{
   id: string;
   scale?: number | null | undefined;
@@ -363,6 +370,13 @@ export type ImportPointsMutationVariables = Exact<{
 
 
 export type ImportPointsMutation = { importPoints: { rowCount: number } };
+
+export type ImportProjectMutationVariables = Exact<{
+  content: string;
+}>;
+
+
+export type ImportProjectMutation = { importProject: { id: string, name: string } };
 
 export type SceneQueryVariables = Exact<{
   id: string;
@@ -835,6 +849,11 @@ export const ExportPointsDocument = new TypedDocumentString(`
   )
 }
     `) as unknown as TypedDocumentString<ExportPointsQuery, ExportPointsQueryVariables>;
+export const ProjectExportDocument = new TypedDocumentString(`
+    query ProjectExport($id: UUID!) {
+  projectExport(projectId: $id)
+}
+    `) as unknown as TypedDocumentString<ProjectExportQuery, ProjectExportQueryVariables>;
 export const UpdateGeoreferenceDocument = new TypedDocumentString(`
     mutation UpdateGeoreference($id: UUID!, $scale: Float, $lat: Float, $lon: Float, $rot: Float) {
   updateProject(
@@ -893,6 +912,14 @@ export const ImportPointsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ImportPointsMutation, ImportPointsMutationVariables>;
+export const ImportProjectDocument = new TypedDocumentString(`
+    mutation ImportProject($content: String!) {
+  importProject(content: $content) {
+    id
+    name
+  }
+}
+    `) as unknown as TypedDocumentString<ImportProjectMutation, ImportProjectMutationVariables>;
 export const SceneDocument = new TypedDocumentString(`
     query Scene($id: UUID!) {
   sceneData(projectId: $id) {

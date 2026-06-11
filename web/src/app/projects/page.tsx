@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import type { Project } from '@/lib/types';
 
 import { CreateProjectDialog } from '@/components/projects/create-project-dialog';
+import { ImportProjectCard } from '@/components/projects/import-project-card';
 import { ProjectCard } from '@/components/projects/project-card';
 import { Card, CardContent } from '@/components/ui/card';
 import { graphql } from '@/lib/gql';
@@ -108,6 +109,12 @@ function ProjectsContent() {
           ))}
         </div>
       )}
+
+      {/* Always available: import a project archive. */}
+      <div className="mt-8">
+        <h2 className="mb-3 text-sm font-semibold tracking-tight">Import a project</h2>
+        <ImportProjectCard onImported={load} />
+      </div>
     </div>
   );
 }

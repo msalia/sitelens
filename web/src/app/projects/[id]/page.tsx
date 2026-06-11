@@ -10,12 +10,14 @@ import { CadOverlayPanel } from '@/components/projects/cad-overlay-panel';
 import { ControlPointsEditor } from '@/components/projects/control-points-editor';
 import { ConverterPanel } from '@/components/projects/converter-panel';
 import { EditProjectDialog } from '@/components/projects/edit-project-dialog';
+import { ExportProjectButton } from '@/components/projects/export-project-button';
 import { GridEditor } from '@/components/projects/grid-editor';
 import { SceneView } from '@/components/projects/scene-view';
 import { SetupChecklist } from '@/components/projects/setup-checklist';
 import { SurveyPointsPanel } from '@/components/projects/survey-points-panel';
 import { TransformPanel } from '@/components/projects/transform-panel';
 import { buttonVariants } from '@/components/ui/button';
+import { ButtonGroup } from '@/components/ui/button-group';
 import {
   Empty,
   EmptyContent,
@@ -225,7 +227,10 @@ export default function ProjectWorkspace() {
                 {project.combinedScaleFactor}
               </p>
             </div>
-            <EditProjectDialog project={project} onSaved={load} />
+            <ButtonGroup>
+              <EditProjectDialog project={project} onSaved={load} />
+              <ExportProjectButton project={project} />
+            </ButtonGroup>
           </div>
         </header>
 

@@ -21,6 +21,7 @@ import {
  */
 export function ConfirmDialog({
   confirmLabel = 'Delete',
+  confirmVariant = 'destructive',
   description,
   onConfirm,
   onOpenChange,
@@ -31,6 +32,7 @@ export function ConfirmDialog({
   title: string;
   description?: ReactNode;
   confirmLabel?: string;
+  confirmVariant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost';
   onConfirm: () => void;
   trigger?: ReactElement;
   open?: boolean;
@@ -46,7 +48,7 @@ export function ConfirmDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={onConfirm}>
+          <AlertDialogAction variant={confirmVariant} onClick={onConfirm}>
             {confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>

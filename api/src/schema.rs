@@ -11,6 +11,7 @@ use rand::{distributions::Alphanumeric, Rng};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::archive;
 use crate::auth::{
     build_clearing_cookie, build_session_cookie, hash_password, issue_jwt, verify_password,
     AuthConfig, AuthContext, Role,
@@ -569,6 +570,18 @@ impl QueryRoot {
         let bytes = storage.get(&key).await.map_err(async_graphql::Error::new)?;
         String::from_utf8(bytes)
             .map_err(|_| async_graphql::Error::new("overlay is not valid UTF-8"))
+    }
+
+    /// Exports a project as a self-contained `.slx` archive (JSON text) with all
+    /// of its authored data. Re-import with `importProject`.
+    async fn project_export(&self, ctx: &Context<'_>, project_id: Uuid) -> Result<String> {
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        let storage = ctx.data::<Arc<dyn Storage>>()?;
+        archive::export_project(pool, storage.as_ref(), project_id)
+            .await
+            .map_err(async_graphql::Error::new)
     }
 
     /// Cached OpenTopography terrain metadata for a project (null until first
@@ -1246,6 +1259,24 @@ impl MutationRoot {
         .bind(site_origin_lon)
         .bind(site_origin_rotation_deg.unwrap_or(0.0))
         .fetch_one(pool(ctx)?)
+        .await?;
+        Ok(row.into())
+    }
+
+    /// Imports a `.slx` archive as a new project in the caller's org. Editor role
+    /// required.
+    async fn import_project(&self, ctx: &Context<'_>, content: String) -> Result<Project> {
+        let auth = require_editor(ctx)?;
+        let pool = pool(ctx)?;
+        let storage = ctx.data::<Arc<dyn Storage>>()?;
+        let id = archive::import_project(pool, storage.as_ref(), auth.org_id, &content)
+            .await
+            .map_err(async_graphql::Error::new)?;
+        let row: ProjectRow = sqlx::query_as(&format!(
+            "SELECT {PROJECT_COLUMNS} FROM projects WHERE id = $1"
+        ))
+        .bind(id)
+        .fetch_one(pool)
         .await?;
         Ok(row.into())
     }

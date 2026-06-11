@@ -80,6 +80,10 @@ The **Display** menu (top-left) toggles what's drawn:
 - **Buildings** — show/hide the extruded OpenStreetMap buildings (appears once
   buildings have been fetched).
 - **Project onto terrain** — drape zero-elevation features onto the surface.
+- **DXF overlays** — show/hide the architect's drawing (appears once an overlay is
+  uploaded). DXF overlays render flat at their set elevation, not draped on
+  terrain. Pick which layers to show in the **Layers** menu — none are shown by
+  default. See [DXF Overlay](/docs/dxf-overlay).
 
 ## Camera views
 

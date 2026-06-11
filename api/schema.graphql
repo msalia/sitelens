@@ -237,6 +237,11 @@ type MutationRoot {
 	"""
 	createProject(name: String!, description: String, epsgCode: Int!, displayUnit: LengthUnit!, combinedScaleFactor: Float, siteOriginLat: Float, siteOriginLon: Float, siteOriginRotationDeg: Float): Project!
 	"""
+	Imports a `.slx` archive as a new project in the caller's org. Editor role
+	required.
+	"""
+	importProject(content: String!): Project!
+	"""
 	Updates mutable project fields. Editor role required.
 	"""
 	updateProject(id: UUID!, name: String, description: String, epsgCode: Int, displayUnit: LengthUnit, combinedScaleFactor: Float, siteOriginLat: Float, siteOriginLon: Float, siteOriginRotationDeg: Float): Project!
@@ -503,6 +508,11 @@ type QueryRoot {
 	The raw DXF text of an overlay (for client-side parsing/rendering).
 	"""
 	cadOverlayContent(id: UUID!): String!
+	"""
+	Exports a project as a self-contained `.slx` archive (JSON text) with all
+	of its authored data. Re-import with `importProject`.
+	"""
+	projectExport(projectId: UUID!): String!
 	"""
 	Cached OpenTopography terrain metadata for a project (null until first
 	fetched). Drives the "Refresh terrain" 7-day cooldown on the client.
