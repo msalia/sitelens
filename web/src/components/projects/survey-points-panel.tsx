@@ -78,7 +78,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 import {
   type InspectablePoint,
@@ -91,88 +90,22 @@ import {
 import { fromMeters } from '@/lib/units';
 import { cn } from '@/lib/utils';
 
+import {
+  ADD_TO_GROUP,
+  ASSIGN_CATEGORY,
+  BULK_DELETE,
+  CREATE_POINT_GROUP,
+  DELETE_SURVEY_POINT,
+  POINT_GROUPS,
+  SURVEY_POINTS,
+} from './survey-points-data';
+
 const ALL = 'all';
 const NONE = 'none';
 const PAGE_SIZE = 50;
 
 /** Sortable columns, mapped to the API's `sort` argument. */
 type SortField = 'label' | 'northing' | 'easting' | 'elevation';
-
-const SURVEY_POINTS = graphql(`
-  query SurveyPoints(
-    $id: UUID!
-    $search: String
-    $cat: UUID
-    $group: UUID
-    $limit: Int
-    $offset: Int
-    $sort: String
-    $descending: Boolean
-  ) {
-    surveyPoints(
-      projectId: $id
-      search: $search
-      categoryId: $cat
-      groupId: $group
-      limit: $limit
-      offset: $offset
-      sort: $sort
-      descending: $descending
-    ) {
-      id
-      projectId
-      label
-      northing
-      easting
-      elevation
-      description
-      categoryId
-      tags
-      importBatchId
-    }
-    surveyPointCount(projectId: $id, search: $search, categoryId: $cat, groupId: $group)
-  }
-`);
-const DELETE_SURVEY_POINT = graphql(`
-  mutation DeleteSurveyPoint($id: UUID!) {
-    deleteSurveyPoint(id: $id)
-  }
-`);
-const BULK_DELETE = graphql(`
-  mutation DeleteSurveyPoints($ids: [UUID!]!) {
-    deleteSurveyPoints(ids: $ids)
-  }
-`);
-const ASSIGN_CATEGORY = graphql(`
-  mutation AssignCategory($ids: [UUID!]!, $cat: UUID) {
-    assignCategory(ids: $ids, categoryId: $cat)
-  }
-`);
-const CREATE_POINT_GROUP = graphql(`
-  mutation CreatePointGroup($id: UUID!, $name: String!, $ids: [UUID!]!) {
-    createPointGroup(projectId: $id, name: $name, memberIds: $ids) {
-      id
-    }
-  }
-`);
-const POINT_GROUPS = graphql(`
-  query PointGroups($id: UUID!) {
-    pointGroups(projectId: $id) {
-      id
-      projectId
-      name
-      memberIds
-    }
-  }
-`);
-const ADD_TO_GROUP = graphql(`
-  mutation AddPointsToGroup($groupId: UUID!, $ids: [UUID!]!) {
-    addPointsToGroup(groupId: $groupId, memberIds: $ids) {
-      id
-      memberIds
-    }
-  }
-`);
 
 export function SurveyPointsPanel({
   categories,
