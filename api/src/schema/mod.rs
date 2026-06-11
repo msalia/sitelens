@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use async_graphql::{Context, Object, Result};
+use async_graphql::{Context, MergedObject, Object, Result};
 use base64::Engine as _;
 use chrono::{DateTime, Utc};
 use rand::{distributions::Alphanumeric, Rng};
@@ -230,10 +230,40 @@ async fn email_taken(pool: &PgPool, email: &str) -> Result<bool> {
     Ok(existing.is_some())
 }
 
-pub struct QueryRoot;
+mod auth;
+mod coords;
+mod grid;
+mod overlays;
+mod points;
+mod projects;
+mod scene;
+mod system;
+mod terrain;
 
-mod mutation;
-mod query;
+/// The GraphQL query root — a merge of the per-domain query objects.
+#[derive(MergedObject, Default)]
+pub struct QueryRoot(
+    system::SystemQuery,
+    auth::AuthQuery,
+    projects::ProjectQuery,
+    grid::GridQuery,
+    points::PointsQuery,
+    overlays::OverlayQuery,
+    terrain::TerrainQuery,
+    coords::CoordsQuery,
+    scene::SceneQuery,
+);
+
+/// The GraphQL mutation root — a merge of the per-domain mutation objects.
+#[derive(MergedObject, Default)]
+pub struct MutationRoot(
+    auth::AuthMutation,
+    projects::ProjectMutation,
+    grid::GridMutation,
+    points::PointsMutation,
+    overlays::OverlayMutation,
+    terrain::TerrainMutation,
+);
 
 /// Row shape for reading a persisted transform.
 #[derive(sqlx::FromRow)]
@@ -260,8 +290,6 @@ impl From<TransformRow> for Transform {
         }
     }
 }
-
-pub struct MutationRoot;
 
 /// CSV header label for an export column.
 fn column_header(c: &ExportColumn) -> String {

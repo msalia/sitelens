@@ -201,6 +201,9 @@ enum LengthUnit {
 	METER
 }
 
+"""
+The GraphQL mutation root — a merge of the per-domain mutation objects.
+"""
 type MutationRoot {
 	"""
 	Self-service signup: creates a new organization and its first Admin user
@@ -321,6 +324,14 @@ type MutationRoot {
 	"""
 	uploadDxf(projectId: UUID!, filename: String!, content: String!): CadOverlay!
 	"""
+	Updates an overlay's georeference / visibility. Editor role required.
+	"""
+	setCadGeoreference(id: UUID!, offsetE: Float, offsetN: Float, rotationDeg: Float, scale: Float, elevation: Float, assumeRealWorld: Boolean, visible: Boolean): CadOverlay!
+	"""
+	Deletes an overlay and its stored file. Editor role required.
+	"""
+	deleteCadOverlay(id: UUID!): Boolean!
+	"""
 	Fetches (if needed) and caches the OpenTopography DEM for a project's
 	bbox. Lazy: a cached terrain is reused unless `force`. A forced refresh is
 	blocked for 7 days after the last fetch (OpenTopography is rate-limited).
@@ -332,14 +343,6 @@ type MutationRoot {
 	the free Overpass API. Same 7-day cooldown as terrain. Visual context only.
 	"""
 	refreshBuildings(projectId: UUID!, south: Float!, north: Float!, west: Float!, east: Float!, force: Boolean): ProjectBuildings!
-	"""
-	Updates an overlay's georeference / visibility. Editor role required.
-	"""
-	setCadGeoreference(id: UUID!, offsetE: Float, offsetN: Float, rotationDeg: Float, scale: Float, elevation: Float, assumeRealWorld: Boolean, visible: Boolean): CadOverlay!
-	"""
-	Deletes an overlay and its stored file. Editor role required.
-	"""
-	deleteCadOverlay(id: UUID!): Boolean!
 }
 
 """
@@ -427,6 +430,9 @@ type PublicConfig {
 	cesiumIonToken: String!
 }
 
+"""
+The GraphQL query root — a merge of the per-domain query objects.
+"""
 type QueryRoot {
 	"""
 	Liveness check.
@@ -457,6 +463,11 @@ type QueryRoot {
 	"""
 	project(id: UUID!): Project
 	"""
+	Exports a project as a self-contained `.slx` archive (JSON text) with all
+	of its authored data. Re-import with `importProject`.
+	"""
+	projectExport(projectId: UUID!): String!
+	"""
 	The grid axes for a project, ordered by family then position.
 	"""
 	gridAxes(projectId: UUID!): [GridAxis!]!
@@ -468,11 +479,6 @@ type QueryRoot {
 	The persisted Helmert transform for a project, if one has been solved.
 	"""
 	transform(projectId: UUID!): Transform
-	"""
-	Converts a coordinate (given in `unit`, in the named `space`) into every
-	derivable representation: grid, projected (grid + ground), and geographic.
-	"""
-	convertCoordinate(projectId: UUID!, space: CoordinateSpace!, x: Float!, y: Float!, unit: LengthUnit!): CoordinateSet!
 	"""
 	The caller organization's point categories (defaults + custom).
 	"""
@@ -509,11 +515,6 @@ type QueryRoot {
 	"""
 	cadOverlayContent(id: UUID!): String!
 	"""
-	Exports a project as a self-contained `.slx` archive (JSON text) with all
-	of its authored data. Re-import with `importProject`.
-	"""
-	projectExport(projectId: UUID!): String!
-	"""
 	Cached OpenTopography terrain metadata for a project (null until first
 	fetched). Drives the "Refresh terrain" 7-day cooldown on the client.
 	"""
@@ -531,6 +532,11 @@ type QueryRoot {
 	`[{"poly":[[lat,lon],...],"height":<m>}, ...]`.
 	"""
 	projectBuildingsContent(projectId: UUID!): String!
+	"""
+	Converts a coordinate (given in `unit`, in the named `space`) into every
+	derivable representation: grid, projected (grid + ground), and geographic.
+	"""
+	convertCoordinate(projectId: UUID!, space: CoordinateSpace!, x: Float!, y: Float!, unit: LengthUnit!): CoordinateSet!
 	"""
 	Searches the EPSG coordinate-reference-system catalog by code or name.
 	"""

@@ -68,12 +68,16 @@ pub fn build_schema_with(
     storage: Arc<dyn Storage>,
     limiter: RateLimiter,
 ) -> ApiSchema {
-    Schema::build(QueryRoot, MutationRoot, EmptySubscription)
-        .data(pool)
-        .data(config)
-        .data(storage)
-        .data(limiter)
-        .finish()
+    Schema::build(
+        QueryRoot::default(),
+        MutationRoot::default(),
+        EmptySubscription,
+    )
+    .data(pool)
+    .data(config)
+    .data(storage)
+    .data(limiter)
+    .finish()
 }
 
 #[derive(Clone)]
