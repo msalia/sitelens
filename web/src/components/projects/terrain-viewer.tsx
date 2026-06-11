@@ -29,6 +29,7 @@ import {
   useBounds,
   useMarkers,
 } from './terrain-objects';
+import { silenceThreeClockWarning } from './three-clock-warning';
 
 // Re-export the public surface so consumers keep importing from 'terrain-viewer'.
 export { CAMERA_VIEWS } from './terrain-shared';
@@ -39,23 +40,7 @@ export type {
   TerrainData,
 } from './terrain-shared';
 
-// `@react-three/fiber`'s render loop still constructs a `THREE.Clock`, which
-// three r184 deprecated in favor of `THREE.Timer`. Drop just that one warning.
-if (typeof window !== 'undefined') {
-  const w = window as unknown as { __slClockWarnPatched?: boolean };
-  if (!w.__slClockWarnPatched) {
-    w.__slClockWarnPatched = true;
-    /* eslint-disable no-console */
-    const original = console.warn.bind(console);
-    console.warn = (...args: unknown[]) => {
-      if (typeof args[0] === 'string' && args[0].includes('THREE.Clock')) {
-        return;
-      }
-      original(...(args as []));
-    };
-    /* eslint-enable no-console */
-  }
-}
+silenceThreeClockWarning();
 
 // Matte "clay" palette — soft and bright in light mode, a deep neutral with the
 // same matte feel in dark mode. Clay sits a touch lighter than the background.

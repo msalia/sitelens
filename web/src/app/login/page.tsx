@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { LoginForm } from '@/components/login-form';
+import { LoginShowcase } from '@/components/login-showcase';
 import { isAuthenticated } from '@/lib/auth-server';
 
 export default async function LoginPage() {
@@ -27,7 +28,9 @@ export default async function LoginPage() {
         </div>
       </div>
 
-      {/* Cover panel — branded gradient + survey grid in lieu of a photo asset. */}
+      {/* Cover panel — a live, orbiting 3D view of a cached iconic place. The
+          gradient + survey grid stays underneath as the fallback backdrop when
+          the baked showcase assets aren't present. */}
       <div className="bg-muted relative hidden overflow-hidden lg:block">
         <div className="from-primary/25 via-background to-background absolute inset-0 bg-gradient-to-br" />
         <div
@@ -38,20 +41,7 @@ export default async function LoginPage() {
             backgroundSize: '40px 40px',
           }}
         />
-        {/* A few "control point" ticks to evoke a survey tie. */}
-        <div className="bg-primary absolute top-[30%] left-[20%] size-2 rounded-full" />
-        <div className="bg-primary absolute top-[22%] left-[64%] size-2 rounded-full" />
-        <div className="bg-primary absolute top-[68%] left-[44%] size-2 rounded-full" />
-        <div className="relative flex h-full flex-col items-center justify-center gap-3 p-10 text-center">
-          <div className="bg-primary text-primary-foreground flex size-12 items-center justify-center rounded-xl">
-            <IconCompass className="size-7" />
-          </div>
-          <p className="text-2xl font-semibold tracking-tight">SiteLens</p>
-          <p className="text-muted-foreground max-w-xs text-sm text-balance">
-            Tie the building grid to the real world. Solve, convert, and visualize survey
-            coordinates in 3D.
-          </p>
-        </div>
+        <LoginShowcase />
       </div>
     </div>
   );

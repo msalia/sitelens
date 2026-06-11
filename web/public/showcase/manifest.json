@@ -1,0 +1,32 @@
+[
+  {
+    "id": "hong-kong",
+    "label": "Hong Kong",
+    "lat": 22.281,
+    "lon": 114.158
+  },
+  {
+    "id": "sf",
+    "label": "San Francisco",
+    "lat": 37.795,
+    "lon": -122.402
+  },
+  {
+    "id": "seattle",
+    "label": "Seattle",
+    "lat": 47.607,
+    "lon": -122.33500000000001
+  },
+  {
+    "id": "toronto",
+    "label": "Toronto",
+    "lat": 43.644999999999996,
+    "lon": -79.386
+  },
+  {
+    "id": "nyc",
+    "label": "New York",
+    "lat": 40.713,
+    "lon": -74.011
+  }
+]
