@@ -13,7 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-axum = "0.8"
+axum = { version = "0.8", features = ["ws"] }
 async-graphql = { version = "7", features = ["chrono", "uuid"] }
 async-graphql-axum = "7"
 sqlx = { version = "0.8", default-features = false, features = [
@@ -35,6 +35,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 rand = "0.8"
 async-trait = "0.1"
+async-stream = "0.3"
 nalgebra = "0.33"
 proj4rs = "0.1"
 crs-definitions = { version = "0.3", features = ["proj4", "wkt"] }

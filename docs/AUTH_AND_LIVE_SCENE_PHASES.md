@@ -13,7 +13,7 @@
 | 2     | Email verification                                     | 1          | ✅ Done     |
 | 3     | Self-service password reset                            | 1          | ✅ Done     |
 | 4     | Org user management (`/settings/users`) + operator CLI | 1          | ✅ Done     |
-| 5     | WebSocket subscription infra                           | —          | Not started |
+| 5     | WebSocket subscription infra                           | —          | ✅ Done     |
 | 6     | Live scene client (reconcile-by-id, camera decouple)   | 5          | Not started |
 | 7     | Delightful animations                                  | 6          | Not started |
 
@@ -163,22 +163,33 @@ Shipped alongside Phases 3–4 in response to follow-up requests:
 
 ---
 
-## Phase 5 — WebSocket subscription infrastructure
+## Phase 5 — WebSocket subscription infrastructure ✅
 
 ### Deliverables
 
-- [ ] `ScenePubSub` (per-`project_id` `tokio::sync::broadcast`) in `AppState`/context.
-- [ ] `projectChanged(projectId)` `#[Subscription]` returning a ping stream.
-- [ ] `publish(project_id)` calls in scene-affecting mutations (points, categories,
-      groups, grid, control, overlays, georef/update_project).
-- [ ] WebSocket transport mounted on `/graphql` (graphql-transport-ws); connection
-      auth from the session cookie; org-ownership check before streaming.
-- [ ] Traefik WS upgrade passthrough verified.
+- [x] `ScenePubSub` (per-`project_id` `tokio::sync::broadcast`) injected into the
+      GraphQL context (`api/src/pubsub.rs`).
+- [x] `projectChanged(projectId)` `#[Subscription]` returning a ping stream
+      (`api/src/schema/subscription.rs`).
+- [x] `publish(project_id)` calls in scene-affecting mutations: survey points
+      (import/update/delete/bulk-delete/assign-category), control points
+      (add/update/delete), grid axes, transform solve, overlays
+      (upload/georef/delete), terrain/buildings refresh, and project georef update.
+      (Org-wide category create/delete have no single project to target — noted.)
+- [x] WebSocket transport mounted on `/graphql` (graphql-transport-ws), coexisting
+      with the GraphiQL GET and the POST handler; connection auth from the session
+      cookie at upgrade; org-ownership check before streaming.
+- [ ] Traefik WS upgrade passthrough — verify on deploy (Traefik forwards the
+      `Upgrade`/`Connection` headers by default; confirm in prod).
 
 ### Tests
 
-- [ ] Unit: publish → subscriber receives a ping; unrelated project gets nothing.
-- [ ] Manual: a `graphql-ws` client receives pings on edits.
+- [x] Unit: publish → subscriber receives a ping; unrelated project gets nothing;
+      no-subscriber publish is a no-op (`pubsub` tests).
+- [x] Integration: subscription enforces org ownership, and a publish delivers a
+      ping to the owner's stream (`project_changed_subscription_requires_org_ownership`).
+- [ ] Manual: a `graphql-ws` client receives pings on edits (verify with the live
+      client in Phase 6).
 
 ### Validates
 

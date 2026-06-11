@@ -322,6 +322,7 @@ impl PointsMutation {
         }
 
         tx.commit().await?;
+        publish_scene(ctx, project_id);
         Ok(batch)
     }
 
@@ -362,25 +363,27 @@ impl PointsMutation {
         .bind(auth.org_id)
         .fetch_optional(pool(ctx)?)
         .await?;
-        point.ok_or_else(|| async_graphql::Error::new("point not found in your organization"))
+        let point = point
+            .ok_or_else(|| async_graphql::Error::new("point not found in your organization"))?;
+        publish_scene(ctx, point.project_id);
+        Ok(point)
     }
 
     /// Deletes a surveyed point. Editor role required.
     async fn delete_survey_point(&self, ctx: &Context<'_>, id: Uuid) -> Result<bool> {
         let auth = require_editor(ctx)?;
-        let result = sqlx::query(
+        let row: Option<(Uuid,)> = sqlx::query_as(
             "DELETE FROM survey_points sp USING projects p \
-             WHERE sp.id = $1 AND sp.project_id = p.id AND p.org_id = $2",
+             WHERE sp.id = $1 AND sp.project_id = p.id AND p.org_id = $2 \
+             RETURNING sp.project_id",
         )
         .bind(id)
         .bind(auth.org_id)
-        .execute(pool(ctx)?)
+        .fetch_optional(pool(ctx)?)
         .await?;
-        if result.rows_affected() == 0 {
-            return Err(async_graphql::Error::new(
-                "point not found in your organization",
-            ));
-        }
+        let (project_id,) =
+            row.ok_or_else(|| async_graphql::Error::new("point not found in your organization"))?;
+        publish_scene(ctx, project_id);
         Ok(true)
     }
 
@@ -388,15 +391,17 @@ impl PointsMutation {
     /// Editor role required.
     async fn delete_survey_points(&self, ctx: &Context<'_>, ids: Vec<Uuid>) -> Result<i64> {
         let auth = require_editor(ctx)?;
-        let result = sqlx::query(
+        let rows: Vec<(Uuid,)> = sqlx::query_as(
             "DELETE FROM survey_points sp USING projects p \
-             WHERE sp.id = ANY($1) AND sp.project_id = p.id AND p.org_id = $2",
+             WHERE sp.id = ANY($1) AND sp.project_id = p.id AND p.org_id = $2 \
+             RETURNING sp.project_id",
         )
         .bind(&ids)
         .bind(auth.org_id)
-        .execute(pool(ctx)?)
+        .fetch_all(pool(ctx)?)
         .await?;
-        Ok(result.rows_affected() as i64)
+        publish_scenes(ctx, rows.iter().map(|(pid,)| *pid));
+        Ok(rows.len() as i64)
     }
 
     /// Bulk-assigns (or clears, when `categoryId` is null) the category of
@@ -408,16 +413,18 @@ impl PointsMutation {
         category_id: Option<Uuid>,
     ) -> Result<i64> {
         let auth = require_editor(ctx)?;
-        let result = sqlx::query(
+        let rows: Vec<(Uuid,)> = sqlx::query_as(
             "UPDATE survey_points sp SET category_id = $3 FROM projects p \
-             WHERE sp.id = ANY($1) AND sp.project_id = p.id AND p.org_id = $2",
+             WHERE sp.id = ANY($1) AND sp.project_id = p.id AND p.org_id = $2 \
+             RETURNING sp.project_id",
         )
         .bind(&ids)
         .bind(auth.org_id)
         .bind(category_id)
-        .execute(pool(ctx)?)
+        .fetch_all(pool(ctx)?)
         .await?;
-        Ok(result.rows_affected() as i64)
+        publish_scenes(ctx, rows.iter().map(|(pid,)| *pid));
+        Ok(rows.len() as i64)
     }
 
     // ----- Point groups -----
@@ -445,25 +452,25 @@ impl PointsMutation {
         .bind(&member_ids)
         .fetch_one(pool)
         .await?;
+        publish_scene(ctx, project_id);
         Ok(group)
     }
 
     /// Deletes a point group. Editor role required.
     async fn delete_point_group(&self, ctx: &Context<'_>, id: Uuid) -> Result<bool> {
         let auth = require_editor(ctx)?;
-        let result = sqlx::query(
+        let row: Option<(Uuid,)> = sqlx::query_as(
             "DELETE FROM point_groups pg USING projects p \
-             WHERE pg.id = $1 AND pg.project_id = p.id AND p.org_id = $2",
+             WHERE pg.id = $1 AND pg.project_id = p.id AND p.org_id = $2 \
+             RETURNING pg.project_id",
         )
         .bind(id)
         .bind(auth.org_id)
-        .execute(pool(ctx)?)
+        .fetch_optional(pool(ctx)?)
         .await?;
-        if result.rows_affected() == 0 {
-            return Err(async_graphql::Error::new(
-                "group not found in your organization",
-            ));
-        }
+        let (project_id,) =
+            row.ok_or_else(|| async_graphql::Error::new("group not found in your organization"))?;
+        publish_scene(ctx, project_id);
         Ok(true)
     }
 
@@ -492,6 +499,9 @@ impl PointsMutation {
         .bind(auth.org_id)
         .fetch_optional(pool(ctx)?)
         .await?;
-        group.ok_or_else(|| async_graphql::Error::new("group not found in your organization"))
+        let group = group
+            .ok_or_else(|| async_graphql::Error::new("group not found in your organization"))?;
+        publish_scene(ctx, group.project_id);
+        Ok(group)
     }
 }

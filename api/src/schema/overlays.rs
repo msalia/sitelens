@@ -77,6 +77,7 @@ impl OverlayMutation {
         .bind(&key)
         .fetch_one(pool)
         .await?;
+        publish_scene(ctx, project_id);
         Ok(row)
     }
 
@@ -123,7 +124,10 @@ impl OverlayMutation {
         .bind(elevation)
         .fetch_optional(pool(ctx)?)
         .await?;
-        row.ok_or_else(|| async_graphql::Error::new("overlay not found in your organization"))
+        let row =
+            row.ok_or_else(|| async_graphql::Error::new("overlay not found in your organization"))?;
+        publish_scene(ctx, row.project_id);
+        Ok(row)
     }
 
     /// Deletes an overlay and its stored file. Editor role required.
@@ -131,13 +135,17 @@ impl OverlayMutation {
         let auth = require_editor(ctx)?;
         let pool = pool(ctx)?;
         let key = overlay_key_in_org(pool, id, auth.org_id).await?;
-        sqlx::query("DELETE FROM cad_overlays WHERE id = $1")
-            .bind(id)
-            .execute(pool)
-            .await?;
+        let row: Option<(Uuid,)> =
+            sqlx::query_as("DELETE FROM cad_overlays WHERE id = $1 RETURNING project_id")
+                .bind(id)
+                .fetch_optional(pool)
+                .await?;
         // Best-effort file cleanup.
         let storage = ctx.data::<Arc<dyn Storage>>()?;
         let _ = storage.delete(&key).await;
+        if let Some((project_id,)) = row {
+            publish_scene(ctx, project_id);
+        }
         Ok(true)
     }
 }

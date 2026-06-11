@@ -29,6 +29,7 @@ use crate::models::{
     PublicConfig, SceneData, SceneLine, ScenePoint, SignupResult, SurveyPoint, Transform,
     TransformResidual, User, UserRow,
 };
+use crate::pubsub::ScenePubSub;
 use crate::ratelimit::{ClientIp, RateLimiter};
 use crate::storage::Storage;
 
@@ -159,6 +160,28 @@ fn require_editor<'a>(ctx: &'a Context) -> Result<&'a AuthContext> {
     Ok(auth)
 }
 
+/// Notifies live scene subscribers that the project changed. Best-effort: a
+/// missing hub (e.g. in a minimal test schema) is silently ignored.
+fn publish_scene(ctx: &Context<'_>, project_id: Uuid) {
+    if let Ok(hub) = ctx.data::<ScenePubSub>() {
+        hub.publish(project_id);
+    }
+}
+
+/// Like [`publish_scene`] for a bulk op spanning possibly several projects;
+/// publishes each distinct project once.
+fn publish_scenes(ctx: &Context<'_>, project_ids: impl IntoIterator<Item = Uuid>) {
+    let Ok(hub) = ctx.data::<ScenePubSub>() else {
+        return;
+    };
+    let mut seen = std::collections::HashSet::new();
+    for pid in project_ids {
+        if seen.insert(pid) {
+            hub.publish(pid);
+        }
+    }
+}
+
 const PROJECT_COLUMNS: &str = "id, org_id, name, description, epsg_code, display_unit, \
     combined_scale_factor, site_origin_lat, site_origin_lon, site_origin_rotation_deg, \
     created_at, updated_at";
@@ -237,8 +260,11 @@ mod overlays;
 mod points;
 mod projects;
 mod scene;
+mod subscription;
 mod system;
 mod terrain;
+
+pub use subscription::SubscriptionRoot;
 
 /// The GraphQL query root — a merge of the per-domain query objects.
 #[derive(MergedObject, Default)]

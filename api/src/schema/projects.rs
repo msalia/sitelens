@@ -149,6 +149,8 @@ impl ProjectMutation {
         .bind(site_origin_rotation_deg)
         .fetch_one(pool)
         .await?;
+        // Scale / origin / rotation changes move the whole scene.
+        publish_scene(ctx, id);
         Ok(row.into())
     }
 

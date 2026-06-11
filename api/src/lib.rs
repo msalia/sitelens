@@ -8,6 +8,7 @@ pub mod geo;
 pub mod import;
 pub mod mail;
 pub mod models;
+pub mod pubsub;
 pub mod ratelimit;
 pub mod schema;
 pub mod storage;
@@ -16,12 +17,13 @@ pub mod units;
 use std::sync::Arc;
 use std::time::Duration;
 
-use async_graphql::{EmptySubscription, Schema};
-use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
+use async_graphql::http::ALL_WEBSOCKET_PROTOCOLS;
+use async_graphql::{Data, Schema};
+use async_graphql_axum::{GraphQLProtocol, GraphQLRequest, GraphQLResponse, GraphQLWebSocket};
 use axum::{
-    extract::{DefaultBodyLimit, State},
+    extract::{ws::WebSocketUpgrade, DefaultBodyLimit, FromRequestParts, Request, State},
     http::{header, HeaderMap, StatusCode},
-    response::{Html, IntoResponse},
+    response::{Html, IntoResponse, Response},
     routing::get,
     Json, Router,
 };
@@ -30,11 +32,12 @@ use sqlx::PgPool;
 
 use crate::auth::{auth_context_from_token, session_token_from_cookie_header, AuthConfig};
 use crate::mail::Mailer;
+use crate::pubsub::ScenePubSub;
 use crate::ratelimit::{ClientIp, RateLimiter};
-use crate::schema::{MutationRoot, QueryRoot};
+use crate::schema::{MutationRoot, QueryRoot, SubscriptionRoot};
 use crate::storage::{LocalStorage, Storage};
 
-pub type ApiSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
+pub type ApiSchema = Schema<QueryRoot, MutationRoot, SubscriptionRoot>;
 
 /// Auth rate-limit policy: defaults to 10 login/signup attempts per IP per
 /// minute. Overridable via env (e.g. raised for local E2E runs); prod leaves
@@ -73,13 +76,14 @@ pub fn build_schema_with(
     Schema::build(
         QueryRoot::default(),
         MutationRoot::default(),
-        EmptySubscription,
+        SubscriptionRoot,
     )
     .data(pool)
     .data(config)
     .data(storage)
     .data(limiter)
     .data(Mailer::from_env())
+    .data(ScenePubSub::new())
     .finish()
 }
 
@@ -90,18 +94,22 @@ struct AppState {
     pool: PgPool,
 }
 
+/// Derives the authenticated principal (if any) from the request's session
+/// cookie. Shared by the HTTP and WebSocket entry points.
+fn auth_from_headers(headers: &HeaderMap, jwt_secret: &str) -> Option<crate::auth::AuthContext> {
+    let cookie = headers.get(header::COOKIE).and_then(|v| v.to_str().ok())?;
+    let token = session_token_from_cookie_header(cookie)?;
+    auth_context_from_token(&token, jwt_secret)
+}
+
 async fn graphql_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
     req: GraphQLRequest,
 ) -> GraphQLResponse {
     let mut request = req.into_inner();
-    if let Some(cookie) = headers.get(header::COOKIE).and_then(|v| v.to_str().ok()) {
-        if let Some(token) = session_token_from_cookie_header(cookie) {
-            if let Some(auth) = auth_context_from_token(&token, &state.config.jwt_secret) {
-                request = request.data(auth);
-            }
-        }
+    if let Some(auth) = auth_from_headers(&headers, &state.config.jwt_secret) {
+        request = request.data(auth);
     }
     // Client IP for rate limiting. Behind Traefik the real IP is the first hop
     // of X-Forwarded-For; fall back to a constant so the limiter still applies.
@@ -119,8 +127,37 @@ async fn graphiql() -> impl IntoResponse {
     Html(
         async_graphql::http::GraphiQLSource::build()
             .endpoint("/graphql")
+            .subscription_endpoint("/graphql")
             .finish(),
     )
+}
+
+/// GET /graphql serves either the GraphQL-over-WebSocket transport (when the
+/// request is a WS upgrade carrying a GraphQL subprotocol) or the GraphiQL IDE.
+/// Subscription auth comes from the session cookie sent on the upgrade.
+async fn graphql_get(State(state): State<AppState>, req: Request) -> Response {
+    let (mut parts, _body) = req.into_parts();
+    // A WS upgrade carrying a GraphQL subprotocol → subscriptions; otherwise the
+    // GraphiQL IDE. Both extractors only read headers, so probing them is cheap.
+    let protocol = GraphQLProtocol::from_request_parts(&mut parts, &()).await;
+    let upgrade = WebSocketUpgrade::from_request_parts(&mut parts, &()).await;
+    match (upgrade, protocol) {
+        (Ok(ws), Ok(protocol)) => {
+            let mut data = Data::default();
+            if let Some(auth) = auth_from_headers(&parts.headers, &state.config.jwt_secret) {
+                data.insert(auth);
+            }
+            let schema = state.schema.clone();
+            ws.protocols(ALL_WEBSOCKET_PROTOCOLS)
+                .on_upgrade(move |stream| {
+                    GraphQLWebSocket::new(stream, schema, protocol)
+                        .with_data(data)
+                        .serve()
+                })
+                .into_response()
+        }
+        _ => graphiql().await.into_response(),
+    }
 }
 
 /// JSON health endpoint. 200 when the DB is reachable, 503 otherwise.
@@ -203,7 +240,7 @@ pub async fn run() {
     let app = Router::new()
         .route("/", get(|| async { "SiteLens API" }))
         .route("/health", get(health))
-        .route("/graphql", get(graphiql).post(graphql_handler))
+        .route("/graphql", get(graphql_get).post(graphql_handler))
         // Axum defaults to a 2 MB request body; a 10 MB DXF (plus JSON-string
         // escaping) needs headroom, so lift the cap well above MAX_DXF_BYTES.
         .layer(DefaultBodyLimit::max(32 * 1024 * 1024))

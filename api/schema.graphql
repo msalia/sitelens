@@ -699,6 +699,17 @@ type SignupResult {
 	verificationToken: String!
 }
 
+type SubscriptionRoot {
+	"""
+	Emits a ping (the project id) each time the project's scene changes —
+	points, control points, grid, overlays, terrain/buildings, transform, or
+	georeference. The payload is intentionally minimal; clients refetch the
+	scene on the ping. Authenticated via the session cookie sent on the
+	WebSocket upgrade; only members of the project's organization may subscribe.
+	"""
+	projectChanged(projectId: UUID!): UUID!
+}
+
 """
 A surveyed point. Coordinates are meters; one category + free-text tags.
 """
@@ -777,4 +788,5 @@ directive @specifiedBy(url: String!) on SCALAR
 schema {
 	query: QueryRoot
 	mutation: MutationRoot
+	subscription: SubscriptionRoot
 }

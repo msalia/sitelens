@@ -1961,3 +1961,47 @@ async fn cannot_remove_or_demote_the_last_admin(pool: PgPool) {
     let err2 = exec_err(&schema, &demote, Some(ctx)).await;
     assert!(err2.to_lowercase().contains("last admin"), "got: {err2}");
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn project_changed_subscription_requires_org_ownership(pool: PgPool) {
+    use async_graphql::futures_util::StreamExt;
+    let schema = schema(pool);
+    let (a_admin, a_org, _) = signup(&schema, "a@example.com", "Org A").await;
+    let (b_admin, b_org, _) = signup(&schema, "b@example.com", "Org B").await;
+    let a_pid = create_project(&schema, admin_ctx(a_admin, a_org), "A Site").await;
+
+    // Org B may not subscribe to Org A's project — the stream's first item errors.
+    let q = format!(r#"subscription {{ projectChanged(projectId: "{a_pid}") }}"#);
+    let req = Request::new(q).data(admin_ctx(b_admin, b_org));
+    let first = schema
+        .execute_stream(req)
+        .next()
+        .await
+        .expect("a stream response");
+    assert!(
+        !first.errors.is_empty(),
+        "expected an org-ownership error, got: {:?}",
+        first.data
+    );
+
+    // The owner can subscribe and receives a ping when the project is published.
+    let q2 = format!(r#"subscription {{ projectChanged(projectId: "{a_pid}") }}"#);
+    let req2 = Request::new(q2).data(admin_ctx(a_admin, a_org));
+    let mut owner_stream = schema.execute_stream(req2);
+    // Poll once so the resolver runs and registers the subscriber (no ping yet,
+    // so this times out by design); only then does a publish reach it.
+    let _ = tokio::time::timeout(std::time::Duration::from_millis(500), owner_stream.next()).await;
+    schema
+        .data::<sitelens_api::pubsub::ScenePubSub>()
+        .unwrap()
+        .publish(a_pid);
+    let item = tokio::time::timeout(std::time::Duration::from_secs(2), owner_stream.next())
+        .await
+        .expect("subscription should yield within 2s")
+        .expect("a stream item");
+    assert!(
+        item.errors.is_empty(),
+        "unexpected errors: {:?}",
+        item.errors
+    );
+}

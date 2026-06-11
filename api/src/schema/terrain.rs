@@ -217,6 +217,7 @@ impl TerrainMutation {
         .bind(&key)
         .fetch_one(pool)
         .await?;
+        publish_scene(ctx, project_id);
         Ok(row)
     }
 
@@ -364,6 +365,7 @@ impl TerrainMutation {
         .bind(count)
         .fetch_one(pool)
         .await?;
+        publish_scene(ctx, project_id);
         Ok(row)
     }
 }

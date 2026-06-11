@@ -103,6 +103,7 @@ impl GridMutation {
         .bind(project_id)
         .fetch_all(pool)
         .await?;
+        publish_scene(ctx, project_id);
         Ok(rows.into_iter().map(GridAxis::from).collect())
     }
 
@@ -143,6 +144,7 @@ impl GridMutation {
         .bind(source.unwrap_or_default())
         .fetch_one(pool)
         .await?;
+        publish_scene(ctx, project_id);
         Ok(cp)
     }
 
@@ -190,25 +192,29 @@ impl GridMutation {
         .bind(auth.org_id)
         .fetch_optional(pool(ctx)?)
         .await?;
-        cp.ok_or_else(|| async_graphql::Error::new("control point not found in your organization"))
+        let cp = cp.ok_or_else(|| {
+            async_graphql::Error::new("control point not found in your organization")
+        })?;
+        publish_scene(ctx, cp.project_id);
+        Ok(cp)
     }
 
     /// Deletes a control point in the caller's organization. Editor role required.
     async fn delete_control_point(&self, ctx: &Context<'_>, id: Uuid) -> Result<bool> {
         let auth = require_editor(ctx)?;
-        let result = sqlx::query(
+        let row: Option<(Uuid,)> = sqlx::query_as(
             "DELETE FROM control_points cp USING projects p \
-             WHERE cp.id = $1 AND cp.project_id = p.id AND p.org_id = $2",
+             WHERE cp.id = $1 AND cp.project_id = p.id AND p.org_id = $2 \
+             RETURNING cp.project_id",
         )
         .bind(id)
         .bind(auth.org_id)
-        .execute(pool(ctx)?)
+        .fetch_optional(pool(ctx)?)
         .await?;
-        if result.rows_affected() == 0 {
-            return Err(async_graphql::Error::new(
-                "control point not found in your organization",
-            ));
-        }
+        let (project_id,) = row.ok_or_else(|| {
+            async_graphql::Error::new("control point not found in your organization")
+        })?;
+        publish_scene(ctx, project_id);
         Ok(true)
     }
 
@@ -275,6 +281,7 @@ impl GridMutation {
         .bind(sqlx::types::Json(&residuals))
         .execute(pool)
         .await?;
+        publish_scene(ctx, project_id);
 
         Ok(Transform {
             translation_e: solution.params.tx,
