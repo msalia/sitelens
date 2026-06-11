@@ -117,29 +117,17 @@ impl TerrainMutation {
         let explicit_demtype = demtype.filter(|d| !d.trim().is_empty());
         let force = force.unwrap_or(false);
 
-        let existing: Option<(DateTime<Utc>,)> =
-            sqlx::query_as("SELECT fetched_at FROM project_terrain WHERE project_id = $1")
-                .bind(project_id)
-                .fetch_optional(pool)
-                .await?;
-        if let Some((fetched_at,)) = existing {
-            if !force {
-                // Already cached and no forced refresh requested — reuse it.
-                let row = sqlx::query_as(&format!(
-                    "SELECT {TERRAIN_COLUMNS} FROM project_terrain WHERE project_id = $1"
-                ))
-                .bind(project_id)
-                .fetch_one(pool)
-                .await?;
-                return Ok(row);
-            }
-            let age = Utc::now() - fetched_at;
-            if age < chrono::Duration::days(7) {
-                let days = (7 - age.num_days()).max(1);
-                return Err(async_graphql::Error::new(format!(
-                    "Terrain was refreshed recently — try again in {days} day(s)."
-                )));
-            }
+        if let Refresh::Cached(row) = refresh_cooldown::<ProjectTerrain>(
+            pool,
+            "project_terrain",
+            TERRAIN_COLUMNS,
+            "Terrain was",
+            project_id,
+            force,
+        )
+        .await?
+        {
+            return Ok(row);
         }
 
         let api_key = std::env::var("OPENTOPO_API_KEY")
@@ -238,28 +226,17 @@ impl TerrainMutation {
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
         let force = force.unwrap_or(false);
 
-        let existing: Option<(DateTime<Utc>,)> =
-            sqlx::query_as("SELECT fetched_at FROM project_buildings WHERE project_id = $1")
-                .bind(project_id)
-                .fetch_optional(pool)
-                .await?;
-        if let Some((fetched_at,)) = existing {
-            if !force {
-                let row = sqlx::query_as(&format!(
-                    "SELECT {BUILDINGS_COLUMNS} FROM project_buildings WHERE project_id = $1"
-                ))
-                .bind(project_id)
-                .fetch_one(pool)
-                .await?;
-                return Ok(row);
-            }
-            let age = Utc::now() - fetched_at;
-            if age < chrono::Duration::days(7) {
-                let days = (7 - age.num_days()).max(1);
-                return Err(async_graphql::Error::new(format!(
-                    "Buildings were refreshed recently — try again in {days} day(s)."
-                )));
-            }
+        if let Refresh::Cached(row) = refresh_cooldown::<ProjectBuildings>(
+            pool,
+            "project_buildings",
+            BUILDINGS_COLUMNS,
+            "Buildings were",
+            project_id,
+            force,
+        )
+        .await?
+        {
+            return Ok(row);
         }
 
         // Overpass QL: building ways within the bbox, with node geometry + tags.
