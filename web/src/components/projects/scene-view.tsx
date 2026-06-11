@@ -627,7 +627,15 @@ export function SceneView({
                 ) : null}
                 <DropdownMenuCheckboxItem
                   checked={projectOnTerrain}
-                  onCheckedChange={(v) => setProjectOnTerrain(Boolean(v))}
+                  onCheckedChange={(v) => {
+                    const on = Boolean(v);
+                    setProjectOnTerrain(on);
+                    // Projecting onto hidden terrain makes no sense — turn it on
+                    // so the surface the points drape onto is actually visible.
+                    if (on) {
+                      setShowTerrain(true);
+                    }
+                  }}
                 >
                   Project onto terrain
                 </DropdownMenuCheckboxItem>

@@ -4,7 +4,6 @@ import { OrbitControls } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
 import { useTheme } from 'next-themes';
 import { useEffect, useMemo, useState } from 'react';
-import * as THREE from 'three';
 
 import type { PointCategory, SceneData } from '@/lib/types';
 
@@ -23,8 +22,10 @@ import {
   BUILDING_COLOR,
   Buildings,
   DxfOverlays,
+  Fade,
   GridLines,
   Markers,
+  TerrainSurface,
   useBounds,
   useMarkers,
 } from './terrain-objects';
@@ -147,9 +148,10 @@ export function TerrainViewer(props: TerrainViewerProps) {
   // the downloaded heightfield, with cleanup that disposes the GPU resource.
   useEffect(() => {
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTerrainMesh(null);
     if (!terrain?.contentBase64) {
+      // Terrain genuinely removed → clear it.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTerrainMesh(null);
       return;
     }
     (async () => {
@@ -158,6 +160,11 @@ export function TerrainViewer(props: TerrainViewerProps) {
         if (cancelled) {
           built.geometry.dispose();
         } else {
+          // Swap in place — we keep the previous mesh until the new one is ready
+          // (we never null it out first). So on a refresh the sampler never blips
+          // to null: points + grid glide straight from the old drape to the new,
+          // and the terrain doesn't blink out-then-in. The previous geometry is
+          // disposed by the [terrainMesh] cleanup effect when this swap commits.
           setTerrainMesh(built);
         }
       } catch {
@@ -214,47 +221,59 @@ export function TerrainViewer(props: TerrainViewerProps) {
       <directionalLight position={[ext, ext * 1.6, ext * 0.6]} intensity={1.25} />
       <directionalLight position={[-ext, ext * 0.8, -ext]} intensity={0.35} />
 
-      {showTerrain && terrainMesh ? (
-        <mesh geometry={terrainMesh.geometry}>
-          <meshStandardMaterial
+      {/* Each layer stays mounted only while fading; `Fade` unmounts it once
+          fully hidden, so a toggled-off layer costs nothing. Grid + pins are
+          lightweight and fade in place (grid via its own lerp; pins exit via the
+          presence hook when passed an empty list). */}
+      {terrainMesh ? (
+        // `cull`: terrain is one heavy mesh kept resident in state anyway, so
+        // keep it mounted + warm when hidden (no remount shader-recompile hitch
+        // on fade-in) and just stop drawing it. TerrainSurface morphs the vertex
+        // heights flat↔relief in step with the same toggle, so it grows as it
+        // fades in and settles flat as it fades out. `key` remounts only when a
+        // genuinely new terrain geometry loads (re-snapshots its base heights).
+        <Fade visible={showTerrain} cull>
+          <TerrainSurface
+            key={terrainMesh.geometry.uuid}
+            geometry={terrainMesh.geometry}
             color={palette.clay}
-            vertexColors
-            transparent
-            roughness={1}
-            metalness={0}
-            side={THREE.DoubleSide}
+            relief={showTerrain}
           />
-        </mesh>
+        </Fade>
       ) : null}
 
-      {showBuildings && buildings?.length ? (
-        <Buildings
-          buildings={buildings}
-          color={buildingColor}
-          frame={frame}
-          // Buildings always sit on the terrain surface (independent of the
-          // point/grid projection toggle) and are culled/faded to its extent.
-          sample={terrainMesh?.sample ?? null}
-          center={terrainMesh ? { x: terrainMesh.cx, z: terrainMesh.cz } : null}
-          radius={terrainMesh?.radius ?? null}
-        />
+      {buildings?.length ? (
+        <Fade visible={showBuildings}>
+          <Buildings
+            buildings={buildings}
+            color={buildingColor}
+            frame={frame}
+            // Buildings always sit on the terrain surface (independent of the
+            // point/grid projection toggle) and are culled/faded to its extent.
+            sample={terrainMesh?.sample ?? null}
+            center={terrainMesh ? { x: terrainMesh.cx, z: terrainMesh.cz } : null}
+            radius={terrainMesh?.radius ?? null}
+          />
+        </Fade>
       ) : null}
 
-      {showGrid ? <GridLines scene={scene} frame={frame} sample={sampler} /> : null}
-      {showOverlays &&
-      overlays?.length &&
+      <GridLines scene={scene} frame={frame} sample={sampler} visible={showGrid} />
+      {overlays?.length &&
       originProjectedE !== null &&
       originProjectedE !== undefined &&
       originProjectedN !== null &&
       originProjectedN !== undefined ? (
+        // No outer Fade — DxfOverlays fades each layer itself, combining the
+        // master toggle with per-layer visibility so both animate via one Fade.
         <DxfOverlays
           overlays={overlays}
           originE={originProjectedE}
           originN={originProjectedN}
           shownLayers={shownLayers}
+          visible={showOverlays}
         />
       ) : null}
-      {showPins ? <Markers markers={markers} onSelectPoint={onSelectPoint} /> : null}
+      <Markers markers={showPins ? markers : []} onSelectPoint={onSelectPoint} />
 
       {/* No `target` prop — CameraRig owns the pivot so it always glides (never
           snaps) when the grid centre / projection changes. */}
