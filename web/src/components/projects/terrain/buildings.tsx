@@ -121,7 +121,11 @@ export function Buildings({
     return null;
   }
   return (
-    <mesh geometry={geometry}>
+    // renderOrder=1 draws buildings AFTER the terrain so the two transparent
+    // meshes have a stable order (otherwise the camera-distance sort flips and
+    // near buildings blink in/out as the view moves). They still depth-test
+    // against the terrain that's already been drawn, so occlusion stays correct.
+    <mesh geometry={geometry} renderOrder={1}>
       {/* depthWrite off: the prisms are a translucent radial-faded massing, so they
           blend rather than hard-occlude — and it keeps Fade from popping when it
           restores the original depth-write at the end of a fade-in. */}
