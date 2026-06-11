@@ -6,9 +6,9 @@
 > sub-processor so they can object (see [DPA.md](./DPA.md) §5).
 > Last updated: June 11, 2026.
 
-| Sub-processor | Purpose                                                                  | Data processed                            | Location      | Transfer safeguard                                                                                                 |
-| ------------- | ------------------------------------------------------------------------ | ----------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------ |
-| **Resend**    | Transactional email delivery (verification, password reset, invitations) | Recipient email address + message content | United States | DPA + EU SCCs (Module 3, processor→processor); UK IDTA where applicable. [TODO: confirm signed Resend DPA on file] |
+| Sub-processor | Purpose                                                                  | Data processed                            | Location      | Transfer safeguard                                                                                                            |
+| ------------- | ------------------------------------------------------------------------ | ----------------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **Resend**    | Transactional email delivery (verification, password reset, invitations) | Recipient email address + message content | United States | DPA + EU SCCs (Module 3, processor→processor); UK IDTA where applicable. ✅ Signed DPA/SCCs on file (`resend-dpa-signed.pdf`) |
 
 ## Hosting
 
@@ -31,6 +31,6 @@ may object on reasonable data-protection grounds within that window.
 
 ## To do before publishing
 
-- [TODO: sign and file the Resend DPA/SCCs]
+- [x] Sign and file the Resend DPA/SCCs — see `resend-dpa-signed.pdf`.
 - [TODO: complete a Transfer Impact Assessment for US processing (KeshavTech is
   US-based) and the Resend transfer]
