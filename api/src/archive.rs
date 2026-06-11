@@ -293,7 +293,8 @@ pub async fn export_project(
     })
     .collect();
 
-    let overlay_rows: Vec<(String, f64, f64, f64, f64, f64, bool, bool, String)> = sqlx::query_as(
+    type OverlayRow = (String, f64, f64, f64, f64, f64, bool, bool, String);
+    let overlay_rows: Vec<OverlayRow> = sqlx::query_as(
         "SELECT original_filename, offset_e, offset_n, rotation_deg, scale, elevation, \
          assume_real_world, visible, storage_key FROM cad_overlays WHERE project_id = $1 ORDER BY created_at",
     )
