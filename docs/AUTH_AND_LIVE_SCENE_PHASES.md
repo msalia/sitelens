@@ -197,20 +197,32 @@ Edits to a project emit a push over an authenticated WebSocket.
 
 ---
 
-## Phase 6 — Live scene client
+## Phase 6 — Live scene client ✅
 
 ### Deliverables
 
-- [ ] `SceneView` opens a `projectChanged` subscription for the open project.
-- [ ] On ping (debounced), refetch `sceneData` and **reconcile by id** into existing
-      state (no `setScene(newObject)` remount); remove the manual "Reload" reliance.
-- [ ] `CameraRig` decoupled from data-driven bounds — re-aims only on first load,
-      preset/reset, and table "locate".
+- [x] `SceneView` opens a `projectChanged` subscription for the open project
+      (`lib/scene-subscription.ts`, a minimal graphql-transport-ws client with
+      backoff; WS URL auto-resolves dev→:4000 / prod→same-origin `/graphql`).
+- [x] On ping (debounced ~250 ms), refetch `sceneData`. Markers/lines are keyed by
+      id, so React reconciles in place (no remount); live edits no longer rely on
+      the manual reload.
+- [x] `CameraRig` decoupled from data-driven bounds — frames once when bounds first
+      become valid, then re-aims only on explicit intent (preset/reset `viewNonce`)
+      or table "locate" (`focus`). Data/terrain/projection changes no longer move
+      the view.
 
 ### Tests
 
-- [ ] e2e: edit in one browser context appears in another without reload (best-effort).
+- [x] e2e: with the scene open, an external change to the project triggers a live
+      `sceneData` refetch without navigation (`scene-live.spec`, best-effort — the
+      WebGL canvas isn't DOM-introspectable).
 - [ ] Manual: rapid edits don't jerk the camera; view holds position.
+
+### Deploy note
+
+- [ ] Prod: Traefik must forward the WS upgrade for `Host=<app> && Path=/graphql`
+      to the API service (so the browser's same-origin `/graphql` WS reaches it).
 
 ### Validates
 

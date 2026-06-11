@@ -49,6 +49,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { parseDxf } from '@/lib/dxf';
 import { gql } from '@/lib/graphql';
+import { subscribeProjectChanged } from '@/lib/scene-subscription';
 
 import {
   BUILDINGS_CONTENT,
@@ -261,6 +262,22 @@ export function SceneView({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load, reloadNonce]);
+
+  // Live updates: subscribe to projectChanged and refetch (debounced) on each
+  // push, so edits from this or another session appear without a manual reload.
+  // The camera is decoupled from data bounds (see CameraRig), so refetching never
+  // moves the view.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = subscribeProjectChanged(project.id, () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => void load(), 250);
+    });
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [project.id, load]);
 
   function toggleLayer(layer: string) {
     setShownLayers((s) => {

@@ -93,12 +93,37 @@ export function CameraRig({
   const idleFor = useRef(0); // seconds since the last interaction / re-aim
   const reduceMotion = useRef(false);
 
-  // Re-aim on a preset change AND when the grid-center moves (e.g. terrain loads
-  // or projection is toggled, which shifts the centre's elevation).
+  // Latest bounds, kept current without letting them re-aim the camera.
+  const bounds = useRef({ cx, cy, cz, ext });
   useEffect(() => {
+    bounds.current = { cx, cy, cz, ext };
+  }, [cx, cy, cz, ext]);
+
+  // Frame once, when the scene bounds first become valid. Later changes to the
+  // bounds (points added/removed via live updates, terrain load, projection
+  // toggle) do NOT re-aim — the view holds steady while data streams in.
+  const framedOnce = useRef(false);
+  useEffect(() => {
+    if (framedOnce.current || ext <= 0) {
+      return;
+    }
+    framedOnce.current = true;
     goal.current = presetFor(view, [cx, cy, cz], ext);
     idleFor.current = 0;
-  }, [view, viewNonce, cx, cy, cz, ext]);
+  }, [cx, cy, cz, ext, view]);
+
+  // Re-aim only on explicit intent — a preset selection or a reset (viewNonce
+  // bump) — using the bounds as they stand now.
+  const firstIntent = useRef(true);
+  useEffect(() => {
+    if (firstIntent.current) {
+      firstIntent.current = false;
+      return;
+    }
+    const b = bounds.current;
+    goal.current = presetFor(view, [b.cx, b.cy, b.cz], b.ext);
+    idleFor.current = 0;
+  }, [view, viewNonce]);
 
   useEffect(() => {
     if (!focus) {
