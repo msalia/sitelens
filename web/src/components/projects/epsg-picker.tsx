@@ -33,9 +33,10 @@ export function EpsgPicker({
   const [selectedName, setSelectedName] = useState('');
   const boxRef = useRef<HTMLDivElement>(null);
 
-  // Resolve the current code's name for display.
+  // Resolve the current code's name for display (legitimate data-fetching effect).
   useEffect(() => {
     if (!value) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedName('');
       return;
     }

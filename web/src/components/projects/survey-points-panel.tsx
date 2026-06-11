@@ -160,7 +160,9 @@ export function SurveyPointsPanel({
     }
   }, [project.id, debouncedSearch, categoryFilter, groupFilter, page, sortField, sortDesc]);
 
+  // Legitimate data-fetching effect: query the server when filters/page change.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 
@@ -173,7 +175,9 @@ export function SurveyPointsPanel({
     }
   }, [project.id]);
 
+  // Legitimate data-fetching effect: load point groups for the filter dropdown.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadGroups();
   }, [loadGroups]);
 
@@ -183,10 +187,15 @@ export function SurveyPointsPanel({
     return () => clearTimeout(t);
   }, [search]);
 
-  // Reset to the first page whenever the filters or sort change.
-  useEffect(() => {
+  // Reset to the first page whenever the filters or sort change. Adjusting state
+  // during render (instead of an effect) also avoids a redundant fetch at the
+  // stale page before the reset lands.
+  const filterSig = `${debouncedSearch}|${categoryFilter}|${groupFilter}|${sortField}|${sortDesc}`;
+  const [pagedFilterSig, setPagedFilterSig] = useState(filterSig);
+  if (pagedFilterSig !== filterSig) {
+    setPagedFilterSig(filterSig);
     setPage(0);
-  }, [debouncedSearch, categoryFilter, groupFilter, sortField, sortDesc]);
+  }
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const showPagination = pageCount > 1;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -107,31 +107,34 @@ export function ControlPointDialog({
   const [busy, setBusy] = useState(false);
 
   // Seed the form when the dialog opens: from the point in edit mode, blank for
-  // add. Keyed on `open` so reopening add mode always starts clean.
-  useEffect(() => {
-    if (!open) {
-      return;
+  // add. Done during render (not an effect) and keyed on open/point/unit so
+  // reopening add mode always starts clean.
+  const seedSig = `${open}|${point?.id ?? ''}|${project.displayUnit}`;
+  const [seededSig, setSeededSig] = useState(seedSig);
+  if (seededSig !== seedSig) {
+    setSeededSig(seedSig);
+    if (open) {
+      if (point) {
+        const unit = project.displayUnit;
+        const fmt = (m: number | null) => (m === null ? '' : fromMeters(m, unit).toFixed(4));
+        setLabel(point.label);
+        setNorthing(fromMeters(point.northing, unit).toFixed(4));
+        setEasting(fromMeters(point.easting, unit).toFixed(4));
+        setElevation(fmt(point.elevation));
+        setGridX(fmt(point.gridX));
+        setGridY(fmt(point.gridY));
+        setSource(point.source);
+      } else {
+        setLabel('');
+        setNorthing('');
+        setEasting('');
+        setElevation('');
+        setGridX('');
+        setGridY('');
+        setSource('');
+      }
     }
-    if (point) {
-      const unit = project.displayUnit;
-      const fmt = (m: number | null) => (m === null ? '' : fromMeters(m, unit).toFixed(4));
-      setLabel(point.label);
-      setNorthing(fromMeters(point.northing, unit).toFixed(4));
-      setEasting(fromMeters(point.easting, unit).toFixed(4));
-      setElevation(fmt(point.elevation));
-      setGridX(fmt(point.gridX));
-      setGridY(fmt(point.gridY));
-      setSource(point.source);
-    } else {
-      setLabel('');
-      setNorthing('');
-      setEasting('');
-      setElevation('');
-      setGridX('');
-      setGridY('');
-      setSource('');
-    }
-  }, [open, point, project.displayUnit]);
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();

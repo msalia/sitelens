@@ -44,10 +44,12 @@ export function CoordinateInspectorDialog({
   const [set, setSet] = useState<CoordinateSet | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Legitimate data-fetching effect: convert the selected point via the API.
   useEffect(() => {
     if (!point) {
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSet(null);
     setLoading(true);
     // Pass the stored (meters) projected coordinate; the API derives the rest.

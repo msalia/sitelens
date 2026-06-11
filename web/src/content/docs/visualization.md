@@ -6,12 +6,11 @@ viewport is always present in the project workspace and updates live as you edit
 
 ## The scene
 
-The viewer is a lightweight WebGL scene (react-three-fiber) drawn in a soft,
-matte **"clay"** style — bright in light mode, a deep neutral in dark mode. It
-shows:
+The viewer is a lightweight, interactive 3D scene drawn in a soft, matte
+**"clay"** style — bright in light mode, a deep neutral in dark mode. It shows:
 
-- The **terrain** for your site, fetched from open elevation data.
-- Nearby **buildings**, extruded from OpenStreetMap footprints, for context.
+- The **terrain** for your site.
+- Nearby **buildings**, extruded for context.
 - The **building grid** lines, with axis labels.
 - **Control points** as red pins.
 - All **surveyed points** as pins colored by category.
@@ -31,23 +30,20 @@ disabled automatically if your system is set to _reduce motion_.
 
 ## Terrain &amp; buildings
 
-Two context layers are fetched server-side for the area covering your points and
-cached with your project, so they load instantly and aren't re-fetched on every
-visit:
+Two context layers cover the area around your points and are cached with your
+project, so they load instantly and aren't re-fetched on every visit:
 
-- **Terrain** — an elevation grid from **OpenTopography** (USGS 3DEP 10 m where
-  available in the US, falling back to the global SRTM 30 m DEM).
-- **Buildings** — nearby building footprints from **OpenStreetMap** (the free
-  Overpass API), extruded to their tagged height (or a sensible default), sitting
-  on the terrain surface.
+- **Terrain** — a real-world elevation grid for your site.
+- **Buildings** — nearby building footprints, extruded to their height (or a
+  sensible default), sitting on the terrain surface.
 
 A single button (top-right) handles both:
 
 - Click **Load site data** to fetch them the first time.
-- **Refresh site** re-fetches them. Because both sources are rate-limited, a
-  refresh is blocked for **7 days** after the last fetch (the button shows why),
-  plus a short client-side cooldown to prevent accidental repeats. Whichever layer
-  is still fresh is skipped, so only stale data is re-fetched.
+- **Refresh site** re-fetches them. To stay efficient, a refresh is limited to
+  once every **7 days** after the last fetch (the button shows why), plus a short
+  cooldown to prevent accidental repeats. Whichever layer is still fresh is
+  skipped, so only stale data is re-fetched.
 
 The fetched area is derived automatically from your control and survey points, so
 there's nothing to configure. The terrain tile fades out at its edges so it blends
@@ -77,8 +73,8 @@ The **Display** menu (top-left) toggles what's drawn:
 - **Grid lines** — show/hide the building grid and its labels. Grid lines extend
   past their ends with a dashed lead-out so the labels stay clear of the pins.
 - **Terrain** — show/hide the terrain mesh.
-- **Buildings** — show/hide the extruded OpenStreetMap buildings (appears once
-  buildings have been fetched).
+- **Buildings** — show/hide the extruded buildings (appears once buildings have
+  been fetched).
 - **Project onto terrain** — drape zero-elevation features onto the surface.
 - **DXF overlays** — show/hide the architect's drawing (appears once an overlay is
   uploaded). DXF overlays render flat at their set elevation, not draped on

@@ -39,7 +39,7 @@ describe('units', () => {
     expect(formatInUnit(0.3048, 'INTERNATIONAL_FOOT', 4)).toBe('1.0000');
   });
 
-  it('mirrors the Rust geo-core conversions for a known value', () => {
+  it('mirrors the canonical server conversions for a known value', () => {
     // 100 m → US survey feet, matching api/src/units.rs.
     expect(fromMeters(100, 'US_SURVEY_FOOT')).toBeCloseTo((100 * 3937) / 1200, 9);
   });

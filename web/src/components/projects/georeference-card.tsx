@@ -7,7 +7,7 @@ import {
   IconWorldLatitude,
   IconWorldLongitude,
 } from '@tabler/icons-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { Project } from '@/lib/types';
@@ -71,8 +71,13 @@ export function GeoreferenceCard({
   const [saving, setSaving] = useState(false);
 
   // Reset the draft whenever the saved project changes (e.g. after a save or an
-  // edit from the modal) so the card reflects persisted state.
-  useEffect(() => {
+  // edit from the modal) so the card reflects persisted state. Adjusting state
+  // during render (vs. an effect) avoids a redundant re-render and is the React-
+  // recommended pattern for "reset state when a prop changes".
+  const sig = `${project.combinedScaleFactor}|${project.siteOriginLat}|${project.siteOriginLon}|${project.siteOriginRotationDeg}`;
+  const [syncedSig, setSyncedSig] = useState(sig);
+  if (syncedSig !== sig) {
+    setSyncedSig(sig);
     setScale(project.combinedScaleFactor);
     setLat(project.siteOriginLat);
     setLon(project.siteOriginLon);
@@ -80,12 +85,7 @@ export function GeoreferenceCard({
     setBaseLat(project.siteOriginLat ?? 0);
     setBaseLon(project.siteOriginLon ?? 0);
     setDirty(false);
-  }, [
-    project.combinedScaleFactor,
-    project.siteOriginLat,
-    project.siteOriginLon,
-    project.siteOriginRotationDeg,
-  ]);
+  }
 
   function edit(fn: () => void) {
     fn();

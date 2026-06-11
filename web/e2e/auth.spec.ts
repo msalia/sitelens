@@ -2,38 +2,34 @@ import { expect, test } from '@playwright/test';
 
 import { signUpAndLogin } from './helpers';
 
-// Auth surfaces: login (login-02 split), signup (login-03 card), and the
+// Auth surfaces: login (email/password, no SSO), signup card, and the
 // docs-behind-auth gate. Layout checks are static; the verify flow needs the API.
 
-test('login page renders the login-02 layout', async ({ page }) => {
+test('login page renders the email/password layout', async ({ page }) => {
   await page.goto('/login');
   await expect(page.getByRole('heading', { name: 'Login to your account' })).toBeVisible();
   await expect(page.getByLabel('Email')).toBeVisible();
   await expect(page.getByLabel('Password')).toBeVisible();
   await expect(page.getByRole('button', { exact: true, name: 'Login' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Continue with Google/ })).toBeVisible();
+  // SSO has been removed — no social login button.
+  await expect(page.getByRole('button', { name: /Continue with Google/ })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Sign up' })).toBeVisible();
 });
 
-test('forgot-password shows a coming-soon notice', async ({ page }) => {
+test('the forgot-password link opens the reset-request page', async ({ page }) => {
   await page.goto('/login');
-  await page.getByRole('button', { name: 'Forgot your password?' }).click();
-  await expect(page.getByText(/coming soon/i)).toBeVisible();
+  await page.getByRole('link', { name: 'Forgot your password?' }).click();
+  await expect(page).toHaveURL(/\/forgot-password$/);
+  await expect(page.getByRole('button', { name: 'Send reset link' })).toBeVisible();
 });
 
-test('social login routes to the SSO placeholder', async ({ page }) => {
-  await page.goto('/login');
-  await page.getByRole('button', { name: /Continue with Google/ }).click();
-  await expect(page).toHaveURL(/\/auth\/google$/);
-  await expect(page.getByText(/coming soon/i)).toBeVisible();
-});
-
-test('signup page renders the login-03 layout', async ({ page }) => {
+test('signup page renders the create-organization card', async ({ page }) => {
   await page.goto('/signup');
   await expect(page.getByText('Create your organization')).toBeVisible();
   await expect(page.getByLabel('Organization name')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create account' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Sign up with Google/ })).toBeVisible();
+  // SSO has been removed — no social signup button.
+  await expect(page.getByRole('button', { name: /Sign up with Google/ })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Log in' })).toBeVisible();
 });
 

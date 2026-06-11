@@ -24,9 +24,10 @@ use crate::import::{self, CsvMapping};
 use crate::models::{
     CadOverlay, ControlPoint, CoordinateSet, CoordinateSpace, CsvMappingInput, EpsgEntry,
     ExportColumn, ExportFormat, ExportSpace, GridAxis, GridAxisInput, GridAxisRow, ImportBatch,
-    ImportFormat, ImportProfile, ImportProfileRow, InviteResult, LoginRow, Org, PointCategory,
-    PointGroup, Project, ProjectBuildings, ProjectRow, ProjectTerrain, PublicConfig, SceneData,
-    SceneLine, ScenePoint, SignupResult, SurveyPoint, Transform, TransformResidual, User, UserRow,
+    ImportFormat, ImportProfile, ImportProfileRow, InviteResult, LoginRow, Org, OrgMember,
+    OrgMemberRow, PointCategory, PointGroup, Project, ProjectBuildings, ProjectRow, ProjectTerrain,
+    PublicConfig, SceneData, SceneLine, ScenePoint, SignupResult, SurveyPoint, Transform,
+    TransformResidual, User, UserRow,
 };
 use crate::ratelimit::{ClientIp, RateLimiter};
 use crate::storage::Storage;
@@ -41,7 +42,6 @@ const BUILDINGS_COLUMNS: &str = "project_id, count, fetched_at";
 fn building_height(tags: &serde_json::Value) -> f64 {
     if let Some(h) = tags.get("height").and_then(|v| v.as_str()) {
         if let Some(n) = h
-            .trim()
             .split_whitespace()
             .next()
             .and_then(|s| s.parse::<f64>().ok())

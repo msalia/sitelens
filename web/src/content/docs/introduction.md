@@ -36,7 +36,7 @@ real-world coordinates, then keeps every point consistent across all systems.
   survey-grade data.
 - **Everything is stored in meters internally.** Units are converted only when
   you import, view, or export — and feet are always labeled.
-- **Precision math is deliberate.** The transform and projections run in a Rust
-  geo-core, not in the browser.
+- **Precision math is deliberate.** The transform and projections are computed at
+  full precision, never approximated.
 
 Continue to [Getting Started](/docs/getting-started) to set up your first project.

@@ -133,8 +133,11 @@ export function TerrainViewer(props: TerrainViewerProps) {
   const buildingColor = isDark ? BUILDING_COLOR.dark : BUILDING_COLOR.light;
 
   const [terrainMesh, setTerrainMesh] = useState<TerrainMesh | null>(null);
+  // Legitimate effect: asynchronously build the Three.js terrain geometry from
+  // the downloaded heightfield, with cleanup that disposes the GPU resource.
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTerrainMesh(null);
     if (!terrain?.contentBase64) {
       return;

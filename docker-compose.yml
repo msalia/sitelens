@@ -44,6 +44,9 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       SITELENS_MAIL_FROM: ${SITELENS_MAIL_FROM:-SiteLens <noreply@msalia.org>}
       APP_URL: ${APP_URL:-http://localhost:3000}
+      # Set MAIL_CAPTURE=1 (e.g. for e2e) to record emails in memory instead of
+      # sending — no provider quota used; readable via the `sentEmails` query.
+      MAIL_CAPTURE: ${MAIL_CAPTURE:-}
     volumes:
       - uploads:${STORAGE_DIR}
     depends_on:

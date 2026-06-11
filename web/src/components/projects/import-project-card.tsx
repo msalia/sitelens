@@ -53,7 +53,7 @@ export function ImportProjectCard({ onImported }: { onImported: () => void }) {
   return (
     <Card
       className={cn(
-        'border-dashed transition-colors',
+        'border-muted-foreground/30 h-full border border-dashed bg-transparent ring-0 transition-colors',
         dragOver && 'border-primary bg-accent/40',
         busy && 'pointer-events-none opacity-70',
       )}
@@ -68,7 +68,7 @@ export function ImportProjectCard({ onImported }: { onImported: () => void }) {
         void handleFile(e.dataTransfer.files?.[0]);
       }}
     >
-      <CardContent className="flex flex-col items-center gap-3 py-8 text-center">
+      <CardContent className="flex h-full flex-col items-center justify-center gap-3 text-center">
         <span className="bg-muted text-muted-foreground flex size-11 items-center justify-center rounded-full">
           <IconFileImport className="size-5" />
         </span>

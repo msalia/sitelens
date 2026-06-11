@@ -12,6 +12,10 @@ pub trait Storage: Send + Sync {
     async fn get(&self, key: &str) -> Result<Vec<u8>, String>;
     async fn delete(&self, key: &str) -> Result<(), String>;
     async fn exists(&self, key: &str) -> bool;
+    /// Removes every object under `prefix` (a key prefix / directory). Used to
+    /// purge a project's uploads on delete so no files are left behind. A missing
+    /// prefix is not an error. (S3 will list-and-batch-delete here later.)
+    async fn delete_prefix(&self, prefix: &str) -> Result<(), String>;
 }
 
 /// Stores objects as files under a root directory.
@@ -61,6 +65,16 @@ impl Storage for LocalStorage {
             Err(_) => false,
         }
     }
+
+    async fn delete_prefix(&self, prefix: &str) -> Result<(), String> {
+        let path = self.resolve(prefix)?;
+        match fs::metadata(&path).await {
+            Ok(meta) if meta.is_dir() => fs::remove_dir_all(&path).await.map_err(|e| e.to_string()),
+            Ok(_) => fs::remove_file(&path).await.map_err(|e| e.to_string()),
+            // Nothing at this prefix — already clean.
+            Err(_) => Ok(()),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -83,6 +97,26 @@ mod tests {
         assert_eq!(store.get("a/b.txt").await.unwrap(), b"hello");
         store.delete("a/b.txt").await.unwrap();
         assert!(!store.exists("a/b.txt").await);
+
+        let _ = fs::remove_dir_all(&root).await;
+    }
+
+    #[tokio::test]
+    async fn delete_prefix_removes_a_whole_directory_and_is_idempotent() {
+        let root = temp_root();
+        let store = LocalStorage::new(&root);
+
+        store.put("dxf/p1/a.dxf", b"a").await.unwrap();
+        store.put("dxf/p1/b.dxf", b"b").await.unwrap();
+        store.put("dxf/p2/c.dxf", b"c").await.unwrap();
+
+        store.delete_prefix("dxf/p1").await.unwrap();
+        assert!(!store.exists("dxf/p1/a.dxf").await);
+        assert!(!store.exists("dxf/p1/b.dxf").await);
+        // A sibling project's files are untouched.
+        assert!(store.exists("dxf/p2/c.dxf").await);
+        // Deleting a missing prefix is not an error.
+        store.delete_prefix("dxf/p1").await.unwrap();
 
         let _ = fs::remove_dir_all(&root).await;
     }

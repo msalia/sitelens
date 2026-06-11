@@ -69,7 +69,7 @@ export const docsOrder: DocMeta[] = [
   },
   {
     description:
-      'The 3D scene, OpenTopography terrain, projecting onto terrain, camera views, and display toggles.',
+      'The 3D scene, terrain, projecting onto terrain, camera views, and display toggles.',
     group: 'Visualization',
     href: '/docs/visualization',
     slug: 'visualization',

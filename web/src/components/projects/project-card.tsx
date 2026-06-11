@@ -3,7 +3,7 @@
 import { IconTrash } from '@tabler/icons-react';
 import Link from 'next/link';
 
-import { ConfirmDialog } from '@/components/projects/confirm-dialog';
+import { TypeToConfirmDialog } from '@/components/type-to-confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { type Project, UNIT_LABELS } from '@/lib/types';
@@ -25,9 +25,18 @@ export function ProjectCard({ onDelete, project }: { project: Project; onDelete:
         <span>
           EPSG {project.epsgCode} · {UNIT_LABELS[project.displayUnit]}
         </span>
-        <ConfirmDialog
+        <TypeToConfirmDialog
           title={`Delete ${project.name}?`}
-          description="The project and all its data will be permanently deleted. This can’t be undone."
+          description={
+            <>
+              This <strong>permanently</strong> deletes the project and{' '}
+              <strong>everything in it</strong> — survey points, control points, the grid, imported
+              data, and all uploaded files (drawings, terrain). This action is{' '}
+              <strong>irreversible</strong> and leaves no trace.
+            </>
+          }
+          confirmPhrase={project.name}
+          confirmLabel="Delete project"
           onConfirm={onDelete}
           trigger={
             <Button variant="ghost" size="icon-sm" aria-label="Delete project">

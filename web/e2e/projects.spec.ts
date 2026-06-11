@@ -41,7 +41,13 @@ test('delete a project requires confirmation', async ({ page }) => {
   await page.getByRole('button', { name: 'Delete project' }).click();
   const dialog = page.getByRole('alertdialog');
   await expect(dialog.getByText(/Delete Doomed Site\?/)).toBeVisible();
-  await dialog.getByRole('button', { name: 'Delete' }).click();
+
+  // Type-to-confirm: the action is disabled until the exact project name is typed.
+  const confirm = dialog.getByRole('button', { name: 'Delete project' });
+  await expect(confirm).toBeDisabled();
+  await dialog.getByRole('textbox').fill('Doomed Site');
+  await expect(confirm).toBeEnabled();
+  await confirm.click();
 
   await expect(page.getByRole('link', { name: 'Doomed Site' })).toBeHidden();
 });

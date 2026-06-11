@@ -31,7 +31,7 @@ pub struct SiteRotation {
 
 impl SiteRotation {
     /// Stored/assumed projected → true projected (CCW by `theta_rad`).
-    pub fn to_true(&self, e: f64, n: f64) -> (f64, f64) {
+    pub fn to_true(self, e: f64, n: f64) -> (f64, f64) {
         let (s, c) = self.theta_rad.sin_cos();
         let (de, dn) = (e - self.pivot_e, n - self.pivot_n);
         (
@@ -40,7 +40,7 @@ impl SiteRotation {
         )
     }
     /// True projected → stored/assumed projected (the inverse rotation).
-    fn to_stored(&self, e: f64, n: f64) -> (f64, f64) {
+    fn to_stored(self, e: f64, n: f64) -> (f64, f64) {
         let (s, c) = (-self.theta_rad).sin_cos();
         let (de, dn) = (e - self.pivot_e, n - self.pivot_n);
         (

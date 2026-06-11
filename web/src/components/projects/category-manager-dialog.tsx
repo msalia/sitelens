@@ -1,7 +1,7 @@
 'use client';
 
 import { IconTag, IconTrash } from '@tabler/icons-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { PointCategory } from '@/lib/types';
@@ -179,10 +179,13 @@ function CategoryList({
     return q ? items.filter((c) => c.name.toLowerCase().includes(q)) : items;
   }, [items, search]);
 
-  // Reset to the first page when the filter changes.
-  useEffect(() => {
+  // Reset to the first page when the filter changes (adjusted during render,
+  // not via an effect).
+  const [pagedSearch, setPagedSearch] = useState(search);
+  if (pagedSearch !== search) {
+    setPagedSearch(search);
     setPage(0);
-  }, [search]);
+  }
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const pageItems = filtered.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE);

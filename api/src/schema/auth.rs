@@ -41,6 +41,41 @@ impl AuthQuery {
         .await?;
         Ok(rows.into_iter().map(User::from).collect())
     }
+
+    /// The caller's organization (id, name). Used by the settings page and the
+    /// type-to-confirm delete flow.
+    async fn organization(&self, ctx: &Context<'_>) -> Result<Org> {
+        let auth = require_auth(ctx)?;
+        let org: Org = sqlx::query_as::<_, (Uuid, String, chrono::DateTime<chrono::Utc>)>(
+            "SELECT id, name, created_at FROM orgs WHERE id = $1",
+        )
+        .bind(auth.org_id)
+        .fetch_one(pool(ctx)?)
+        .await
+        .map(|(id, name, created_at)| Org {
+            id,
+            name,
+            created_at,
+        })?;
+        Ok(org)
+    }
+
+    /// Org roster for the admin user-management page, with a derived status.
+    async fn org_members(&self, ctx: &Context<'_>) -> Result<Vec<OrgMember>> {
+        let auth = require_admin(ctx)?;
+        let rows: Vec<OrgMemberRow> = sqlx::query_as(
+            "SELECT id, email, role, \
+               CASE WHEN email_verified THEN 'active' \
+                    WHEN invite_token IS NOT NULL THEN 'pending' \
+                    ELSE 'unverified' END AS status, \
+               created_at \
+             FROM users WHERE org_id = $1 ORDER BY created_at",
+        )
+        .bind(auth.org_id)
+        .fetch_all(pool(ctx)?)
+        .await?;
+        Ok(rows.into_iter().map(OrgMember::from).collect())
+    }
 }
 
 #[derive(Default)]
@@ -251,8 +286,8 @@ impl AuthMutation {
         }
         let invite_token = gen_token();
         let user: User = sqlx::query_as::<_, UserRow>(&format!(
-            "INSERT INTO users (org_id, email, role, invite_token) VALUES ($1, $2, $3, $4) \
-             RETURNING {USER_COLUMNS}"
+            "INSERT INTO users (org_id, email, role, invite_token, invite_token_expires) \
+             VALUES ($1, $2, $3, $4, now() + interval '7 days') RETURNING {USER_COLUMNS}"
         ))
         .bind(auth.org_id)
         .bind(&email)
@@ -261,6 +296,17 @@ impl AuthMutation {
         .fetch_one(pool)
         .await
         .map(User::from)?;
+
+        // Email the invite link (best-effort — the link is also returned).
+        let (org_name,): (String,) = sqlx::query_as("SELECT name FROM orgs WHERE id = $1")
+            .bind(auth.org_id)
+            .fetch_one(pool)
+            .await?;
+        let mailer = ctx.data::<Mailer>()?;
+        let link = format!("{}/accept-invite?token={}", mailer.app_url(), invite_token);
+        if let Err(e) = mailer.send_invite(&email, &org_name, &link).await {
+            eprintln!("invite_user: failed to email invite to {email}: {e}");
+        }
 
         Ok(InviteResult { user, invite_token })
     }
@@ -280,8 +326,11 @@ impl AuthMutation {
         let pool = pool(ctx)?;
         let password_hash = hash_password(&password).map_err(async_graphql::Error::new)?;
         let user: Option<UserRow> = sqlx::query_as(&format!(
-            "UPDATE users SET password_hash = $1, email_verified = true, invite_token = NULL \
-             WHERE invite_token = $2 RETURNING {USER_COLUMNS}"
+            "UPDATE users SET password_hash = $1, email_verified = true, invite_token = NULL, \
+               invite_token_expires = NULL \
+             WHERE invite_token = $2 \
+               AND (invite_token_expires IS NULL OR invite_token_expires > now()) \
+             RETURNING {USER_COLUMNS}"
         ))
         .bind(&password_hash)
         .bind(&token)
@@ -300,15 +349,182 @@ impl AuthMutation {
     /// Changes a user's role within the caller's organization. Admin only.
     async fn update_user_role(&self, ctx: &Context<'_>, user_id: Uuid, role: Role) -> Result<User> {
         let auth = require_admin(ctx)?;
+        let pool = pool(ctx)?;
+        // Never demote the org's last admin.
+        if role != Role::Admin && is_last_admin(pool, auth.org_id, user_id).await? {
+            return Err(async_graphql::Error::new("cannot demote the last admin"));
+        }
         let user: Option<UserRow> = sqlx::query_as(&format!(
             "UPDATE users SET role = $1 WHERE id = $2 AND org_id = $3 RETURNING {USER_COLUMNS}"
         ))
         .bind(role.as_str())
         .bind(user_id)
         .bind(auth.org_id)
-        .fetch_optional(pool(ctx)?)
+        .fetch_optional(pool)
         .await?;
         user.map(User::from)
             .ok_or_else(|| async_graphql::Error::new("user not found in your organization"))
     }
+
+    /// Removes a user from the caller's org. Admin only; cannot remove the last
+    /// admin (an admin may remove themselves only if another admin remains).
+    async fn remove_user(&self, ctx: &Context<'_>, user_id: Uuid) -> Result<bool> {
+        let auth = require_admin(ctx)?;
+        let pool = pool(ctx)?;
+        if is_last_admin(pool, auth.org_id, user_id).await? {
+            return Err(async_graphql::Error::new("cannot remove the last admin"));
+        }
+        let result = sqlx::query("DELETE FROM users WHERE id = $1 AND org_id = $2")
+            .bind(user_id)
+            .bind(auth.org_id)
+            .execute(pool)
+            .await?;
+        if result.rows_affected() == 0 {
+            return Err(async_graphql::Error::new(
+                "user not found in your organization",
+            ));
+        }
+        Ok(true)
+    }
+
+    /// Permanently deletes the caller's entire organization — this *closes the
+    /// account*. Every project (and all its uploaded files), every user, and all
+    /// org data is removed; nothing is left behind. Admin only. Clears the
+    /// caller's session since their account no longer exists.
+    async fn delete_organization(&self, ctx: &Context<'_>) -> Result<bool> {
+        let auth = require_admin(ctx)?;
+        let pool = pool(ctx)?;
+        let storage = ctx.data::<std::sync::Arc<dyn crate::storage::Storage>>()?;
+
+        // Purge every project's uploaded files before dropping the rows.
+        let project_ids: Vec<Uuid> =
+            sqlx::query_scalar("SELECT id FROM projects WHERE org_id = $1")
+                .bind(auth.org_id)
+                .fetch_all(pool)
+                .await?;
+        for pid in project_ids {
+            super::projects::purge_project_files(storage.as_ref(), pid).await;
+        }
+
+        // Deleting the org cascades to projects (and their children), users, and
+        // org-scoped categories — see the FK ON DELETE CASCADE chain.
+        sqlx::query("DELETE FROM orgs WHERE id = $1")
+            .bind(auth.org_id)
+            .execute(pool)
+            .await?;
+
+        // The caller's user is gone — clear their session cookie.
+        let cfg = config(ctx)?;
+        ctx.append_http_header("Set-Cookie", build_clearing_cookie(cfg.cookie_secure));
+        Ok(true)
+    }
+
+    /// Admin-initiated reset: emails the user a one-time reset link. Admin only.
+    async fn admin_reset_password(&self, ctx: &Context<'_>, user_id: Uuid) -> Result<bool> {
+        let auth = require_admin(ctx)?;
+        let pool = pool(ctx)?;
+        let row: Option<(String,)> =
+            sqlx::query_as("SELECT email FROM users WHERE id = $1 AND org_id = $2")
+                .bind(user_id)
+                .bind(auth.org_id)
+                .fetch_optional(pool)
+                .await?;
+        let (email,) =
+            row.ok_or_else(|| async_graphql::Error::new("user not found in your organization"))?;
+        send_reset_link(ctx, pool, user_id, &email).await?;
+        Ok(true)
+    }
+
+    /// Self-service: emails a reset link if the address has a password. Always
+    /// returns true (no account-existence leak). Rate-limited.
+    async fn request_password_reset(&self, ctx: &Context<'_>, email: String) -> Result<bool> {
+        enforce_rate_limit(ctx, "password_reset").await?;
+        let email = normalize_email(&email);
+        let pool = pool(ctx)?;
+        let row: Option<(Uuid, String)> = sqlx::query_as(
+            "SELECT id, email FROM users WHERE lower(email) = $1 AND password_hash IS NOT NULL",
+        )
+        .bind(&email)
+        .fetch_optional(pool)
+        .await?;
+        if let Some((id, addr)) = row {
+            send_reset_link(ctx, pool, id, &addr).await?;
+        }
+        Ok(true)
+    }
+
+    /// Consumes a reset token and sets a new password (also marks the email
+    /// verified — possessing the token proves control of the inbox).
+    async fn reset_password(
+        &self,
+        ctx: &Context<'_>,
+        token: String,
+        new_password: String,
+    ) -> Result<bool> {
+        if new_password.len() < MIN_PASSWORD_LEN {
+            return Err(async_graphql::Error::new(format!(
+                "password must be at least {MIN_PASSWORD_LEN} characters"
+            )));
+        }
+        let hash = hash_password(&new_password).map_err(async_graphql::Error::new)?;
+        let result = sqlx::query(
+            "UPDATE users SET password_hash = $1, email_verified = true, reset_token = NULL, \
+               reset_token_expires = NULL \
+             WHERE reset_token = $2 \
+               AND (reset_token_expires IS NULL OR reset_token_expires > now())",
+        )
+        .bind(&hash)
+        .bind(&token)
+        .execute(pool(ctx)?)
+        .await?;
+        if result.rows_affected() == 0 {
+            return Err(async_graphql::Error::new("invalid or expired token"));
+        }
+        Ok(true)
+    }
+}
+
+/// True when `user_id` is an admin and the only admin left in the org — used to
+/// block removing/demoting the last admin.
+async fn is_last_admin(pool: &PgPool, org_id: Uuid, user_id: Uuid) -> Result<bool> {
+    let (is_admin,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND org_id = $2 AND role = 'admin')",
+    )
+    .bind(user_id)
+    .bind(org_id)
+    .fetch_one(pool)
+    .await?;
+    if !is_admin {
+        return Ok(false);
+    }
+    let (admins,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM users WHERE org_id = $1 AND role = 'admin'")
+            .bind(org_id)
+            .fetch_one(pool)
+            .await?;
+    Ok(admins <= 1)
+}
+
+/// Mints a one-hour reset token for a user and emails the reset link (best-effort).
+async fn send_reset_link(
+    ctx: &Context<'_>,
+    pool: &PgPool,
+    user_id: Uuid,
+    email: &str,
+) -> Result<()> {
+    let token = gen_token();
+    sqlx::query(
+        "UPDATE users SET reset_token = $1, reset_token_expires = now() + interval '1 hour' \
+         WHERE id = $2",
+    )
+    .bind(&token)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    let mailer = ctx.data::<Mailer>()?;
+    let link = format!("{}/reset-password?token={}", mailer.app_url(), token);
+    if let Err(e) = mailer.send_password_reset(email, &link).await {
+        eprintln!("send_reset_link: failed for {email}: {e}");
+    }
+    Ok(())
 }

@@ -256,7 +256,9 @@ export function SceneView({
 
   // The 3D view is always present — load on mount and when the parent bumps
   // `reloadNonce` (e.g. after a DXF overlay is uploaded, or a georeference save).
+  // Loading scene data from the server is a legitimate data-fetching effect.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load, reloadNonce]);
 
@@ -391,16 +393,16 @@ export function SceneView({
     ? 'Fetching terrain & buildings…'
     : bothFresh
       ? `Site data is up to date. It can be refreshed again on ` +
-        `${new Date(earliestFreshUntil).toLocaleDateString()} — the elevation and ` +
-        `OpenStreetMap sources limit how often we can re-fetch.`
+        `${new Date(earliestFreshUntil).toLocaleDateString()} — refreshes are ` +
+        `limited to keep things efficient.`
       : inSpamCooldown
         ? `Just fetched — please wait about ${Math.max(
             1,
             Math.ceil((cooldownUntil! - now) / 60_000),
           )} min before fetching again.`
         : hasSiteData
-          ? 'Re-fetch terrain elevation and OpenStreetMap buildings.'
-          : 'Fetch terrain elevation and OpenStreetMap buildings for this site.';
+          ? 'Re-fetch terrain and buildings for this site.'
+          : 'Fetch terrain and buildings for this site.';
 
   const hiddenCount = categories.filter((c) => hidden.has(c.id)).length;
   const hiddenLayerCount = overlayLayers.filter((l) => !shownLayers.has(l)).length;

@@ -5,8 +5,19 @@
 //! logs the message + link to stdout instead of sending, so auth flows still work
 //! end-to-end without a provider. The full-access devkit key is never used here.
 
+use std::sync::{Arc, Mutex};
+
 use resend_rs::types::CreateEmailBaseOptions;
 use resend_rs::Resend;
+
+/// An email recorded in capture mode (tests/e2e). Holds the plain-text body so
+/// callers can extract links/tokens without a real provider.
+#[derive(Clone, Debug)]
+pub struct CapturedEmail {
+    pub to: String,
+    pub subject: String,
+    pub text: String,
+}
 
 /// Sends transactional email, or logs to stdout when no API key is configured.
 pub struct Mailer {
@@ -16,21 +27,38 @@ pub struct Mailer {
     from: String,
     /// Web-app base URL for building links, e.g. `https://sitelens.msalia.org`.
     app_url: String,
+    /// `Some` → capture mode: record emails in memory and never send (enabled by
+    /// `MAIL_CAPTURE`, used by e2e so flows are observable without spending quota).
+    capture: Option<Arc<Mutex<Vec<CapturedEmail>>>>,
 }
 
 impl Mailer {
     /// Builds the mailer from env: `RESEND_API_KEY` (send-only), `SITELENS_MAIL_FROM`,
-    /// and `APP_URL`. With no key, runs in log mode.
+    /// `APP_URL`, and `MAIL_CAPTURE`. With no key, runs in log mode; with
+    /// `MAIL_CAPTURE` set, runs in capture mode (records, never sends).
     pub fn from_env() -> Self {
         let from = std::env::var("SITELENS_MAIL_FROM")
             .unwrap_or_else(|_| "SiteLens <noreply@msalia.org>".to_string());
         let app_url =
             std::env::var("APP_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
-        let client = std::env::var("RESEND_API_KEY")
+        let capture_on = std::env::var("MAIL_CAPTURE")
             .ok()
-            .filter(|k| !k.trim().is_empty())
-            .map(|k| Resend::new(&k));
-        if client.is_none() {
+            .is_some_and(|v| matches!(v.trim(), "1" | "true" | "TRUE"));
+        let capture = capture_on.then(|| Arc::new(Mutex::new(Vec::new())));
+        // Capture mode never instantiates a real client, so no quota is ever used.
+        let client = if capture_on {
+            None
+        } else {
+            std::env::var("RESEND_API_KEY")
+                .ok()
+                .filter(|k| !k.trim().is_empty())
+                .map(|k| Resend::new(&k))
+        };
+        if capture_on {
+            eprintln!(
+                "mail: MAIL_CAPTURE set — capture mode (emails recorded in memory, not sent)"
+            );
+        } else if client.is_none() {
             eprintln!(
                 "mail: RESEND_API_KEY unset — running in log mode (emails printed, not sent)"
             );
@@ -39,6 +67,7 @@ impl Mailer {
             client,
             from,
             app_url,
+            capture,
         }
     }
 
@@ -47,7 +76,41 @@ impl Mailer {
         self.app_url.trim_end_matches('/')
     }
 
+    /// Whether the mailer is in capture mode (test/e2e only).
+    pub fn capture_enabled(&self) -> bool {
+        self.capture.is_some()
+    }
+
+    /// Captured emails (newest first), optionally filtered by recipient substring.
+    /// Empty when not in capture mode.
+    pub fn captured(&self, to: Option<&str>) -> Vec<CapturedEmail> {
+        let Some(store) = &self.capture else {
+            return Vec::new();
+        };
+        let mut out: Vec<CapturedEmail> = store
+            .lock()
+            .expect("mail capture lock")
+            .iter()
+            .filter(|e| to.is_none_or(|t| e.to.contains(t)))
+            .cloned()
+            .collect();
+        out.reverse();
+        out
+    }
+
     async fn deliver(&self, to: &str, subject: &str, html: &str, text: &str) -> Result<(), String> {
+        // Capture mode wins over any client: record and return without sending.
+        if let Some(store) = &self.capture {
+            store
+                .lock()
+                .expect("mail capture lock")
+                .push(CapturedEmail {
+                    to: to.to_string(),
+                    subject: subject.to_string(),
+                    text: text.to_string(),
+                });
+            return Ok(());
+        }
         match &self.client {
             // Log mode: surface the message + link so dev flows work with no key.
             None => {
@@ -169,6 +232,7 @@ mod tests {
             client: None,
             from: "SiteLens <noreply@example.com>".to_string(),
             app_url: "http://localhost:3000/".to_string(),
+            capture: None,
         };
         mailer
             .send_verification("u@example.com", "https://app/verify?token=z")
@@ -176,6 +240,31 @@ mod tests {
             .unwrap();
         // Trailing slash trimmed for link-building.
         assert_eq!(mailer.app_url(), "http://localhost:3000");
+    }
+
+    #[tokio::test]
+    async fn capture_mode_records_without_sending() {
+        let mailer = Mailer {
+            client: None,
+            from: "SiteLens <noreply@example.com>".to_string(),
+            app_url: "http://localhost:3000".to_string(),
+            capture: Some(Arc::new(Mutex::new(Vec::new()))),
+        };
+        mailer
+            .send_password_reset("u@example.com", "https://app/reset-password?token=cap")
+            .await
+            .unwrap();
+        mailer
+            .send_verification("other@example.com", "https://app/verify?token=v")
+            .await
+            .unwrap();
+
+        assert!(mailer.capture_enabled());
+        // Filtered by recipient, newest first, body carries the link.
+        let mine = mailer.captured(Some("u@example.com"));
+        assert_eq!(mine.len(), 1);
+        assert!(mine[0].text.contains("reset-password?token=cap"));
+        assert_eq!(mailer.captured(None).len(), 2);
     }
 
     /// Real network send through resend-rs (skipped by default). Run with:

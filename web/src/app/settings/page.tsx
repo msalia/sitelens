@@ -1,16 +1,22 @@
 'use client';
 
+import { IconAlertTriangle, IconChevronRight, IconUsers } from '@tabler/icons-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 import type { Me } from '@/lib/types';
 
 import { ThemeToggle } from '@/components/theme-toggle';
+import { TypeToConfirmDialog } from '@/components/type-to-confirm-dialog';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 
-const ME = graphql(`
-  query SettingsMe {
+const SETTINGS_DATA = graphql(`
+  query SettingsData {
     me {
       id
       orgId
@@ -18,6 +24,15 @@ const ME = graphql(`
       role
       emailVerified
     }
+    organization {
+      id
+      name
+    }
+  }
+`);
+const DELETE_ORGANIZATION = graphql(`
+  mutation DeleteOrganization {
+    deleteOrganization
   }
 `);
 
@@ -31,13 +46,28 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
+  const [orgName, setOrgName] = useState<string | null>(null);
 
   useEffect(() => {
-    gql(ME)
-      .then(({ me }) => setMe(me))
+    gql(SETTINGS_DATA)
+      .then(({ me, organization }) => {
+        setMe(me);
+        setOrgName(organization?.name ?? null);
+      })
       .catch(() => undefined);
   }, []);
+
+  async function deleteOrganization() {
+    try {
+      await gql(DELETE_ORGANIZATION);
+      toast.success('Organization deleted.');
+      router.replace('/login');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not delete organization');
+    }
+  }
 
   return (
     <div className="mx-auto max-w-2xl p-6">
@@ -68,12 +98,32 @@ export default function SettingsPage() {
             <CardDescription>The tenant your data belongs to.</CardDescription>
           </CardHeader>
           <CardContent className="divide-border divide-y">
+            <Row label="Name" value={orgName ?? '—'} />
             <Row
               label="Organization ID"
               value={<span className="font-mono text-xs">{me?.orgId ?? '—'}</span>}
             />
           </CardContent>
         </Card>
+
+        {me?.role === 'ADMIN' ? (
+          <Link href="/settings/users" className="block">
+            <Card className="hover:ring-primary/40 transition-shadow">
+              <CardContent className="flex items-center gap-4">
+                <div className="bg-primary/10 text-primary flex size-10 items-center justify-center rounded-lg">
+                  <IconUsers className="size-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">Users</p>
+                  <p className="text-muted-foreground text-sm">
+                    Invite teammates and manage their roles.
+                  </p>
+                </div>
+                <IconChevronRight className="text-muted-foreground size-5" />
+              </CardContent>
+            </Card>
+          </Link>
+        ) : null}
 
         <Card>
           <CardHeader>
@@ -85,6 +135,46 @@ export default function SettingsPage() {
             <ThemeToggle />
           </CardContent>
         </Card>
+
+        {me?.role === 'ADMIN' ? (
+          <Card className="border-destructive/40">
+            <CardHeader>
+              <CardTitle className="text-destructive flex items-center gap-2">
+                <IconAlertTriangle className="size-5" /> Danger zone
+              </CardTitle>
+              <CardDescription>
+                Deleting your organization is permanent and closes the account for everyone.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-muted-foreground text-sm">
+                This removes <strong>every project</strong> and all its data and uploaded files, and{' '}
+                <strong>every user account</strong> in this organization — including yours. It
+                cannot be undone.
+              </p>
+              <TypeToConfirmDialog
+                title="Delete this organization?"
+                description={
+                  <>
+                    This <strong>permanently</strong> deletes the entire organization:{' '}
+                    <strong>all projects</strong>, their data and uploaded files, and{' '}
+                    <strong>every user account</strong> (including yours). Everyone will be signed
+                    out and no one will be able to log in. This action is{' '}
+                    <strong>irreversible</strong> and leaves no trace.
+                  </>
+                }
+                confirmPhrase={orgName ?? ''}
+                confirmLabel="Delete organization"
+                onConfirm={deleteOrganization}
+                trigger={
+                  <Button variant="destructive" disabled={!orgName} className="shrink-0">
+                    Delete organization
+                  </Button>
+                }
+              />
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
     </div>
   );

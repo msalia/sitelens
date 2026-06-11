@@ -39,8 +39,8 @@ distinct. Pick the one your jurisdiction and datasheet use — don't assume.
 
 ## Invite your team
 
-SiteLens is multi-tenant. Your organization's projects are private to your org.
-Within the org, users have a role:
+Your organization's projects are private to your organization. Within it, users
+have a role:
 
 - **Admin** — manages the org, users, and all projects.
 - **Surveyor** — full project work: grid, control, imports, transforms, exports.

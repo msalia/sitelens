@@ -8,6 +8,7 @@ import {
   IconLogout,
   IconSearch,
   IconSettings,
+  IconUsers,
 } from '@tabler/icons-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -17,6 +18,7 @@ import type { Me } from '@/lib/types';
 
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Input } from '@/components/ui/input';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 import { cn } from '@/lib/utils';
@@ -122,13 +124,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {NAV.map((item) => (
             <RailLink key={item.href} {...item} active={pathname.startsWith(item.href)} />
           ))}
-          <div className="mt-auto">
+          <div className="mt-auto flex flex-col gap-1">
+            {me.role === 'ADMIN' ? (
+              <RailLink
+                href="/settings/users"
+                icon={IconUsers}
+                label="Users"
+                active={pathname.startsWith('/settings/users')}
+              />
+            ) : null}
             <RailLink
               href="/settings"
               icon={IconSettings}
               label="Settings"
-              active={pathname.startsWith('/settings')}
+              active={pathname === '/settings'}
             />
+            <RailButton icon={IconLogout} label="Log out" onClick={logout} />
           </div>
         </nav>
 
@@ -137,6 +148,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
+const railClass = (active = false) =>
+  cn(
+    'flex size-11 items-center justify-center rounded-xl transition-colors',
+    active
+      ? 'bg-primary/10 text-primary'
+      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+  );
 
 function RailLink({
   active,
@@ -150,19 +169,39 @@ function RailLink({
   active: boolean;
 }) {
   return (
-    <Link
-      href={href}
-      title={label}
-      aria-label={label}
-      className={cn(
-        'flex size-11 items-center justify-center rounded-xl transition-colors',
-        active
-          ? 'bg-primary/10 text-primary'
-          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-      )}
-    >
-      <Icon className="size-5" />
-    </Link>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Link href={href} aria-label={label} className={railClass(active)}>
+            <Icon className="size-5" />
+          </Link>
+        }
+      />
+      <TooltipContent side="right">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function RailButton({
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  icon: typeof IconLayoutGrid;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button type="button" aria-label={label} onClick={onClick} className={railClass()}>
+            <Icon className="size-5" />
+          </button>
+        }
+      />
+      <TooltipContent side="right">{label}</TooltipContent>
+    </Tooltip>
   );
 }
 

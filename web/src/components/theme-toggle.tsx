@@ -2,10 +2,12 @@
 
 import { IconDeviceDesktop, IconMoon, IconSun } from '@tabler/icons-react';
 import { useTheme } from 'next-themes';
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { ButtonGroup } from '@/components/ui/button-group';
+
+const noop = () => () => {};
 
 const OPTIONS = [
   { icon: IconSun, label: 'Light', value: 'light' },
@@ -18,8 +20,13 @@ const OPTIONS = [
  *  SSR/client mismatch on `theme`). */
 export function ThemeToggle() {
   const { setTheme, theme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  // `false` on the server and first client render, `true` thereafter — keeps the
+  // active highlight off until hydration so SSR markup matches (no effect needed).
+  const mounted = useSyncExternalStore(
+    noop,
+    () => true,
+    () => false,
+  );
 
   return (
     <ButtonGroup>

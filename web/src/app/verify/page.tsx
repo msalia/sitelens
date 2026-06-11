@@ -21,20 +21,19 @@ type Status = 'pending' | 'ok' | 'error';
 function VerifyContent() {
   const router = useRouter();
   const token = useSearchParams().get('token');
-  const [status, setStatus] = useState<Status>('pending');
-  const [message, setMessage] = useState('Verifying your email…');
+  // Derive the initial state from the token so the missing-token case needs no
+  // effect; the effect below only runs the (async) verification network call.
+  const [status, setStatus] = useState<Status>(token ? 'pending' : 'error');
+  const [message, setMessage] = useState(
+    token ? 'Verifying your email…' : 'This verification link is missing its token.',
+  );
   const ran = useRef(false);
 
   useEffect(() => {
-    if (ran.current) {
+    if (ran.current || !token) {
       return;
     }
     ran.current = true;
-    if (!token) {
-      setStatus('error');
-      setMessage('This verification link is missing its token.');
-      return;
-    }
     gql(VERIFY_EMAIL, { t: token })
       .then(() => {
         setStatus('ok');

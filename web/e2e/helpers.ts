@@ -1,4 +1,39 @@
-import { expect, type Page } from '@playwright/test';
+import { type APIRequestContext, expect, type Page } from '@playwright/test';
+
+/** Whether the API is running in MAIL_CAPTURE mode (e2e records emails instead
+ *  of sending them). Tests that depend on reading emails should skip when off. */
+export async function mailCaptureEnabled(request: APIRequestContext): Promise<boolean> {
+  const res = await request.post('/api/graphql', {
+    data: { query: '{ mailCaptureEnabled }' },
+  });
+  if (!res.ok()) {
+    return false;
+  }
+  return Boolean((await res.json()).data?.mailCaptureEnabled);
+}
+
+/** Returns the in-app path (pathname + query) of the first link in the most
+ *  recent captured email to `email` whose subject matches `subjectMatch`.
+ *  Asserts the mail path actually ran — no real email is ever sent in e2e. */
+export async function emailLinkTo(
+  request: APIRequestContext,
+  email: string,
+  subjectMatch: RegExp,
+): Promise<string> {
+  const res = await request.post('/api/graphql', {
+    data: {
+      query: 'query SentEmails($to: String) { sentEmails(to: $to) { subject text } }',
+      variables: { to: email },
+    },
+  });
+  const emails: { subject: string; text: string }[] = (await res.json()).data?.sentEmails ?? [];
+  const hit = emails.find((e) => subjectMatch.test(e.subject));
+  expect(hit, `expected a captured email to ${email} matching ${subjectMatch}`).toBeTruthy();
+  const url = hit!.text.match(/https?:\/\/\S+/)?.[0];
+  expect(url, 'expected a link in the email body').toBeTruthy();
+  const parsed = new URL(url!);
+  return parsed.pathname + parsed.search;
+}
 
 // Shared E2E helpers for the command-center UI. Kept in the project's own e2e dir.
 // The app uses base-ui primitives: Select items are role="option", dropdown items

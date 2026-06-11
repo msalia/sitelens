@@ -175,7 +175,10 @@ export default function ProjectWorkspace() {
     }
   }, [id]);
 
+  // Fetching the project on mount/id-change is a legitimate data-loading effect;
+  // the setState inside `load` runs after the await, which is expected.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 

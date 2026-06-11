@@ -241,6 +241,32 @@ type MutationRoot {
 	"""
 	updateUserRole(userId: UUID!, role: Role!): User!
 	"""
+	Removes a user from the caller's org. Admin only; cannot remove the last
+	admin (an admin may remove themselves only if another admin remains).
+	"""
+	removeUser(userId: UUID!): Boolean!
+	"""
+	Permanently deletes the caller's entire organization — this *closes the
+	account*. Every project (and all its uploaded files), every user, and all
+	org data is removed; nothing is left behind. Admin only. Clears the
+	caller's session since their account no longer exists.
+	"""
+	deleteOrganization: Boolean!
+	"""
+	Admin-initiated reset: emails the user a one-time reset link. Admin only.
+	"""
+	adminResetPassword(userId: UUID!): Boolean!
+	"""
+	Self-service: emails a reset link if the address has a password. Always
+	returns true (no account-existence leak). Rate-limited.
+	"""
+	requestPasswordReset(email: String!): Boolean!
+	"""
+	Consumes a reset token and sets a new password (also marks the email
+	verified — possessing the token proves control of the inbox).
+	"""
+	resetPassword(token: String!, newPassword: String!): Boolean!
+	"""
 	Creates a project in the caller's organization. Editor role required.
 	"""
 	createProject(name: String!, description: String, epsgCode: Int!, displayUnit: LengthUnit!, combinedScaleFactor: Float, siteOriginLat: Float, siteOriginLon: Float, siteOriginRotationDeg: Float): Project!
@@ -254,7 +280,10 @@ type MutationRoot {
 	"""
 	updateProject(id: UUID!, name: String, description: String, epsgCode: Int, displayUnit: LengthUnit, combinedScaleFactor: Float, siteOriginLat: Float, siteOriginLon: Float, siteOriginRotationDeg: Float): Project!
 	"""
-	Deletes a project (cascades to its grid and control points). Editor role required.
+	Permanently deletes a project: removes every uploaded file (DXF overlays,
+	terrain, buildings) and all database rows (cascades to grid, control
+	points, survey points, transforms, imports, groups, categories links).
+	Nothing is left behind. Editor role required.
 	"""
 	deleteProject(id: UUID!): Boolean!
 	"""
@@ -360,6 +389,21 @@ type Org {
 }
 
 """
+An org member for the admin user-management roster, with a derived status.
+"""
+type OrgMember {
+	id: UUID!
+	email: String!
+	role: Role!
+	"""
+	Derived: `active` (verified), `pending` (invite not yet accepted), or
+	`unverified` (signed up but email not verified).
+	"""
+	status: String!
+	createdAt: DateTime!
+}
+
+"""
 A point category (color/icon). Default set is seeded per org; orgs add custom.
 """
 type PointCategory {
@@ -448,6 +492,18 @@ type QueryRoot {
 	"""
 	dbStatus: String!
 	"""
+	Whether the server is in `MAIL_CAPTURE` mode (test/e2e). Lets clients skip
+	mail-dependent flows when capture isn't available.
+	"""
+	mailCaptureEnabled: Boolean!
+	"""
+	Test-only: emails captured while `MAIL_CAPTURE` is enabled (newest first),
+	optionally filtered by recipient substring. Always empty in normal/prod
+	operation, so no message contents are ever exposed there. Lets e2e assert
+	the mail path ran and extract links without spending email quota.
+	"""
+	sentEmails(to: String): [SentEmail!]!
+	"""
 	Public runtime config the client needs (e.g. the shared Cesium Ion token).
 	"""
 	publicConfig: PublicConfig!
@@ -459,6 +515,15 @@ type QueryRoot {
 	All users in the caller's organization. Admin only.
 	"""
 	users: [User!]!
+	"""
+	The caller's organization (id, name). Used by the settings page and the
+	type-to-confirm delete flow.
+	"""
+	organization: Org!
+	"""
+	Org roster for the admin user-management page, with a derived status.
+	"""
+	orgMembers: [OrgMember!]!
 	"""
 	All projects in the caller's organization.
 	"""
@@ -609,6 +674,18 @@ type ScenePoint {
 	easting: Float!
 	northing: Float!
 	categoryId: UUID
+}
+
+"""
+A captured email surfaced by `sentEmails` in `MAIL_CAPTURE` mode (test/e2e).
+"""
+type SentEmail {
+	to: String!
+	subject: String!
+	"""
+	Plain-text body — carries any verification/reset/invite link.
+	"""
+	text: String!
 }
 
 """

@@ -33,7 +33,7 @@ count — so you can trace where any point came from and re-import cleanly.
 
 ## Safety
 
-Uploads are parsed with size and time limits to guard against malformed or
-oversized files. Files are stored separately from the database.
+Uploads are checked against size and time limits to guard against malformed or
+oversized files.
 
 Next: [3D Visualization](/docs/visualization).

@@ -1,7 +1,7 @@
 'use client';
 
 import { IconPlus, IconTrash } from '@tabler/icons-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -59,7 +59,11 @@ export function GridEditor({
   const [draft, setDraft] = useState<AxisDraft[]>([]);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
+  // Rebuild the editable draft from the saved axes whenever they (or the display
+  // unit) change. Done during render rather than in an effect.
+  const [synced, setSynced] = useState<{ axes: GridAxis[]; unit: string } | null>(null);
+  if (synced?.axes !== axes || synced.unit !== project.displayUnit) {
+    setSynced({ axes, unit: project.displayUnit });
     setDraft(
       axes.map((a) => ({
         family: a.family,
@@ -67,7 +71,7 @@ export function GridEditor({
         position: fromMeters(a.position, project.displayUnit).toFixed(4),
       })),
     );
-  }, [axes, project.displayUnit]);
+  }
 
   function update(i: number, patch: Partial<AxisDraft>) {
     setDraft((d) => d.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));

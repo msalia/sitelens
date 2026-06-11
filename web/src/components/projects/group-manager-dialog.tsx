@@ -93,8 +93,10 @@ export function GroupManagerDialog({
     }
   }
 
+  // Legitimate data-fetching effect: load groups when the dialog opens.
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       void load();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

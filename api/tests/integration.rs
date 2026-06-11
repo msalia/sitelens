@@ -1760,3 +1760,139 @@ async fn survey_points_sort_and_bulk_actions(pool: PgPool) {
         .collect();
     assert_eq!(remaining, vec!["C"]);
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn delete_project_purges_db_rows_and_uploaded_files(pool: PgPool) {
+    // Use a dedicated storage root so we can assert files are physically removed.
+    let storage_root = std::env::temp_dir().join(format!("sitelens-del-{}", Uuid::new_v4()));
+    let storage: Arc<dyn Storage> = Arc::new(LocalStorage::new(&storage_root));
+    let config = AuthConfig {
+        jwt_secret: "test-secret".to_string(),
+        cookie_secure: false,
+        cesium_ion_token: String::new(),
+    };
+    let schema = build_schema(pool.clone(), config, storage.clone());
+
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let auth = admin_ctx(admin, org);
+    let pid = create_project(&schema, auth.clone(), "Site").await;
+
+    // Child data + an uploaded DXF (writes a real file on disk).
+    exec_ok(
+        &schema,
+        &format!(
+            r#"mutation {{ addControlPoint(projectId: "{pid}", label: "CP", northing: 1.0, easting: 2.0, unit: METER) {{ id }} }}"#
+        ),
+        Some(auth.clone()),
+    )
+    .await;
+    let ov = exec_ok(
+        &schema,
+        &format!(
+            r#"mutation {{ uploadDxf(projectId: "{pid}", filename: "d.dxf", content: "0\nSECTION\n") {{ id }} }}"#
+        ),
+        Some(auth.clone()),
+    )
+    .await;
+    let overlay_id = uuid_at(&ov, &["uploadDxf", "id"]);
+    let key = format!("dxf/{pid}/{overlay_id}.dxf");
+    assert!(
+        storage.exists(&key).await,
+        "overlay file should exist pre-delete"
+    );
+
+    // Delete the project.
+    let data = exec_ok(
+        &schema,
+        &format!(r#"mutation {{ deleteProject(id: "{pid}") }}"#),
+        Some(auth.clone()),
+    )
+    .await;
+    assert_eq!(data["deleteProject"].as_bool(), Some(true));
+
+    // DB: the project and its children are gone (FK cascade).
+    for (table, col) in [
+        ("projects", "id"),
+        ("control_points", "project_id"),
+        ("cad_overlays", "project_id"),
+    ] {
+        let count: i64 =
+            sqlx::query_scalar(&format!("SELECT count(*) FROM {table} WHERE {col} = $1"))
+                .bind(pid)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(count, 0, "{table} should have no rows for the project");
+    }
+
+    // Storage: the uploaded file is physically gone — no traces left behind.
+    assert!(!storage.exists(&key).await, "overlay file must be deleted");
+
+    let _ = tokio::fs::remove_dir_all(&storage_root).await;
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn delete_organization_removes_everything_and_isolates_other_orgs(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (a_admin, a_org, _) = signup(&schema, "a@example.com", "Org A").await;
+    let (b_admin, b_org, _) = signup(&schema, "b@example.com", "Org B").await;
+
+    // Org A: a project + an invited user. Org B: a project (to prove isolation).
+    let a_pid = create_project(&schema, admin_ctx(a_admin, a_org), "A Site").await;
+    exec_ok(
+        &schema,
+        r#"mutation { inviteUser(email: "tech@a.com", role: SURVEYOR) { user { id } } }"#,
+        Some(admin_ctx(a_admin, a_org)),
+    )
+    .await;
+    let b_pid = create_project(&schema, admin_ctx(b_admin, b_org), "B Site").await;
+
+    // Non-admins cannot delete the organization.
+    let viewer = AuthContext {
+        user_id: a_admin,
+        org_id: a_org,
+        role: Role::Viewer,
+    };
+    let err = exec_err(&schema, "mutation { deleteOrganization }", Some(viewer)).await;
+    assert!(
+        err.to_lowercase().contains("admin"),
+        "expected admin guard: {err}"
+    );
+
+    // Admin deletes Org A.
+    let data = exec_ok(
+        &schema,
+        "mutation { deleteOrganization }",
+        Some(admin_ctx(a_admin, a_org)),
+    )
+    .await;
+    assert_eq!(data["deleteOrganization"].as_bool(), Some(true));
+
+    // Org A: org row, users, and projects are all gone.
+    for (q, id) in [
+        ("SELECT count(*) FROM orgs WHERE id = $1", a_org),
+        ("SELECT count(*) FROM users WHERE org_id = $1", a_org),
+        ("SELECT count(*) FROM projects WHERE id = $1", a_pid),
+    ] {
+        let count: i64 = sqlx::query_scalar(q)
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    // Org B is completely untouched.
+    let b_proj: i64 = sqlx::query_scalar("SELECT count(*) FROM projects WHERE id = $1")
+        .bind(b_pid)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(b_proj, 1);
+    let b_users: i64 = sqlx::query_scalar("SELECT count(*) FROM users WHERE org_id = $1")
+        .bind(b_org)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(b_users, 1);
+}

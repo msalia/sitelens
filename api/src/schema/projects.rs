@@ -152,19 +152,60 @@ impl ProjectMutation {
         Ok(row.into())
     }
 
-    /// Deletes a project (cascades to its grid and control points). Editor role required.
+    /// Permanently deletes a project: removes every uploaded file (DXF overlays,
+    /// terrain, buildings) and all database rows (cascades to grid, control
+    /// points, survey points, transforms, imports, groups, categories links).
+    /// Nothing is left behind. Editor role required.
     async fn delete_project(&self, ctx: &Context<'_>, id: Uuid) -> Result<bool> {
         let auth = require_editor(ctx)?;
-        let result = sqlx::query("DELETE FROM projects WHERE id = $1 AND org_id = $2")
-            .bind(id)
-            .bind(auth.org_id)
-            .execute(pool(ctx)?)
-            .await?;
-        if result.rows_affected() == 0 {
+        let pool = pool(ctx)?;
+        let storage = ctx.data::<Arc<dyn Storage>>()?;
+
+        // Verify the project belongs to the caller's org before touching anything.
+        let owned: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM projects WHERE id = $1 AND org_id = $2)",
+        )
+        .bind(id)
+        .bind(auth.org_id)
+        .fetch_one(pool)
+        .await?;
+        if !owned {
             return Err(async_graphql::Error::new(
                 "project not found in your organization",
             ));
         }
+
+        // Purge uploads first (deterministic per-project keys), then DB rows.
+        purge_project_files(storage.as_ref(), id).await;
+        sqlx::query("DELETE FROM projects WHERE id = $1 AND org_id = $2")
+            .bind(id)
+            .bind(auth.org_id)
+            .execute(pool)
+            .await?;
         Ok(true)
+    }
+}
+
+/// Removes every stored file for a project so a delete leaves no traces. Keys are
+/// deterministic (see overlays/terrain modules): `dxf/{id}/…`, `terrain/{id}.tif`,
+/// `buildings/{id}.json`. Best-effort: a missing file is fine; failures are logged
+/// but don't block the delete (the DB rows that reference them are removed anyway).
+pub(crate) async fn purge_project_files(storage: &dyn Storage, project_id: Uuid) {
+    let dxf_dir = format!("dxf/{project_id}");
+    let terrain = format!("terrain/{project_id}.tif");
+    let buildings = format!("buildings/{project_id}.json");
+    if let Err(e) = storage.delete_prefix(&dxf_dir).await {
+        eprintln!("purge_project_files: {dxf_dir}: {e}");
+    }
+    if let Err(e) = storage.delete(&terrain).await {
+        // Ignore not-found; only log unexpected errors.
+        if storage.exists(&terrain).await {
+            eprintln!("purge_project_files: {terrain}: {e}");
+        }
+    }
+    if let Err(e) = storage.delete(&buildings).await {
+        if storage.exists(&buildings).await {
+            eprintln!("purge_project_files: {buildings}: {e}");
+        }
     }
 }

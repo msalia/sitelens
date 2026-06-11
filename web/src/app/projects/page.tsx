@@ -54,7 +54,10 @@ function ProjectsContent() {
     }
   }, []);
 
+  // Fetching server data on mount is a legitimate effect (synchronizing with an
+  // external system), so the setState inside `load` is expected here.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 
@@ -100,23 +103,15 @@ function ProjectsContent() {
             No projects match your search.
           </CardContent>
         </Card>
-      ) : filtered.length === 0 ? (
-        // Empty state — create a project above, or import an archive right here.
-        <ImportProjectCard onImported={load} />
       ) : (
-        <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((p) => (
-              <ProjectCard key={p.id} project={p} onDelete={() => remove(p.id)} />
-            ))}
-          </div>
-
-          {/* Always available below the grid: import a project archive. */}
-          <div className="mt-8">
-            <h2 className="mb-3 text-sm font-semibold tracking-tight">Import a project</h2>
-            <ImportProjectCard onImported={load} />
-          </div>
-        </>
+        // The import card lives in the grid alongside projects (and stands alone
+        // as the empty state when there are none).
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((p) => (
+            <ProjectCard key={p.id} project={p} onDelete={() => remove(p.id)} />
+          ))}
+          <ImportProjectCard onImported={load} />
+        </div>
       )}
     </div>
   );

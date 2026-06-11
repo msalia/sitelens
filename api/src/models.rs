@@ -52,6 +52,39 @@ impl From<UserRow> for User {
     }
 }
 
+/// An org member for the admin user-management roster, with a derived status.
+#[derive(SimpleObject, Clone)]
+pub struct OrgMember {
+    pub id: Uuid,
+    pub email: String,
+    pub role: Role,
+    /// Derived: `active` (verified), `pending` (invite not yet accepted), or
+    /// `unverified` (signed up but email not verified).
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(sqlx::FromRow)]
+pub struct OrgMemberRow {
+    pub id: Uuid,
+    pub email: String,
+    pub role: String,
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+}
+
+impl From<OrgMemberRow> for OrgMember {
+    fn from(r: OrgMemberRow) -> Self {
+        OrgMember {
+            id: r.id,
+            email: r.email,
+            role: Role::parse(&r.role).unwrap_or(Role::Viewer),
+            status: r.status,
+            created_at: r.created_at,
+        }
+    }
+}
+
 /// Row shape for login: includes the password hash and verification state.
 #[derive(sqlx::FromRow)]
 pub struct LoginRow {
