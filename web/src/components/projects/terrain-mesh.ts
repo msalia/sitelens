@@ -97,8 +97,10 @@ export async function buildTerrainGeometry(buf: ArrayBuffer, frame: Frame): Prom
   // as a soft patch embedded in the background, clear around the data and fully
   // transparent toward the corners. `smoothstep` keeps the falloff gentle.
   const colors = new Float32Array(nRows * nCols * 4);
-  const cxg = (minX + maxX) / 2;
-  const czg = (minZ + maxZ) / 2;
+  // Feather around the PROJECT ORIGIN (local 0,0 = the project lon/lat), not the
+  // DEM tile's geometric center — so the soft opaque patch sits under the site.
+  const cxg = 0;
+  const czg = 0;
   const maxR = Math.hypot((maxX - minX) / 2, (maxZ - minZ) / 2) || 1;
   const fadeStart = TERRAIN_FADE_START; // fully opaque within this fraction of the radius
   const fadeEnd = TERRAIN_FADE_END; // fully transparent beyond this fraction

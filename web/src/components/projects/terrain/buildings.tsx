@@ -122,10 +122,14 @@ export function Buildings({
   }
   return (
     <mesh geometry={geometry}>
+      {/* depthWrite off: the prisms are a translucent radial-faded massing, so they
+          blend rather than hard-occlude — and it keeps Fade from popping when it
+          restores the original depth-write at the end of a fade-in. */}
       <meshStandardMaterial
         color={color}
         vertexColors
         transparent
+        depthWrite={false}
         roughness={1}
         metalness={0}
         side={THREE.DoubleSide}
