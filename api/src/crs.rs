@@ -5,7 +5,8 @@
 //! we convert to/from the CRS's native unit (e.g. US survey feet for State
 //! Plane zones) using the `+units`/`+to_meter` token in its proj4 string.
 
-use std::sync::OnceLock;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use proj4rs::adaptors::transform_xy;
 use proj4rs::Proj;
@@ -32,33 +33,54 @@ fn to_meter(proj4: &str) -> f64 {
     1.0
 }
 
-/// Resolves an EPSG code to its projection plus metres-per-unit factor.
-fn crs_for(epsg: i32) -> Option<(Proj, f64)> {
-    let code = u16::try_from(epsg).ok()?;
-    let def = crs_definitions::from_code(code)?;
-    let proj = Proj::from_proj_string(def.proj4).ok()?;
-    Some((proj, to_meter(def.proj4)))
+/// A parsed projection + its metres-per-unit factor, shared via `Arc`.
+type CrsProj = Arc<(Proj, f64)>;
+
+/// Resolves an EPSG code to its projection plus metres-per-unit factor, **cached**
+/// — `Proj::from_proj_string` parses the proj4 definition, and these are called
+/// once per point in scene/export hot loops, so we memoize per EPSG (negative
+/// results cached too). The `Arc` lets callers hold the `Proj` without the lock.
+fn crs_for(epsg: i32) -> Option<CrsProj> {
+    static CACHE: OnceLock<Mutex<HashMap<i32, Option<CrsProj>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(hit) = cache.lock().unwrap().get(&epsg) {
+        return hit.clone();
+    }
+    let built = u16::try_from(epsg)
+        .ok()
+        .and_then(crs_definitions::from_code)
+        .and_then(|def| {
+            let proj = Proj::from_proj_string(def.proj4).ok()?;
+            Some(Arc::new((proj, to_meter(def.proj4))))
+        });
+    cache.lock().unwrap().insert(epsg, built.clone());
+    built
 }
 
-fn wgs84() -> Option<Proj> {
-    Proj::from_proj_string(WGS84).ok()
+/// The WGS84 geographic projection, parsed once.
+fn wgs84() -> Option<&'static Proj> {
+    static WGS: OnceLock<Option<Proj>> = OnceLock::new();
+    WGS.get_or_init(|| Proj::from_proj_string(WGS84).ok())
+        .as_ref()
 }
 
 /// Projected (meters) → geographic (degrees), returning (latitude, longitude).
 pub fn projected_to_geographic(epsg: i32, easting_m: f64, northing_m: f64) -> Option<(f64, f64)> {
-    let (crs, m_per_unit) = crs_for(epsg)?;
+    let crs = crs_for(epsg)?;
+    let (proj, m_per_unit) = (&crs.0, crs.1);
     let wgs = wgs84()?;
     // proj4rs works in the CRS's native units (projected) and radians (geographic).
     let (lon, lat) =
-        transform_xy(&crs, &wgs, easting_m / m_per_unit, northing_m / m_per_unit).ok()?;
+        transform_xy(proj, wgs, easting_m / m_per_unit, northing_m / m_per_unit).ok()?;
     Some((lat.to_degrees(), lon.to_degrees()))
 }
 
 /// Geographic (degrees) → projected (meters), returning (easting, northing).
 pub fn geographic_to_projected(epsg: i32, latitude: f64, longitude: f64) -> Option<(f64, f64)> {
-    let (crs, m_per_unit) = crs_for(epsg)?;
+    let crs = crs_for(epsg)?;
+    let (proj, m_per_unit) = (&crs.0, crs.1);
     let wgs = wgs84()?;
-    let (e, n) = transform_xy(&wgs, &crs, longitude.to_radians(), latitude.to_radians()).ok()?;
+    let (e, n) = transform_xy(wgs, proj, longitude.to_radians(), latitude.to_radians()).ok()?;
     Some((e * m_per_unit, n * m_per_unit))
 }
 
