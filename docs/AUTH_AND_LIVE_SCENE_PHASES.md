@@ -11,8 +11,8 @@
 | ----- | ------------------------------------------------------ | ---------- | ----------- |
 | 1     | Mail infrastructure (resend-rs)                        | —          | ✅ Done     |
 | 2     | Email verification                                     | 1          | ✅ Done     |
-| 3     | Self-service password reset                            | 1          | Not started |
-| 4     | Org user management (`/settings/users`) + operator CLI | 1          | Not started |
+| 3     | Self-service password reset                            | 1          | ✅ Done     |
+| 4     | Org user management (`/settings/users`) + operator CLI | 1          | ✅ Done     |
 | 5     | WebSocket subscription infra                           | —          | Not started |
 | 6     | Live scene client (reconcile-by-id, camera decouple)   | 5          | Not started |
 | 7     | Delightful animations                                  | 6          | Not started |
@@ -80,20 +80,22 @@ A new user verifies via an emailed link; expired links are rejected.
 
 ---
 
-## Phase 3 — Self-service password reset
+## Phase 3 — Self-service password reset ✅
 
 ### Deliverables
 
-- [ ] Migration: `reset_token` + `reset_token_expires` on `users`.
-- [ ] `requestPasswordReset(email)` — 1h single-use token, emails link, always true,
+- [x] Migration (`0012`): `reset_token` + `reset_token_expires` on `users`.
+- [x] `requestPasswordReset(email)` — 1h single-use token, emails link, always true,
       rate-limited (no enumeration).
-- [ ] `resetPassword(token, newPassword)` — validates + rotates the hash, clears token.
-- [ ] `/forgot-password` page (replaces placeholder) and `/reset-password?token=` page.
+- [x] `resetPassword(token, newPassword)` — validates + rotates the hash, clears token.
+- [x] `/forgot-password` page (replaces placeholder) and `/reset-password?token=` page.
 
 ### Tests
 
-- [ ] Unit: token expiry/single-use; password-strength enforcement reused.
-- [ ] e2e: forgot-password → (capture token) → reset → login with the new password.
+- [x] Integration: token single-use + expiry rejected
+      (`password_reset_token_is_single_use_and_expires`).
+- [x] e2e: forgot-password → (capture link via `sentEmails`) → reset → login with the
+      new password; unknown email still succeeds and sends nothing (`password-reset.spec`).
 
 ### Validates
 
@@ -101,28 +103,63 @@ A user resets their own password via email without account-existence leaks.
 
 ---
 
-## Phase 4 — Org user management
+## Phase 4 — Org user management ✅
 
 Admin UI + the missing remove mutation + operator escape hatch.
 
 ### Deliverables
 
-- [ ] `removeUser(userId)` + `adminResetPassword(userId)` mutations with last-Admin /
+- [x] `removeUser(userId)` + `adminResetPassword(userId)` mutations with last-Admin /
       self guards (server-side).
-- [ ] Migration: `invite_token_expires`; `inviteUser` emails the link.
-- [ ] `/settings/users` route (Admin-only): roster (email · role · status · joined)
-      with Invite / Change role / Reset password / Remove actions (shadcn).
-- [ ] Operator CLI bin `reset_password` (run via `docker exec`) for any user.
+- [x] Migration (`0012`): `invite_token_expires`; `inviteUser` emails the link.
+- [x] `/settings/users` route (Admin-only): roster (email · role · status · joined)
+      with Invite / Change role / Reset password / Remove actions (shadcn); destructive
+      actions use `AlertDialogTrigger` confirmations.
+- [x] Operator CLI bin `reset_password` (run via `docker exec`) for any user.
 
 ### Tests
 
-- [ ] Unit: cannot remove/demote the last Admin; self-remove only if another Admin.
-- [ ] e2e: invite → accept → change role → remove; last-Admin removal blocked.
+- [x] Integration: cannot remove/demote the last Admin
+      (`cannot_remove_or_demote_the_last_admin`); role change + invite covered by
+      `admin_updates_user_role`, `invite`, `token_and_invite_errors`.
+- [x] e2e: invite → accept → land in projects; admin reset emails a link
+      (`users.spec`).
 
 ### Validates
 
 An Admin can fully manage org membership; the operator can recover a locked-out
 sole Admin.
+
+---
+
+## Additional work completed (auth track, beyond the original phases) ✅
+
+Shipped alongside Phases 3–4 in response to follow-up requests:
+
+- [x] **Removed Google SSO** from login/signup and deleted the placeholder route.
+- [x] **Water-tight deletes.** `deleteProject` purges all uploaded files (DXF /
+      terrain / buildings) and cascades every DB row; admin **`deleteOrganization`**
+      (closes the account — removes all projects, files, and users) with cookie
+      clear. Both behind **type-to-confirm** dialogs (exact project/org name).
+      `Storage::delete_prefix` added. Integration tests verify DB cascade + physical
+      file removal + cross-org isolation + admin guard.
+- [x] **Email capture mode for tests.** `MAIL_CAPTURE=1` records mail in memory;
+      `sentEmails` query lets e2e read links without spending Resend quota.
+- [x] **Legal pages.** Public `/terms` and `/privacy`, GDPR-aligned (controller/
+      processor roles, legal bases, full data-subject rights, transfers, breach
+      notice, subprocessor disclosure). Linked from signup, the user dropdown, and
+      the left rail; auth-aware "back" link.
+- [x] **Docs/UI copy scrub** — removed system-architecture / data-provider details
+      from user-facing text; fixed docs prev/next ordering.
+- [x] **Auth-page redirects.** Signed-in users are redirected to `/projects` from
+      every auth page (server-side in `page.tsx`); covered by `auth-redirect.spec`.
+- [x] **Sidebar** — tooltips on rail icons + quick logout button.
+- [x] **`useEffect` cleanup** — render-phase state / `useSyncExternalStore` where
+      effects were avoidable.
+
+> Remaining org/legal steps for full GDPR compliance (not code): customer DPA,
+> documented subprocessor list + SCCs, breach-response process, records of
+> processing, and (if non-EU) an EU representative.
 
 ---
 

@@ -1896,3 +1896,68 @@ async fn delete_organization_removes_everything_and_isolates_other_orgs(pool: Pg
         .unwrap();
     assert_eq!(b_users, 1);
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn password_reset_token_is_single_use_and_expires(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (user_id, _org, _) = signup(&schema, "a@example.com", "Org").await;
+
+    // Request a reset; the token is stored on the user (not returned to clients).
+    exec_ok(
+        &schema,
+        r#"mutation { requestPasswordReset(email: "a@example.com") }"#,
+        None,
+    )
+    .await;
+    let token: String = sqlx::query_scalar("SELECT reset_token FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    // First use succeeds and clears the token; reusing it fails (single-use).
+    let q =
+        format!(r#"mutation {{ resetPassword(token: "{token}", newPassword: "newpassword1") }}"#);
+    let data = exec_ok(&schema, &q, None).await;
+    assert_eq!(data["resetPassword"].as_bool(), Some(true));
+    let reused = exec_err(&schema, &q, None).await;
+    assert!(!reused.is_empty());
+
+    // An expired token is rejected.
+    exec_ok(
+        &schema,
+        r#"mutation { requestPasswordReset(email: "a@example.com") }"#,
+        None,
+    )
+    .await;
+    let token2: String = sqlx::query_scalar("SELECT reset_token FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE users SET reset_token_expires = now() - interval '1 hour' WHERE id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let q2 =
+        format!(r#"mutation {{ resetPassword(token: "{token2}", newPassword: "newpassword2") }}"#);
+    let expired = exec_err(&schema, &q2, None).await;
+    assert!(!expired.is_empty());
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn cannot_remove_or_demote_the_last_admin(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let ctx = admin_ctx(admin, org);
+
+    let remove = format!(r#"mutation {{ removeUser(userId: "{admin}") }}"#);
+    let err = exec_err(&schema, &remove, Some(ctx.clone())).await;
+    assert!(err.to_lowercase().contains("last admin"), "got: {err}");
+
+    let demote =
+        format!(r#"mutation {{ updateUserRole(userId: "{admin}", role: VIEWER) {{ id }} }}"#);
+    let err2 = exec_err(&schema, &demote, Some(ctx)).await;
+    assert!(err2.to_lowercase().contains("last admin"), "got: {err2}");
+}

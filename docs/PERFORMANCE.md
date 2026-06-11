@@ -14,18 +14,19 @@ cd api && cargo bench --bench core_bench
 
 Baseline on the dev machine (Apple Silicon, `opt-level = 2`), 2026-06-09 — median time:
 
-| Benchmark | Input | Time | Throughput |
-|---|---|---|---|
-| `solve_helmert` | 4 pts | ~1.09 µs | 3.7 Melem/s |
-| `solve_helmert` | 50 pts | ~3.11 µs | 16 Melem/s |
-| `solve_helmert` | 500 pts | ~23.2 µs | 21 Melem/s |
-| `helmert_apply` | 1 pt | ~1.6 ns | — |
-| `projected_to_geographic` | 1 pt | ~1.31 µs | — |
-| `convert_full` | 1 pt | ~1.32 µs | — |
-| `parse_csv` | 1,000 rows | ~450 µs | 2.2 Mrows/s |
-| `parse_csv` | 10,000 rows | ~4.36 ms | 2.3 Mrows/s |
+| Benchmark                 | Input       | Time     | Throughput  |
+| ------------------------- | ----------- | -------- | ----------- |
+| `solve_helmert`           | 4 pts       | ~1.09 µs | 3.7 Melem/s |
+| `solve_helmert`           | 50 pts      | ~3.11 µs | 16 Melem/s  |
+| `solve_helmert`           | 500 pts     | ~23.2 µs | 21 Melem/s  |
+| `helmert_apply`           | 1 pt        | ~1.6 ns  | —           |
+| `projected_to_geographic` | 1 pt        | ~1.31 µs | —           |
+| `convert_full`            | 1 pt        | ~1.32 µs | —           |
+| `parse_csv`               | 1,000 rows  | ~450 µs  | 2.2 Mrows/s |
+| `parse_csv`               | 10,000 rows | ~4.36 ms | 2.3 Mrows/s |
 
 **Takeaways**
+
 - The CRS projection (`proj4rs`) dominates `convert` — `convert_full` ≈
   `projected_to_geographic`. The Helmert math itself (`apply`) is ~1.6 ns and
   negligible. Optimizing conversion means optimizing/caching the projection, not
@@ -82,14 +83,14 @@ Tag substring search is intentionally not indexed (`array_to_string` is not
 
 Targets to hold; a regression past these warrants investigation.
 
-| Metric | Budget |
-|---|---|
-| `solveTransform` (≤500 pts) | < 1 ms server compute |
-| `convertCoordinate` (single) | < 1 ms server compute |
-| `surveyPoints` page (50 rows) | < 50 ms server p95 |
-| CSV parse (10k rows) | < 10 ms |
-| App First Load JS (excl. Cesium) | < 300 kB |
-| 3D scene interaction | ≥ 30 fps with clustering at typical zoom |
+| Metric                           | Budget                                   |
+| -------------------------------- | ---------------------------------------- |
+| `solveTransform` (≤500 pts)      | < 1 ms server compute                    |
+| `convertCoordinate` (single)     | < 1 ms server compute                    |
+| `surveyPoints` page (50 rows)    | < 50 ms server p95                       |
+| CSV parse (10k rows)             | < 10 ms                                  |
+| App First Load JS (excl. Cesium) | < 300 kB                                 |
+| 3D scene interaction             | ≥ 30 fps with clustering at typical zoom |
 
 ## Load testing
 
