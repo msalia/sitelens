@@ -8,6 +8,7 @@ import type { Project } from '@/lib/types';
 
 import { ConfirmDialog } from '@/components/projects/confirm-dialog';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 
@@ -29,6 +30,7 @@ function slugify(name: string): string {
 
 export function ExportProjectButton({ project }: { project: Project }) {
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
 
   async function exportProject() {
     setBusy(true);
@@ -52,17 +54,32 @@ export function ExportProjectButton({ project }: { project: Project }) {
   }
 
   return (
-    <ConfirmDialog
-      title={`Export ${project.name}?`}
-      description="Downloads a .slx archive with all of this project's data — settings, grid, control, transform, survey points, categories, point groups, and DXF overlays. Cached terrain and buildings are not included (they re-fetch after import)."
-      confirmLabel={busy ? 'Exporting…' : 'Download archive'}
-      confirmVariant="default"
-      onConfirm={exportProject}
-      trigger={
-        <Button variant="outline" size="sm" disabled={busy}>
-          <IconDownload className="mr-1 size-4" /> Export
-        </Button>
-      }
-    />
+    <>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="outline"
+              size="icon-sm"
+              aria-label="Export project"
+              disabled={busy}
+              onClick={() => setOpen(true)}
+            >
+              <IconDownload className="size-4" />
+            </Button>
+          }
+        />
+        <TooltipContent>Export project</TooltipContent>
+      </Tooltip>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={`Export ${project.name}?`}
+        description="Downloads a .slx archive with all of this project's data — settings, grid, control, transform, survey points, categories, point groups, and DXF overlays. Cached terrain and buildings are not included (they re-fetch after import)."
+        confirmLabel={busy ? 'Exporting…' : 'Download archive'}
+        confirmVariant="default"
+        onConfirm={exportProject}
+      />
+    </>
   );
 }

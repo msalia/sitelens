@@ -94,27 +94,30 @@ function ProjectsContent() {
 
       {loading ? (
         <p className="text-muted-foreground text-sm">Loading…</p>
-      ) : filtered.length === 0 ? (
+      ) : query && filtered.length === 0 ? (
         <Card>
           <CardContent className="text-muted-foreground py-10 text-center text-sm">
-            {query
-              ? 'No projects match your search.'
-              : 'No projects yet. Create your first site to get started.'}
+            No projects match your search.
           </CardContent>
         </Card>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((p) => (
-            <ProjectCard key={p.id} project={p} onDelete={() => remove(p.id)} />
-          ))}
-        </div>
-      )}
-
-      {/* Always available: import a project archive. */}
-      <div className="mt-8">
-        <h2 className="mb-3 text-sm font-semibold tracking-tight">Import a project</h2>
+      ) : filtered.length === 0 ? (
+        // Empty state — create a project above, or import an archive right here.
         <ImportProjectCard onImported={load} />
-      </div>
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {filtered.map((p) => (
+              <ProjectCard key={p.id} project={p} onDelete={() => remove(p.id)} />
+            ))}
+          </div>
+
+          {/* Always available below the grid: import a project archive. */}
+          <div className="mt-8">
+            <h2 className="mb-3 text-sm font-semibold tracking-tight">Import a project</h2>
+            <ImportProjectCard onImported={load} />
+          </div>
+        </>
+      )}
     </div>
   );
 }
