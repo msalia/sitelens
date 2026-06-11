@@ -4,6 +4,8 @@ import { useFrame } from '@react-three/fiber';
 import { useCallback, useRef } from 'react';
 import * as THREE from 'three';
 
+import { expEase } from './lerp';
+
 /** Morphs a terrain mesh between flat (`factor` 0 — every vertex height → 0) and
  *  full DEM relief (`factor` 1), writing both the height and a lerped normal in a
  *  single in-place pass. Normals interpolate between straight-up (flat) and the
@@ -89,7 +91,7 @@ export function TerrainSurface({
     if (factor.current === target || !baseY.current || !baseN.current) {
       return;
     }
-    factor.current += (target - factor.current) * (1 - Math.exp(-dt * 9));
+    factor.current = expEase(factor.current, target, dt, 9);
     if (Math.abs(target - factor.current) < 0.002) {
       factor.current = target;
     }

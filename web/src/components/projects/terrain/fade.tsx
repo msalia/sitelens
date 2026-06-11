@@ -4,6 +4,8 @@ import { useFrame } from '@react-three/fiber';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 
+import { expEase } from './lerp';
+
 /** Applies fade level `tv` (0..1) to a subtree: culls it (`visible = false`) once
  *  effectively invisible, otherwise lerps the opacity of every material under it,
  *  capturing each material's original opacity/transparency/depth-write on first
@@ -83,7 +85,7 @@ export function Fade({
     if (t.current === target || !group.current) {
       return;
     }
-    t.current += (target - t.current) * (1 - Math.exp(-dt * speed));
+    t.current = expEase(t.current, target, dt, speed);
     if (Math.abs(target - t.current) < 0.004) {
       t.current = target;
     }

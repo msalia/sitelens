@@ -2,6 +2,19 @@ import * as THREE from 'three';
 
 import type { Vec3 } from '../terrain-frame';
 
+/** The frame-rate-independent ease fraction for this frame: `1 - e^(-dt·rate)`.
+ *  Pass to a vector/position lerp as its `k`. */
+export function easeFactor(dt: number, rate: number): number {
+  return 1 - Math.exp(-dt * rate);
+}
+
+/** One exponential-ease step for a scalar: moves `cur` toward `target` by the
+ *  frame's ease fraction. The shared easing used by every per-frame settle loop
+ *  (fades, terrain morph, grid highlight/visibility, camera glide). */
+export function expEase(cur: number, target: number, dt: number, rate: number): number {
+  return cur + (target - cur) * easeFactor(dt, rate);
+}
+
 /** 2D segment intersection in the X/Z plane. Returns the point + the parameter
  *  `t` along segment A, or null if parallel or outside either segment. */
 export function segmentIntersectXZ(

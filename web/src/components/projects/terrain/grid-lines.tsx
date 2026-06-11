@@ -7,11 +7,17 @@ import * as THREE from 'three';
 
 import type { SceneData } from '@/lib/types';
 
-import { drapedHeight } from '@/lib/terrain';
-
-import { type Frame, type Sampler, toLocal, type Vec3 } from '../terrain-frame';
+import { drapeTo, type Frame, type Sampler, type Vec3 } from '../terrain-frame';
 import { FadeHtml } from './fade';
-import { type DreiLine, lerpGroupPos, lerpPoints, segmentIntersectXZ, setLinePoints } from './lerp';
+import {
+  type DreiLine,
+  easeFactor,
+  expEase,
+  lerpGroupPos,
+  lerpPoints,
+  segmentIntersectXZ,
+  setLinePoints,
+} from './lerp';
 
 const GRID_COLOR = '#94a3b8';
 // Soft highlight for a selected grid line (blue-500).
@@ -45,7 +51,7 @@ export function GridLines({
     const ext = 0.28; // extend each end by this fraction of the line length
     const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
     const place = (lat: number, lon: number, h: number): Vec3 =>
-      toLocal(frame, lat, lon, drapedHeight(sample, lat, lon, h) + lift);
+      drapeTo(frame, sample, lat, lon, h, lift);
     const drape = (
       a: { latitude: number; longitude: number; height: number },
       b: { latitude: number; longitude: number; height: number },
@@ -244,7 +250,7 @@ function GridLineMesh({
   useFrame((_, dt) => {
     // Drape morph — ease each polyline + label toward its current target. Only
     // the (costly) geometry upload is gated on actual movement.
-    const kp = 1 - Math.exp(-dt * 6);
+    const kp = easeFactor(dt, 6);
     if (lerpPoints(cur.current.main, line.main, kp)) {
       setLinePoints(mainRef.current as unknown as DreiLine | null, cur.current.main);
       setLinePoints(hitRef.current as unknown as DreiLine | null, cur.current.main);
@@ -263,14 +269,14 @@ function GridLineMesh({
     const vt = visible ? 1 : 0;
     let changed = false;
     if (t.current !== ht) {
-      t.current += (ht - t.current) * (1 - Math.exp(-dt * 9));
+      t.current = expEase(t.current, ht, dt, 9);
       if (Math.abs(ht - t.current) < 0.002) {
         t.current = ht;
       }
       changed = true;
     }
     if (vis.current !== vt) {
-      vis.current += (vt - vis.current) * (1 - Math.exp(-dt * 9));
+      vis.current = expEase(vis.current, vt, dt, 9);
       if (Math.abs(vt - vis.current) < 0.004) {
         vis.current = vt;
       }
@@ -400,7 +406,7 @@ function GridIntersectionMarker({ onSelect, p }: { p: Vec3; onSelect: () => void
   // drape (its X/Z are fixed; only the height changes as the grid drapes).
   const [start] = useState(() => p);
   useFrame((_, dt) => {
-    lerpGroupPos(groupRef.current, p, 1 - Math.exp(-dt * 6));
+    lerpGroupPos(groupRef.current, p, easeFactor(dt, 6));
   });
   return (
     <group ref={groupRef} position={start}>

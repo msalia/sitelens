@@ -6,6 +6,7 @@ import * as THREE from 'three';
 
 import { type Frame, toLocal } from './terrain-frame';
 import { type CameraView, type FocusTarget } from './terrain-shared';
+import { easeFactor } from './terrain/lerp';
 
 // Idle "attract" orbit: after IDLE_DELAY seconds without interaction the camera
 // continuously rotates around the target, very slowly (radians/second).
@@ -210,7 +211,7 @@ export function CameraRig({
       } else {
         // Frame-rate-independent exponential ease — a low rate makes a slow,
         // smooth glide (~1.5s) regardless of display refresh.
-        const k = 1 - Math.exp(-delta * 1.8);
+        const k = easeFactor(delta, 1.8);
         camera.position.lerp(g.pos, k);
         controls.target.lerp(g.target, k);
         if (camera.position.distanceTo(g.pos) < Math.max(ext * 0.004, 0.25)) {

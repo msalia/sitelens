@@ -16,9 +16,8 @@ import * as THREE from 'three';
 
 import type { PointCategory, SceneData } from '@/lib/types';
 
-import { drapedHeight } from '@/lib/terrain';
-
-import { type Frame, type Sampler, toLocal } from '../terrain-frame';
+import { drapeTo, type Frame, type Sampler } from '../terrain-frame';
+import { easeFactor } from './lerp';
 
 const CONTROL_COLOR = '#ef4444';
 // Uncategorized survey points: a neutral slate that doesn't collide with the
@@ -44,7 +43,11 @@ interface Marker {
 }
 
 /** One floating pin per point — control points first (always shown), then the
- * visible survey points. No clustering: every point gets its own marker. */
+ * visible survey points. No clustering: every point gets its own marker.
+ *
+ * Split in two stages so toggling a category/group doesn't re-sample the DEM:
+ * stage 1 drapes every point (re-runs only when points/frame/terrain change),
+ * stage 2 filters + colorizes against the precomputed positions. */
 export function useMarkers(
   scene: SceneData,
   frame: Frame,
@@ -53,32 +56,42 @@ export function useMarkers(
   visibleIds: Set<string> | null,
   sample: Sampler,
 ): Marker[] {
+  // Stage 1 — drape positions. A point with no Z (height 0) sits on the terrain
+  // surface; a point with a real Z keeps it. We don't assume points lie on the DEM.
+  const positions = useMemo(
+    () => ({
+      control: scene.controlPoints.map((p) =>
+        drapeTo(frame, sample, p.latitude, p.longitude, p.height),
+      ),
+      survey: scene.surveyPoints.map((p) =>
+        drapeTo(frame, sample, p.latitude, p.longitude, p.height),
+      ),
+    }),
+    [scene.controlPoints, scene.surveyPoints, frame, sample],
+  );
+
+  // Stage 2 — filter + colorize (cheap; no DEM sampling).
   return useMemo(() => {
     const catById = new Map(categories.map((c) => [c.id, c]));
     const out: Marker[] = [];
-    // Each point is placed independently: a point with no Z (height 0) is draped
-    // onto the terrain surface so it sits on the ground; a point with a real Z
-    // keeps it. We do NOT assume control points lie exactly on the DEM.
-    const place = (lat: number, lon: number, h: number): [number, number, number] =>
-      toLocal(frame, lat, lon, drapedHeight(sample, lat, lon, h));
 
-    for (const cp of scene.controlPoints) {
+    scene.controlPoints.forEach((cp, i) => {
       out.push({
         color: CONTROL_COLOR,
         Icon: IconCurrentLocation,
         key: `c-${cp.label}-${cp.easting}`,
         label: cp.label,
-        p: place(cp.latitude, cp.longitude, cp.height),
+        p: positions.control[i],
       });
-    }
+    });
 
-    for (const sp of scene.surveyPoints) {
+    scene.surveyPoints.forEach((sp, i) => {
       if (visibleCategoryIds && sp.categoryId && !visibleCategoryIds.has(sp.categoryId)) {
-        continue;
+        return;
       }
       // Group filter: when active, show only points that belong to the group.
       if (visibleIds && (!sp.id || !visibleIds.has(sp.id))) {
-        continue;
+        return;
       }
       const cat = sp.categoryId ? catById.get(sp.categoryId) : undefined;
       out.push({
@@ -87,18 +100,17 @@ export function useMarkers(
         id: sp.id ?? undefined,
         key: `s-${sp.id ?? `${sp.easting},${sp.northing}`}`,
         label: sp.label,
-        p: place(sp.latitude, sp.longitude, sp.height),
+        p: positions.survey[i],
       });
-    }
+    });
     return out;
   }, [
     scene.controlPoints,
     scene.surveyPoints,
-    frame,
+    positions,
     categories,
     visibleCategoryIds,
     visibleIds,
-    sample,
   ]);
 }
 
@@ -240,7 +252,7 @@ export function Markers({
   // "project onto terrain" (which re-drapes point heights) animates smoothly.
   // Settled markers early-out, so idle cost is just a cheap distance check each.
   useFrame((_, dt) => {
-    const k = 1 - Math.exp(-dt * 6);
+    const k = easeFactor(dt, 6);
     for (const [key, g] of groups.current) {
       const tp = targets.get(key);
       if (!tp) {
