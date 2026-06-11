@@ -4,6 +4,7 @@ import { IconUpload } from '@tabler/icons-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
+import { OptionalBadge } from '@/components/projects/field-extras';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -219,9 +220,7 @@ export function ImportDialog({
               <Field>
                 <FieldLabel htmlFor="imp-cat" className="w-full">
                   Assign category
-                  <span className="text-muted-foreground ml-auto text-xs font-normal">
-                    Optional
-                  </span>
+                  <OptionalBadge />
                 </FieldLabel>
                 <Select value={categoryId} onValueChange={(v) => setCategoryId(v ?? NONE)}>
                   <SelectTrigger id="imp-cat" className="w-full">
@@ -311,9 +310,7 @@ export function ImportDialog({
                   <Field>
                     <FieldLabel htmlFor="imp-profile" className="w-full">
                       Save as import profile
-                      <span className="text-muted-foreground ml-auto text-xs font-normal">
-                        Optional
-                      </span>
+                      <OptionalBadge />
                     </FieldLabel>
                     <Input
                       id="imp-profile"
@@ -360,9 +357,7 @@ function MappingSelect({
     <Field>
       <FieldLabel className="w-full">
         {label}
-        {optional && (
-          <span className="text-muted-foreground ml-auto text-xs font-normal">Optional</span>
-        )}
+        {optional && <OptionalBadge />}
       </FieldLabel>
       <Select value={value} onValueChange={(v) => onChange(v ?? NONE)}>
         <SelectTrigger className="w-full">

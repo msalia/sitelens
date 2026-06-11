@@ -18,7 +18,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { PointCategory, SceneData } from '@/lib/types';
 
 import { dxfExtent } from '@/lib/dxf';
-import { drapedHeight } from '@/lib/terrain';
+import { drapedHeight, smoothstep } from '@/lib/terrain';
 
 import type { BuildingFootprint, RenderableOverlay } from './terrain-shared';
 
@@ -342,14 +342,22 @@ function lerpGroupPos(g: THREE.Group | null, target: Vec3, k: number): boolean {
   if (!g) {
     return false;
   }
+  const p = g.position;
   let moved = false;
-  const axes: ('x' | 'y' | 'z')[] = ['x', 'y', 'z'];
-  for (let a = 0; a < 3; a++) {
-    const d = target[a] - g.position[axes[a]];
-    if (d > LERP_EPS || d < -LERP_EPS) {
-      g.position[axes[a]] += d * k;
-      moved = true;
-    }
+  const dx = target[0] - p.x;
+  const dy = target[1] - p.y;
+  const dz = target[2] - p.z;
+  if (dx > LERP_EPS || dx < -LERP_EPS) {
+    p.x += dx * k;
+    moved = true;
+  }
+  if (dy > LERP_EPS || dy < -LERP_EPS) {
+    p.y += dy * k;
+    moved = true;
+  }
+  if (dz > LERP_EPS || dz < -LERP_EPS) {
+    p.z += dz * k;
+    moved = true;
   }
   return moved;
 }
@@ -894,10 +902,6 @@ export function Buildings({
 }) {
   const geometry = useMemo(() => {
     const parts: THREE.BufferGeometry[] = [];
-    const smooth = (t: number) => {
-      const c = Math.min(Math.max(t, 0), 1);
-      return c * c * (3 - 2 * c);
-    };
     for (const b of buildings) {
       if (!b.poly || b.poly.length < 3) {
         continue;
@@ -929,7 +933,8 @@ export function Buildings({
         if (frac >= TERRAIN_FADE_END) {
           continue; // beyond the visible terrain — would float, so drop it
         }
-        alpha = 1 - smooth((frac - TERRAIN_FADE_START) / (TERRAIN_FADE_END - TERRAIN_FADE_START));
+        alpha =
+          1 - smoothstep((frac - TERRAIN_FADE_START) / (TERRAIN_FADE_END - TERRAIN_FADE_START));
       }
       const height = Math.max(b.height || 0, MIN_BUILDING_HEIGHT);
       let geo: THREE.ExtrudeGeometry;

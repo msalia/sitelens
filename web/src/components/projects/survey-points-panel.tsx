@@ -88,9 +88,8 @@ import {
   type PointGroup,
   type Project,
   type SurveyPoint,
-  UNIT_OPTIONS,
 } from '@/lib/types';
-import { fromMeters } from '@/lib/units';
+import { fromMeters, unitName } from '@/lib/units';
 import { cn } from '@/lib/utils';
 
 import {
@@ -122,7 +121,7 @@ export function SurveyPointsPanel({
   /** Ask the 3D view to fly to a point. */
   onLocate?: (point: SurveyPoint) => void;
 }) {
-  const unitLabel = UNIT_OPTIONS.find((u) => u.value === project.displayUnit)?.label ?? '';
+  const unitLabel = unitName(project.displayUnit);
   const [points, setPoints] = useState<SurveyPoint[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);

@@ -7,6 +7,13 @@ export function isValidElevation(v: number): boolean {
   return Number.isFinite(v) && v > -1000 && v < 1e6;
 }
 
+/** Smoothstep (Hermite) easing, clamped to [0, 1]. Used for the radial terrain/
+ *  building edge dissolve. */
+export function smoothstep(t: number): number {
+  const c = Math.min(Math.max(t, 0), 1);
+  return c * c * (3 - 2 * c);
+}
+
 /** A decoded DEM grid: row-major elevations (row 0 = north edge) + its bbox. */
 export interface DemGrid {
   band: ArrayLike<number>;

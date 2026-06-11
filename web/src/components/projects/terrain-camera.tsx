@@ -39,6 +39,36 @@ export function SnapshotBridge({
   return null;
 }
 
+/** Pauses the render loop — and with it the idle orbit and every per-frame lerp —
+ *  while the tab is hidden or the window is unfocused, so an idle-but-open scene
+ *  doesn't render at full rate in the background. Switches R3F to `demand` when
+ *  inactive (nothing renders until something invalidates) and back to `always`
+ *  when the view is being looked at again. */
+export function RenderGate() {
+  const setFrameloop = useThree((s) => s.setFrameloop);
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => {
+    const sync = () => {
+      const active = document.visibilityState === 'visible' && document.hasFocus();
+      setFrameloop(active ? 'always' : 'demand');
+      if (active) {
+        invalidate(); // repaint immediately on return
+      }
+    };
+    sync();
+    document.addEventListener('visibilitychange', sync);
+    window.addEventListener('focus', sync);
+    window.addEventListener('blur', sync);
+    return () => {
+      document.removeEventListener('visibilitychange', sync);
+      window.removeEventListener('focus', sync);
+      window.removeEventListener('blur', sync);
+      setFrameloop('always');
+    };
+  }, [setFrameloop, invalidate]);
+  return null;
+}
+
 /** Camera position + target for a given preset, relative to the scene bounds. */
 export function presetFor(
   view: CameraView,

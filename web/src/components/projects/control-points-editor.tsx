@@ -32,8 +32,8 @@ import {
 } from '@/components/ui/table';
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
-import { type ControlPoint, type Project, UNIT_OPTIONS } from '@/lib/types';
-import { fromMeters } from '@/lib/units';
+import { type ControlPoint, type Project } from '@/lib/types';
+import { fromMeters, unitName } from '@/lib/units';
 
 const DELETE_CONTROL_POINT = graphql(`
   mutation DeleteControlPoint($id: UUID!) {
@@ -50,7 +50,7 @@ export function ControlPointsEditor({
   points: ControlPoint[];
   onChanged: () => void;
 }) {
-  const unitLabel = UNIT_OPTIONS.find((u) => u.value === project.displayUnit)?.label ?? '';
+  const unitLabel = unitName(project.displayUnit);
   // The same dialog handles add (point === null) and edit (point set).
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ControlPoint | null>(null);

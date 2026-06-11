@@ -16,8 +16,10 @@ import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
-import { type ControlPoint, type Project, UNIT_OPTIONS } from '@/lib/types';
-import { fromMeters } from '@/lib/units';
+import { type ControlPoint, type Project } from '@/lib/types';
+import { fromMeters, unitName } from '@/lib/units';
+
+import { OptionalBadge } from './field-extras';
 
 const ADD_CONTROL_POINT = graphql(`
   mutation AddControlPoint(
@@ -75,10 +77,6 @@ const UPDATE_CONTROL_POINT = graphql(`
   }
 `);
 
-const optional = (
-  <span className="text-muted-foreground ml-auto text-xs font-normal">Optional</span>
-);
-
 /** Add/edit a control point. `point === null` while `open` is add mode; passing
  * a `point` switches it to edit mode and seeds the form from that point. */
 export function ControlPointDialog({
@@ -96,7 +94,7 @@ export function ControlPointDialog({
   onSaved: () => void;
 }) {
   const isEdit = point !== null;
-  const unitName = UNIT_OPTIONS.find((u) => u.value === project.displayUnit)?.label ?? '';
+  const unitLabel = unitName(project.displayUnit);
   const [label, setLabel] = useState('');
   const [northing, setNorthing] = useState('');
   const [easting, setEasting] = useState('');
@@ -169,7 +167,7 @@ export function ControlPointDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit control point' : 'Add control point'}</DialogTitle>
-          <DialogDescription>N, E, Z and grid offsets are in {unitName}.</DialogDescription>
+          <DialogDescription>N, E, Z and grid offsets are in {unitLabel}.</DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="grid grid-cols-2 gap-4">
           <Field className="col-span-2">
@@ -190,7 +188,7 @@ export function ControlPointDialog({
               onChange={(e) => setNorthing(e.target.value)}
               required
             />
-            <FieldDescription>{unitName}</FieldDescription>
+            <FieldDescription>{unitLabel}</FieldDescription>
           </Field>
           <Field>
             <FieldLabel htmlFor="cpd-easting">Easting</FieldLabel>
@@ -201,11 +199,11 @@ export function ControlPointDialog({
               onChange={(e) => setEasting(e.target.value)}
               required
             />
-            <FieldDescription>{unitName}</FieldDescription>
+            <FieldDescription>{unitLabel}</FieldDescription>
           </Field>
           <Field>
             <FieldLabel htmlFor="cpd-gridx" className="w-full">
-              Grid X{optional}
+              Grid X<OptionalBadge />
             </FieldLabel>
             <Input
               id="cpd-gridx"
@@ -216,7 +214,7 @@ export function ControlPointDialog({
           </Field>
           <Field>
             <FieldLabel htmlFor="cpd-gridy" className="w-full">
-              Grid Y{optional}
+              Grid Y<OptionalBadge />
             </FieldLabel>
             <Input
               id="cpd-gridy"
@@ -228,7 +226,7 @@ export function ControlPointDialog({
           <Field>
             <FieldLabel htmlFor="cpd-elevation" className="w-full">
               Elevation
-              {optional}
+              <OptionalBadge />
             </FieldLabel>
             <Input
               id="cpd-elevation"
@@ -236,12 +234,12 @@ export function ControlPointDialog({
               value={elevation}
               onChange={(e) => setElevation(e.target.value)}
             />
-            <FieldDescription>{unitName}</FieldDescription>
+            <FieldDescription>{unitLabel}</FieldDescription>
           </Field>
           <Field>
             <FieldLabel htmlFor="cpd-source" className="w-full">
               Source
-              {optional}
+              <OptionalBadge />
             </FieldLabel>
             <Input id="cpd-source" value={source} onChange={(e) => setSource(e.target.value)} />
           </Field>

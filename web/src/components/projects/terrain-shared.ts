@@ -1,5 +1,4 @@
 /** Predefined camera viewpoints offered by the view selector. */
-/** Predefined camera viewpoints offered by the view selector. */
 export type CameraView = 'top' | 'front' | 'back' | 'left' | 'right' | 'iso';
 export const CAMERA_VIEWS: { value: CameraView; label: string }[] = [
   { label: 'Top', value: 'top' },

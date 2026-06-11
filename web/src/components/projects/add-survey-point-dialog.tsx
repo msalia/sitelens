@@ -27,16 +27,14 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
-import { type PointCategory, type Project, UNIT_OPTIONS } from '@/lib/types';
+import { type PointCategory, type Project } from '@/lib/types';
+import { unitName } from '@/lib/units';
+
+import { OptionalBadge } from './field-extras';
 
 const NONE = '__none__';
 
 type InputSpace = 'GEOGRAPHIC' | 'GRID' | 'PROJECTED';
-
-/** Right-aligned "Optional" marker for a field label, matching the import dialog. */
-function Optional() {
-  return <span className="text-muted-foreground ml-auto text-xs font-normal">Optional</span>;
-}
 
 const ADD_SURVEY_POINT = graphql(`
   mutation AddSurveyPoint(
@@ -80,7 +78,7 @@ export function AddSurveyPointDialog({
   onAdded: () => void;
   trigger: ReactElement;
 }) {
-  const unitName = UNIT_OPTIONS.find((u) => u.value === project.displayUnit)?.label ?? '';
+  const unitLabel = unitName(project.displayUnit);
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState('');
   const [space, setSpace] = useState<InputSpace>('PROJECTED');
@@ -94,7 +92,7 @@ export function AddSurveyPointDialog({
   const isGeo = space === 'GEOGRAPHIC';
   const xLabel = isGeo ? 'Longitude' : space === 'GRID' ? 'Grid X' : 'Easting';
   const yLabel = isGeo ? 'Latitude' : space === 'GRID' ? 'Grid Y' : 'Northing';
-  const linearUnit = isGeo ? 'Degrees' : unitName;
+  const linearUnit = isGeo ? 'Degrees' : unitLabel;
 
   function reset() {
     setLabel('');
@@ -157,7 +155,7 @@ export function AddSurveyPointDialog({
               <Field>
                 <FieldLabel htmlFor="asp-description" className="w-full">
                   Description
-                  <Optional />
+                  <OptionalBadge />
                 </FieldLabel>
                 <Textarea
                   id="asp-description"
@@ -169,7 +167,7 @@ export function AddSurveyPointDialog({
               <Field>
                 <FieldLabel htmlFor="asp-category" className="w-full">
                   Category
-                  <Optional />
+                  <OptionalBadge />
                 </FieldLabel>
                 <Select value={categoryId} onValueChange={(v) => v && setCategoryId(v)}>
                   <SelectTrigger id="asp-category" className="w-full">
@@ -242,7 +240,7 @@ export function AddSurveyPointDialog({
               <Field className="col-span-2">
                 <FieldLabel htmlFor="asp-elevation" className="w-full">
                   Elevation
-                  <Optional />
+                  <OptionalBadge />
                 </FieldLabel>
                 <Input
                   id="asp-elevation"
@@ -251,7 +249,7 @@ export function AddSurveyPointDialog({
                   value={elevation}
                   onChange={(e) => setElevation(e.target.value)}
                 />
-                <FieldDescription>{unitName}</FieldDescription>
+                <FieldDescription>{unitLabel}</FieldDescription>
               </Field>
             </div>
           </div>

@@ -15,7 +15,7 @@ import type {
   TerrainData,
 } from './terrain-shared';
 
-import { CameraRig, presetFor, SnapshotBridge } from './terrain-camera';
+import { CameraRig, presetFor, RenderGate, SnapshotBridge } from './terrain-camera';
 import { base64ToArrayBuffer, makeFrame, type Sampler } from './terrain-frame';
 import { buildTerrainGeometry, type TerrainMesh } from './terrain-mesh';
 import {
@@ -294,6 +294,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
         frame={frame}
       />
       <SnapshotBridge captureRef={captureRef} />
+      <RenderGate />
     </Canvas>
   );
 }

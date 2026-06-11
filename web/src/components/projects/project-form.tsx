@@ -1,4 +1,5 @@
 import { EpsgPicker } from '@/components/projects/epsg-picker';
+import { OptionalBadge } from '@/components/projects/field-extras';
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
@@ -74,9 +75,7 @@ interface ProjectFormFieldsProps {
 
 /** The shared field set. Callers own the surrounding <form> and submit button. */
 export function ProjectFormFields({ idPrefix, onChange, values }: ProjectFormFieldsProps) {
-  const optional = (
-    <span className="text-muted-foreground ml-auto text-xs font-normal">Optional</span>
-  );
+  const optional = <OptionalBadge />;
   const scaleNum = parseFloat(values.scale) || 1;
   const scaleClamped = Math.min(1.1, Math.max(0.9, scaleNum));
   const rotNum = parseFloat(values.rotation) || 0;

@@ -33,8 +33,8 @@ import {
 } from '@/components/ui/table';
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
-import { type GridAxis, type GridFamily, type Project, UNIT_OPTIONS } from '@/lib/types';
-import { fromMeters } from '@/lib/units';
+import { type GridAxis, type GridFamily, type Project } from '@/lib/types';
+import { fromMeters, unitName } from '@/lib/units';
 
 const SET_GRID_AXES = graphql(`
   mutation SetGridAxes($id: UUID!, $unit: LengthUnit!, $axes: [GridAxisInput!]!) {
@@ -55,7 +55,7 @@ export function GridEditor({
   axes: GridAxis[];
   onSaved: () => void;
 }) {
-  const unitLabel = UNIT_OPTIONS.find((u) => u.value === project.displayUnit)?.label ?? '';
+  const unitLabel = unitName(project.displayUnit);
   const [draft, setDraft] = useState<AxisDraft[]>([]);
   const [busy, setBusy] = useState(false);
 

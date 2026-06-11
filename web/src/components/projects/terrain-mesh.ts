@@ -1,7 +1,7 @@
 import { fromArrayBuffer } from 'geotiff';
 import * as THREE from 'three';
 
-import { isValidElevation, sampleElevation } from '@/lib/terrain';
+import { isValidElevation, sampleElevation, smoothstep } from '@/lib/terrain';
 
 import { type Frame, toLocal } from './terrain-frame';
 
@@ -106,8 +106,7 @@ export async function buildTerrainGeometry(buf: ArrayBuffer, frame: Frame): Prom
     const x = positions[k * 3];
     const z = positions[k * 3 + 2];
     const r = Math.hypot(x - cxg, z - czg) / maxR;
-    const t = Math.min(Math.max((r - fadeStart) / (fadeEnd - fadeStart), 0), 1);
-    const alpha = 1 - t * t * (3 - 2 * t);
+    const alpha = 1 - smoothstep((r - fadeStart) / (fadeEnd - fadeStart));
     colors[k * 4] = 1;
     colors[k * 4 + 1] = 1;
     colors[k * 4 + 2] = 1;
