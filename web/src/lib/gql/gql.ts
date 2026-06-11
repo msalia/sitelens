@@ -31,6 +31,7 @@ type Documents = {
   '\n  query LegalMe {\n    me {\n      id\n    }\n  }\n': typeof types.LegalMeDocument;
   '\n  mutation Login($e: String!, $p: String!) {\n    login(email: $e, password: $p) {\n      id\n    }\n  }\n': typeof types.LoginDocument;
   '\n  mutation ResendVerification($e: String!) {\n    resendVerification(email: $e)\n  }\n': typeof types.ResendVerificationDocument;
+  '\n  mutation AddSurveyPoint(\n    $projectId: UUID!\n    $label: String!\n    $space: CoordinateSpace!\n    $x: Float!\n    $y: Float!\n    $elevation: Float\n    $description: String\n    $categoryId: UUID\n    $unit: LengthUnit!\n  ) {\n    addSurveyPoint(\n      projectId: $projectId\n      label: $label\n      space: $space\n      x: $x\n      y: $y\n      elevation: $elevation\n      description: $description\n      categoryId: $categoryId\n      unit: $unit\n    ) {\n      id\n    }\n  }\n': typeof types.AddSurveyPointDocument;
   '\n  mutation UploadDxf($id: UUID!, $f: String!, $c: String!) {\n    uploadDxf(projectId: $id, filename: $f, content: $c) {\n      id\n    }\n  }\n': typeof types.UploadDxfDocument;
   '\n  mutation SetCadGeoreference(\n    $id: UUID!\n    $oe: Float\n    $on: Float\n    $rot: Float\n    $sc: Float\n    $el: Float\n    $vis: Boolean\n  ) {\n    setCadGeoreference(\n      id: $id\n      offsetE: $oe\n      offsetN: $on\n      rotationDeg: $rot\n      scale: $sc\n      elevation: $el\n      visible: $vis\n    ) {\n      id\n    }\n  }\n': typeof types.SetCadGeoreferenceDocument;
   '\n  mutation DeleteCadOverlay($id: UUID!) {\n    deleteCadOverlay(id: $id)\n  }\n': typeof types.DeleteCadOverlayDocument;
@@ -110,6 +111,8 @@ const documents: Documents = {
     types.LoginDocument,
   '\n  mutation ResendVerification($e: String!) {\n    resendVerification(email: $e)\n  }\n':
     types.ResendVerificationDocument,
+  '\n  mutation AddSurveyPoint(\n    $projectId: UUID!\n    $label: String!\n    $space: CoordinateSpace!\n    $x: Float!\n    $y: Float!\n    $elevation: Float\n    $description: String\n    $categoryId: UUID\n    $unit: LengthUnit!\n  ) {\n    addSurveyPoint(\n      projectId: $projectId\n      label: $label\n      space: $space\n      x: $x\n      y: $y\n      elevation: $elevation\n      description: $description\n      categoryId: $categoryId\n      unit: $unit\n    ) {\n      id\n    }\n  }\n':
+    types.AddSurveyPointDocument,
   '\n  mutation UploadDxf($id: UUID!, $f: String!, $c: String!) {\n    uploadDxf(projectId: $id, filename: $f, content: $c) {\n      id\n    }\n  }\n':
     types.UploadDxfDocument,
   '\n  mutation SetCadGeoreference(\n    $id: UUID!\n    $oe: Float\n    $on: Float\n    $rot: Float\n    $sc: Float\n    $el: Float\n    $vis: Boolean\n  ) {\n    setCadGeoreference(\n      id: $id\n      offsetE: $oe\n      offsetN: $on\n      rotationDeg: $rot\n      scale: $sc\n      elevation: $el\n      visible: $vis\n    ) {\n      id\n    }\n  }\n':
@@ -306,6 +309,12 @@ export function graphql(
 export function graphql(
   source: '\n  mutation ResendVerification($e: String!) {\n    resendVerification(email: $e)\n  }\n',
 ): typeof import('./graphql').ResendVerificationDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  mutation AddSurveyPoint(\n    $projectId: UUID!\n    $label: String!\n    $space: CoordinateSpace!\n    $x: Float!\n    $y: Float!\n    $elevation: Float\n    $description: String\n    $categoryId: UUID\n    $unit: LengthUnit!\n  ) {\n    addSurveyPoint(\n      projectId: $projectId\n      label: $label\n      space: $space\n      x: $x\n      y: $y\n      elevation: $elevation\n      description: $description\n      categoryId: $categoryId\n      unit: $unit\n    ) {\n      id\n    }\n  }\n',
+): typeof import('./graphql').AddSurveyPointDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

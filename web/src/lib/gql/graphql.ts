@@ -246,6 +246,20 @@ export type ResendVerificationMutationVariables = Exact<{
 
 export type ResendVerificationMutation = { resendVerification: boolean };
 
+export type AddSurveyPointMutationVariables = Exact<{
+  projectId: string;
+  label: string;
+  space: CoordinateSpace;
+  x: number;
+  y: number;
+  elevation?: number | null | undefined;
+  description?: string | null | undefined;
+  categoryId?: string | null | undefined;
+  unit: LengthUnit;
+}>;
+
+export type AddSurveyPointMutation = { addSurveyPoint: { id: string } };
+
 export type UploadDxfMutationVariables = Exact<{
   id: string;
   f: string;
@@ -945,6 +959,23 @@ export const ResendVerificationDocument = new TypedDocumentString(`
   ResendVerificationMutation,
   ResendVerificationMutationVariables
 >;
+export const AddSurveyPointDocument = new TypedDocumentString(`
+    mutation AddSurveyPoint($projectId: UUID!, $label: String!, $space: CoordinateSpace!, $x: Float!, $y: Float!, $elevation: Float, $description: String, $categoryId: UUID, $unit: LengthUnit!) {
+  addSurveyPoint(
+    projectId: $projectId
+    label: $label
+    space: $space
+    x: $x
+    y: $y
+    elevation: $elevation
+    description: $description
+    categoryId: $categoryId
+    unit: $unit
+  ) {
+    id
+  }
+}
+    `) as unknown as TypedDocumentString<AddSurveyPointMutation, AddSurveyPointMutationVariables>;
 export const UploadDxfDocument = new TypedDocumentString(`
     mutation UploadDxf($id: UUID!, $f: String!, $c: String!) {
   uploadDxf(projectId: $id, filename: $f, content: $c) {

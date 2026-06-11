@@ -322,6 +322,15 @@ type MutationRoot {
 	"""
 	importPoints(projectId: UUID!, format: ImportFormat!, content: String!, unit: LengthUnit!, mapping: CsvMappingInput, sourceFilename: String, categoryId: UUID, saveProfileName: String): ImportBatch!
 	"""
+	Adds a single surveyed point manually (outside of an import). The input
+	coordinate may be given in any `space` — projected easting/northing,
+	geographic longitude/latitude, or building-grid X/Y — and is converted to
+	the canonical projected (grid) value for storage. `x`/`y` are in `unit`
+	except for geographic input, where they are degrees (x = lon, y = lat).
+	Editor role required.
+	"""
+	addSurveyPoint(projectId: UUID!, label: String!, space: CoordinateSpace!, x: Float!, y: Float!, elevation: Float, description: String, categoryId: UUID, tags: [String!], unit: LengthUnit!): SurveyPoint!
+	"""
 	Updates a surveyed point's organizational fields (label, description,
 	category, tags). Editor role required.
 	"""

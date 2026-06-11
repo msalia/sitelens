@@ -328,6 +328,81 @@ impl PointsMutation {
 
     // ----- Survey points -----
 
+    /// Adds a single surveyed point manually (outside of an import). The input
+    /// coordinate may be given in any `space` — projected easting/northing,
+    /// geographic longitude/latitude, or building-grid X/Y — and is converted to
+    /// the canonical projected (grid) value for storage. `x`/`y` are in `unit`
+    /// except for geographic input, where they are degrees (x = lon, y = lat).
+    /// Editor role required.
+    async fn add_survey_point(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        label: String,
+        space: CoordinateSpace,
+        x: f64,
+        y: f64,
+        elevation: Option<f64>,
+        description: Option<String>,
+        category_id: Option<Uuid>,
+        tags: Option<Vec<String>>,
+        unit: LengthUnit,
+    ) -> Result<SurveyPoint> {
+        let auth = require_editor(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        if label.trim().is_empty() {
+            return Err(async_graphql::Error::new("point label is required"));
+        }
+
+        // Convert the input (in whatever space) to the stored projected value,
+        // reusing the same path as the standalone coordinate converter.
+        let (epsg, csf, rot_deg): (i32, f64, f64) = sqlx::query_as(
+            "SELECT epsg_code, combined_scale_factor, site_origin_rotation_deg \
+             FROM projects WHERE id = $1",
+        )
+        .bind(project_id)
+        .fetch_one(pool)
+        .await?;
+        let params = load_transform_params(pool, project_id).await?;
+        let rotation = site_rotation(points_centroid(pool, project_id).await?, rot_deg);
+        let cspace = match space {
+            CoordinateSpace::Grid => Space::Grid,
+            CoordinateSpace::Projected => Space::Projected,
+            CoordinateSpace::Geographic => Space::Geographic,
+        };
+        let (cx, cy) = match cspace {
+            Space::Geographic => (x, y),
+            _ => (unit.to_meters(x), unit.to_meters(y)),
+        };
+        let set = convert::convert_with_rotation(cspace, cx, cy, params, epsg, csf, rotation);
+        let (easting, northing) = match (set.projected_grid_e, set.projected_grid_n) {
+            (Some(e), Some(n)) => (e, n),
+            // Building-grid input needs a solved transform to place the point.
+            _ => return Err(async_graphql::Error::new(
+                "can't place this point — solve the transform first to add a building-grid point",
+            )),
+        };
+
+        let sp: SurveyPoint = sqlx::query_as(&format!(
+            "INSERT INTO survey_points \
+               (project_id, label, northing, easting, elevation, description, category_id, tags) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING {SURVEY_POINT_COLUMNS}"
+        ))
+        .bind(project_id)
+        .bind(label.trim())
+        .bind(northing)
+        .bind(easting)
+        .bind(elevation.map(|e| unit.to_meters(e)))
+        .bind(description.unwrap_or_default())
+        .bind(category_id)
+        .bind(tags.unwrap_or_default())
+        .fetch_one(pool)
+        .await?;
+        publish_scene(ctx, project_id);
+        Ok(sp)
+    }
+
     /// Updates a surveyed point's organizational fields (label, description,
     /// category, tags). Editor role required.
     async fn update_survey_point(

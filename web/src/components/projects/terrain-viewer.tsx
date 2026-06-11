@@ -125,7 +125,17 @@ export function TerrainViewer(props: TerrainViewerProps) {
     visibleCategoryIds,
     visibleIds,
   } = props;
-  const frame = useMemo(() => makeFrame(scene), [scene]);
+  // Keep `frame` referentially stable while the geographic origin is unchanged,
+  // so a live scene refetch (same project) doesn't churn frame-derived work — in
+  // particular, it stops the terrain geometry from rebuilding (and flashing) on
+  // every update. makeFrame is cheap to call each render; we only re-memo when
+  // the origin actually moves.
+  const computedFrame = makeFrame(scene);
+  const frame = useMemo(
+    () => computedFrame,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [computedFrame.lat0, computedFrame.lon0],
+  );
   const { cx, cz, ext } = useBounds(scene, frame);
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';

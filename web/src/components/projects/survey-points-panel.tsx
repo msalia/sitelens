@@ -9,6 +9,7 @@ import {
   IconDotsVertical,
   IconDownload,
   IconMapPin,
+  IconMapPinPlus,
   IconTag,
   IconTrash,
   IconUpload,
@@ -25,6 +26,7 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 
+import { AddSurveyPointDialog } from '@/components/projects/add-survey-point-dialog';
 import { CategoryManagerDialog } from '@/components/projects/category-manager-dialog';
 import { ConfirmDialog } from '@/components/projects/confirm-dialog';
 import { CoordinateInspectorDialog } from '@/components/projects/coordinate-inspector-dialog';
@@ -79,6 +81,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { gql } from '@/lib/graphql';
+import { subscribeProjectChanged } from '@/lib/scene-subscription';
 import {
   type InspectablePoint,
   type PointCategory,
@@ -180,6 +183,23 @@ export function SurveyPointsPanel({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadGroups();
   }, [loadGroups]);
+
+  // Live updates: keep the table in sync with edits (from this or another
+  // session) by refetching the current page + groups on each projectChanged ping.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = subscribeProjectChanged(project.id, () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        void load();
+        void loadGroups();
+      }, 250);
+    });
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [project.id, load, loadGroups]);
 
   // Debounce the search input → server query fires ~300ms after typing settles.
   useEffect(() => {
@@ -666,6 +686,18 @@ export function SurveyPointsPanel({
           <CardDescription>Import, categorize, and export survey points.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
+          <AddSurveyPointDialog
+            project={project}
+            categories={categories}
+            onAdded={load}
+            trigger={
+              <ActionRow
+                icon={<IconMapPinPlus className="size-5" />}
+                title="Add a point"
+                description="Enter a single survey point by hand."
+              />
+            }
+          />
           <ImportDialog
             project={project}
             categories={categories}

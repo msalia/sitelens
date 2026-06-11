@@ -28,6 +28,15 @@ function makeCsv(n: number): string {
 test('1,000 points: table paginates and stays responsive', async ({ page }) => {
   await signUpAndLogin(page, 'large');
   await createProjectAndOpen(page, 'Large Site');
+
+  // Hide the 3D point pins first: with live updates, importing 1,000 points would
+  // otherwise render 1,000 scene markers and contend with the timed table ops
+  // below. This test measures table (server-pagination) responsiveness, not the
+  // scene (the comment at the top notes the 3D scene is excluded).
+  await page.getByRole('button', { name: 'Display' }).click();
+  await page.getByRole('menuitemcheckbox', { name: 'Point pins' }).click();
+  await page.keyboard.press('Escape');
+
   await importCsv(page, makeCsv(POINT_COUNT));
 
   await expect(page.getByText('Page 1 / 20')).toBeVisible();

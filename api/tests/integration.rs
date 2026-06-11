@@ -2005,3 +2005,122 @@ async fn project_changed_subscription_requires_org_ownership(pool: PgPool) {
         item.errors
     );
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn add_survey_point_inserts_a_single_point(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+
+    // Projected input: x = easting, y = northing (meters).
+    let q = format!(
+        r#"mutation {{ addSurveyPoint(projectId: "{pid}", label: "P1", space: PROJECTED, x: 200.0, y: 100.0, unit: METER) {{ label northing easting }} }}"#
+    );
+    let data = exec_ok(&schema, &q, Some(admin_ctx(admin, org))).await;
+    assert_eq!(data["addSurveyPoint"]["label"], serde_json::json!("P1"));
+    // METER projected input is stored as-is (meters).
+    assert_eq!(data["addSurveyPoint"]["northing"], serde_json::json!(100.0));
+    assert_eq!(data["addSurveyPoint"]["easting"], serde_json::json!(200.0));
+
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM survey_points WHERE project_id = $1")
+        .bind(pid)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn add_survey_point_geographic_is_converted_and_stored(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+
+    // Geographic input (LA, in the project's California zone): x = lon, y = lat.
+    let q = format!(
+        r#"mutation {{ addSurveyPoint(projectId: "{pid}", label: "G1", space: GEOGRAPHIC, x: -118.2, y: 34.0, unit: METER) {{ easting northing }} }}"#
+    );
+    let data = exec_ok(&schema, &q, Some(admin_ctx(admin, org))).await;
+    let e = data["addSurveyPoint"]["easting"].as_f64().unwrap();
+    let n = data["addSurveyPoint"]["northing"].as_f64().unwrap();
+    assert!(e.is_finite() && n.is_finite() && (e != 0.0 || n != 0.0));
+
+    // Round-trip the stored projected value back to geographic — it returns the
+    // input lat/lon, confirming the geographic input was converted correctly.
+    let conv = format!(
+        r#"{{ convertCoordinate(projectId: "{pid}", space: PROJECTED, x: {e}, y: {n}, unit: METER) {{ latitude longitude }} }}"#
+    );
+    let cdata = exec_ok(&schema, &conv, Some(admin_ctx(admin, org))).await;
+    assert!((cdata["convertCoordinate"]["latitude"].as_f64().unwrap() - 34.0).abs() < 1e-6);
+    assert!((cdata["convertCoordinate"]["longitude"].as_f64().unwrap() + 118.2).abs() < 1e-6);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn add_survey_point_grid_requires_a_transform(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+
+    // No transform solved yet → a building-grid point can't be placed.
+    let q = format!(
+        r#"mutation {{ addSurveyPoint(projectId: "{pid}", label: "GR", space: GRID, x: 10.0, y: 20.0, unit: METER) {{ easting }} }}"#
+    );
+    let err = exec_err(&schema, &q, Some(admin_ctx(admin, org))).await;
+    assert!(err.to_lowercase().contains("transform"), "got: {err}");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn add_survey_point_grid_uses_the_solved_transform(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+
+    // Identity scale/rotation, translation E=100, N=200: grid (gx,gy) → (gx+100, gy+200).
+    add_cp(
+        &schema,
+        admin_ctx(admin, org),
+        pid,
+        "A",
+        100.0,
+        200.0,
+        0.0,
+        0.0,
+    )
+    .await;
+    add_cp(
+        &schema,
+        admin_ctx(admin, org),
+        pid,
+        "B",
+        110.0,
+        200.0,
+        10.0,
+        0.0,
+    )
+    .await;
+    add_cp(
+        &schema,
+        admin_ctx(admin, org),
+        pid,
+        "C",
+        100.0,
+        210.0,
+        0.0,
+        10.0,
+    )
+    .await;
+    exec_ok(
+        &schema,
+        &format!(r#"mutation {{ solveTransform(projectId: "{pid}") {{ scale }} }}"#),
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+
+    // Grid (10, 20) → projected easting 110, northing 220.
+    let q = format!(
+        r#"mutation {{ addSurveyPoint(projectId: "{pid}", label: "GR", space: GRID, x: 10.0, y: 20.0, unit: METER) {{ easting northing }} }}"#
+    );
+    let data = exec_ok(&schema, &q, Some(admin_ctx(admin, org))).await;
+    assert!((data["addSurveyPoint"]["easting"].as_f64().unwrap() - 110.0).abs() < 1e-6);
+    assert!((data["addSurveyPoint"]["northing"].as_f64().unwrap() - 220.0).abs() < 1e-6);
+}
