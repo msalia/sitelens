@@ -9,6 +9,10 @@ type CadOverlay {
 	offsetN: Float!
 	rotationDeg: Float!
 	scale: Float!
+	"""
+	Flat placement height (meters) in the project's vertical datum.
+	"""
+	elevation: Float!
 	assumeRealWorld: Boolean!
 	visible: Boolean!
 }
@@ -326,7 +330,7 @@ type MutationRoot {
 	"""
 	Updates an overlay's georeference / visibility. Editor role required.
 	"""
-	setCadGeoreference(id: UUID!, offsetE: Float, offsetN: Float, rotationDeg: Float, scale: Float, assumeRealWorld: Boolean, visible: Boolean): CadOverlay!
+	setCadGeoreference(id: UUID!, offsetE: Float, offsetN: Float, rotationDeg: Float, scale: Float, elevation: Float, assumeRealWorld: Boolean, visible: Boolean): CadOverlay!
 	"""
 	Deletes an overlay and its stored file. Editor role required.
 	"""
@@ -528,12 +532,8 @@ type QueryRoot {
 	exportPoints(projectId: UUID!, format: ExportFormat!, space: ExportSpace!, unit: LengthUnit!, columns: [ExportColumn!], pointIds: [UUID!], categoryId: UUID): String!
 	"""
 	Everything the 3D viewer needs, pre-projected to geographic coordinates.
-	
-	The optional `site_origin_*` arguments override the stored project
-	georeference so the overlays-panel "Georeference" card can preview slider
-	edits live in the 3D view before they're committed with `updateProject`.
 	"""
-	sceneData(projectId: UUID!, siteOriginLat: Float, siteOriginLon: Float, siteOriginRotationDeg: Float): SceneData!
+	sceneData(projectId: UUID!): SceneData!
 }
 
 """

@@ -448,6 +448,8 @@ pub struct CadOverlay {
     pub offset_n: f64,
     pub rotation_deg: f64,
     pub scale: f64,
+    /// Flat placement height (meters) in the project's vertical datum.
+    pub elevation: f64,
     pub assume_real_world: bool,
     pub visible: bool,
 }

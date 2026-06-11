@@ -31,7 +31,7 @@ use crate::ratelimit::{ClientIp, RateLimiter};
 use crate::storage::Storage;
 
 const CAD_OVERLAY_COLUMNS: &str = "id, project_id, original_filename, offset_e, offset_n, \
-    rotation_deg, scale, assume_real_world, visible";
+    rotation_deg, scale, elevation, assume_real_world, visible";
 const TERRAIN_COLUMNS: &str = "project_id, demtype, south, north, west, east, fetched_at";
 const BUILDINGS_COLUMNS: &str = "project_id, count, fetched_at";
 
@@ -803,33 +803,18 @@ impl QueryRoot {
     }
 
     /// Everything the 3D viewer needs, pre-projected to geographic coordinates.
-    ///
-    /// The optional `site_origin_*` arguments override the stored project
-    /// georeference so the overlays-panel "Georeference" card can preview slider
-    /// edits live in the 3D view before they're committed with `updateProject`.
-    async fn scene_data(
-        &self,
-        ctx: &Context<'_>,
-        project_id: Uuid,
-        site_origin_lat: Option<f64>,
-        site_origin_lon: Option<f64>,
-        site_origin_rotation_deg: Option<f64>,
-    ) -> Result<SceneData> {
+    async fn scene_data(&self, ctx: &Context<'_>, project_id: Uuid) -> Result<SceneData> {
         let auth = require_auth(ctx)?;
         let pool = pool(ctx)?;
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
 
-        let (epsg, db_lat, db_lon, db_rot): (i32, Option<f64>, Option<f64>, f64) = sqlx::query_as(
+        let (epsg, lat, lon, rot_deg): (i32, Option<f64>, Option<f64>, f64) = sqlx::query_as(
             "SELECT epsg_code, site_origin_lat, site_origin_lon, site_origin_rotation_deg \
              FROM projects WHERE id = $1",
         )
         .bind(project_id)
         .fetch_one(pool)
         .await?;
-        // Live-preview overrides fall back to the saved values when omitted.
-        let lat = site_origin_lat.or(db_lat);
-        let lon = site_origin_lon.or(db_lon);
-        let rot_deg = site_origin_rotation_deg.unwrap_or(db_rot);
         let params = load_transform_params(pool, project_id).await?;
         // The site spins about the centroid of all points, not the origin.
         let rotation = site_rotation(points_centroid(pool, project_id).await?, rot_deg);
@@ -2210,6 +2195,7 @@ impl MutationRoot {
         offset_n: Option<f64>,
         rotation_deg: Option<f64>,
         scale: Option<f64>,
+        elevation: Option<f64>,
         assume_real_world: Option<bool>,
         visible: Option<bool>,
     ) -> Result<CadOverlay> {
@@ -2221,7 +2207,8 @@ impl MutationRoot {
                rotation_deg = COALESCE($4, co.rotation_deg), \
                scale = COALESCE($5, co.scale), \
                assume_real_world = COALESCE($6, co.assume_real_world), \
-               visible = COALESCE($7, co.visible) \
+               visible = COALESCE($7, co.visible), \
+               elevation = COALESCE($9, co.elevation) \
              FROM projects p \
              WHERE co.id = $1 AND co.project_id = p.id AND p.org_id = $8 \
              RETURNING {}",
@@ -2239,6 +2226,7 @@ impl MutationRoot {
         .bind(assume_real_world)
         .bind(visible)
         .bind(auth.org_id)
+        .bind(elevation)
         .fetch_optional(pool(ctx)?)
         .await?;
         row.ok_or_else(|| async_graphql::Error::new("overlay not found in your organization"))

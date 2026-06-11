@@ -140,27 +140,6 @@ export function ProjectFormFields({ idPrefix, onChange, values }: ProjectFormFie
           />
           <FieldDescription>EPSG (European Petroleum Survey Group) code.</FieldDescription>
         </Field>
-        <Field>
-          <FieldLabel className="w-full">
-            Scale factor
-            <span className="text-muted-foreground ml-auto text-sm tabular-nums">
-              {scaleNum.toFixed(6)}
-            </span>
-          </FieldLabel>
-          <Slider
-            className="py-2"
-            min={0.9}
-            max={1.1}
-            step={0.000001}
-            value={[scaleClamped]}
-            onValueChange={(v) => onChange({ scale: String(Array.isArray(v) ? v[0] : v) })}
-          />
-          <div className="text-muted-foreground flex justify-between text-xs">
-            <span>0.900000 (min)</span>
-            <span>1.100000 (max)</span>
-          </div>
-          <FieldDescription>Combined grid-to-ground scale factor.</FieldDescription>
-        </Field>
         <div className="grid grid-cols-2 gap-4">
           <Field>
             <FieldLabel htmlFor={`${idPrefix}-lat`} className="w-full">
@@ -185,6 +164,27 @@ export function ProjectFormFields({ idPrefix, onChange, values }: ProjectFormFie
             />
           </Field>
         </div>
+        <Field>
+          <FieldLabel className="w-full">
+            Scale factor
+            <span className="text-muted-foreground ml-auto text-sm tabular-nums">
+              {scaleNum.toFixed(6)}
+            </span>
+          </FieldLabel>
+          <Slider
+            className="py-2"
+            min={0.9}
+            max={1.1}
+            step={0.000001}
+            value={[scaleClamped]}
+            onValueChange={(v) => onChange({ scale: String(Array.isArray(v) ? v[0] : v) })}
+          />
+          <div className="text-muted-foreground flex justify-between text-xs">
+            <span>0.900000 (min)</span>
+            <span>1.100000 (max)</span>
+          </div>
+          <FieldDescription>Combined grid-to-ground scale factor.</FieldDescription>
+        </Field>
         <Field>
           <FieldLabel className="w-full">
             Site rotation

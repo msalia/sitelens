@@ -4,10 +4,11 @@
 // Hudson County, NJ — 2000 Tonnelle Avenue, North Bergen, NJ 07047 (the drawing
 // is titled "BAPS Jersey City Temple" but the land is physically in North
 // Bergen). Vertical datum is NAVD 88; the horizontal coords on the plan are a
-// local assumed grid (no NAD83/State Plane tie on the sheet), so we tie the
-// local base (1000, 7000) to the geocoded parcel centroid below in NJ State
-// Plane meters so points land at their true geographic location and terrain
-// renders over the actual site.
+// local assumed grid (no NAD83/State Plane tie on the sheet), so we georeference
+// it with a 2-point Helmert similarity (see the site tie below) mapping two
+// control monuments to their real-world positions read off aerial imagery, so
+// points land at their true geographic location and terrain renders over the
+// actual site.
 //
 // COURT STEPH and TACO BELL CURB are treated as control points; everything else
 // is imported as surveyed points.
@@ -27,23 +28,49 @@ const CSV_PATH =
   process.argv[2] ?? '/Users/msalia/Documents/Projects/BAPS JC Surveying Data - Coordinates 2 New.csv';
 
 // --- site tie --------------------------------------------------------------
-// The CSV is a local site grid in METERS, based at (1000, 7000). That base is
-// tied to the geocoded parcel centroid of 2000 Tonnelle Avenue, North Bergen
-// (40.769271, -74.044481) in NJ State Plane meters (EPSG:32111). The
-// projected-meter origin was computed with the same Transverse Mercator
-// projection the API uses (round-trips to the lat/lon to sub-mm), so the tie is
-// a pure translation: projected = origin + (local - base).
+// The CSV is the surveyor's LOCAL site grid in METERS (an assumed datum — no
+// geodetic tie on the sheet). We georeference it to NJ State Plane (EPSG:32111)
+// with a 2-point Helmert similarity solved from two control monuments whose
+// real-world positions were read off aerial imagery:
+//
+//   COURT STEPH    local (957.768, 6962.893) ↔ 40.768698, -74.044009
+//   TACO BELL CURB local (960.086, 7043.204) ↔ 40.769314, -74.043522
+//
+// Those lat/lon project (EPSG:32111, GRS80 Transverse Mercator) to the true
+// eastings/northings in TIES below — precomputed with the same projection the
+// API uses (reproduces it to sub-mm). The similarity comes out to scale ≈ 0.9933
+// and rotation ≈ -29.06°, and is applied to every point so the whole site lands
+// correctly oriented on the terrain. Two control points fit exactly (no
+// residual); a third would add redundancy to validate scale/rotation.
 const EPSG = 32111;
 const UNIT = 'METER';
-const ORIGIN_LAT = 40.769271;
-const ORIGIN_LON = -74.044481;
-const BASE = { e: 1000, n: 7000 };
-const ORIGIN_PROJ_M = { e: 188454.7255, n: 215027.1072 };
+// Site origin = true centroid of the two control monuments (the scene's
+// reference frame). Rotation is 0 because the projected coords below are already
+// true earth.
+const SITE_ORIGIN_LAT = 40.769006;
+const SITE_ORIGIN_LON = -74.043766;
 const CONTROL_CODES = new Set(['COURT STEPH', 'TACO BELL CURB']);
 const PROJECT_NAME = 'BAPS Mandir — North Bergen';
 
-const projE = (localE) => ORIGIN_PROJ_M.e + (localE - BASE.e);
-const projN = (localN) => ORIGIN_PROJ_M.n + (localN - BASE.n);
+// Control ties: local assumed grid (CSV meters) ↔ true projected (EPSG:32111 m).
+const TIES = [
+  { grid: { e: 957.768, n: 6962.893 }, proj: { e: 188494.902, n: 214963.689 } },
+  { grid: { e: 960.086, n: 7043.204 }, proj: { e: 188535.659, n: 215032.303 } },
+];
+
+// Solve the 2-point similarity  proj = s·R·local + t  (a = s·cosθ, b = s·sinθ);
+// exact for two points. projE/projN then map any local (e, n) to true projected.
+const [tieP, tieQ] = TIES;
+const _vg = { e: tieQ.grid.e - tieP.grid.e, n: tieQ.grid.n - tieP.grid.n };
+const _vp = { e: tieQ.proj.e - tieP.proj.e, n: tieQ.proj.n - tieP.proj.n };
+const _den = _vg.e * _vg.e + _vg.n * _vg.n;
+const TIE_A = (_vg.e * _vp.e + _vg.n * _vp.n) / _den;
+const TIE_B = (_vg.e * _vp.n - _vg.n * _vp.e) / _den;
+const TIE_TX = tieP.proj.e - (TIE_A * tieP.grid.e - TIE_B * tieP.grid.n);
+const TIE_TY = tieP.proj.n - (TIE_B * tieP.grid.e + TIE_A * tieP.grid.n);
+
+const projE = (localE, localN) => TIE_A * localE - TIE_B * localN + TIE_TX;
+const projN = (localE, localN) => TIE_B * localE + TIE_A * localN + TIE_TY;
 
 let cookie = '';
 
@@ -157,25 +184,26 @@ async function main() {
   }
 
   const d = await gql(
-    `mutation($name:String!,$description:String,$epsg:Int!,$unit:LengthUnit!,$csf:Float,$lat:Float,$lon:Float){
-       createProject(name:$name,description:$description,epsgCode:$epsg,displayUnit:$unit,combinedScaleFactor:$csf,siteOriginLat:$lat,siteOriginLon:$lon){id name}
+    `mutation($name:String!,$description:String,$epsg:Int!,$unit:LengthUnit!,$csf:Float,$lat:Float,$lon:Float,$rot:Float){
+       createProject(name:$name,description:$description,epsgCode:$epsg,displayUnit:$unit,combinedScaleFactor:$csf,siteOriginLat:$lat,siteOriginLon:$lon,siteOriginRotationDeg:$rot){id name}
      }`,
     {
       name: PROJECT_NAME,
       description:
-        'Plaza and structure control survey for the BAPS Mandir — Lot 38, Block 27, Township of North Bergen, Hudson County, NJ (2000 Tonnelle Avenue). Local site grid (meters) tied to NJ State Plane (EPSG:32111); elevations NAVD 88.',
+        'Plaza and structure control survey for the BAPS Mandir — Lot 38, Block 27, Township of North Bergen, Hudson County, NJ (2000 Tonnelle Avenue). Local site grid (meters) georeferenced to NJ State Plane (EPSG:32111) via a 2-point aerial tie; elevations NAVD 88.',
       epsg: EPSG,
       unit: UNIT,
       csf: 1.0,
-      lat: ORIGIN_LAT,
-      lon: ORIGIN_LON,
+      lat: SITE_ORIGIN_LAT,
+      lon: SITE_ORIGIN_LON,
+      rot: 0,
     },
   );
   const project = d.createProject;
   log(`created project "${project.name}"`);
 
   // Control points keep their local coords as grid coordinates so the Helmert
-  // tie can be solved; projected coords are the real-world NJ State Plane feet.
+  // tie can be solved; projected coords are the real-world NJ State Plane meters.
   for (const c of controls) {
     await gql(
       `mutation($id:UUID!,$label:String!,$n:Float!,$e:Float!,$z:Float,$gx:Float,$gy:Float,$unit:LengthUnit!,$src:String){
@@ -184,8 +212,8 @@ async function main() {
       {
         id: project.id,
         label: c.code,
-        n: projN(c.n),
-        e: projE(c.e),
+        n: projN(c.e, c.n),
+        e: projE(c.e, c.n),
         z: c.z,
         gx: c.e,
         gy: c.n,
@@ -209,7 +237,7 @@ async function main() {
 
   // Surveyed points → PNEZD CSV in projected feet, imported through the API.
   const csv = ['P,N,E,Z,D']
-    .concat(surveys.map((s) => `${s.code},${projN(s.n).toFixed(3)},${projE(s.e).toFixed(3)},${s.z.toFixed(3)},Pt ${s.name}`))
+    .concat(surveys.map((s) => `${s.code},${projN(s.e, s.n).toFixed(3)},${projE(s.e, s.n).toFixed(3)},${s.z.toFixed(3)},Pt ${s.name}`))
     .join('\n');
   const imp = await gql(
     `mutation($id:UUID!,$content:String!,$unit:LengthUnit!,$mapping:CsvMappingInput,$file:String){

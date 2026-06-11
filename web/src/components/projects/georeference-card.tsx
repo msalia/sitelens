@@ -7,10 +7,10 @@ import {
   IconWorldLatitude,
   IconWorldLongitude,
 } from '@tabler/icons-react';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-import type { GeorefPreview, Project } from '@/lib/types';
+import type { Project } from '@/lib/types';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -50,18 +50,15 @@ const UPDATE_GEOREF = graphql(`
 // spans the globe. Bases recenter when a value is committed (typed or dragged).
 const LATLON_WINDOW = 0.01; // degrees on each side (~1.1 km at the equator)
 
-/** First card in the Overlays tab: live, fine-tune control of the project's
- * scale, site origin (lat/lon) and rotation. Slider edits preview in the 3D
- * scene immediately; **Save** persists them to the project. */
+/** First card in the Overlays tab: fine-tune control of the project's scale,
+ * site origin (lat/lon) and rotation. **Save** persists the edits and refreshes
+ * the 3D scene. */
 export function GeoreferenceCard({
-  onPreview,
   onSaved,
   project,
 }: {
   project: Project;
-  /** Emits the live draft (or `null` to clear the preview). */
-  onPreview: (preview: GeorefPreview | null) => void;
-  /** Called after a successful save so the parent can reload. */
+  /** Called after a successful save so the parent can reload the scene. */
   onSaved: () => void;
 }) {
   const [scale, setScale] = useState(project.combinedScaleFactor);
@@ -90,22 +87,6 @@ export function GeoreferenceCard({
     project.siteOriginRotationDeg,
   ]);
 
-  // Push the live draft to the scene only once the user starts editing, so the
-  // saved scene shows untouched until then. Clearing happens on save/reset.
-  const onPreviewRef = useRef(onPreview);
-  useEffect(() => {
-    onPreviewRef.current = onPreview;
-  }, [onPreview]);
-  useEffect(() => {
-    if (!dirty) {
-      return;
-    }
-    onPreviewRef.current({ lat, lon, rotationDeg: rot });
-  }, [dirty, lat, lon, rot]);
-
-  // Clear the preview if the card unmounts mid-edit (e.g. switching tabs).
-  useEffect(() => () => onPreviewRef.current(null), []);
-
   function edit(fn: () => void) {
     fn();
     setDirty(true);
@@ -119,14 +100,12 @@ export function GeoreferenceCard({
     setBaseLat(project.siteOriginLat ?? 0);
     setBaseLon(project.siteOriginLon ?? 0);
     setDirty(false);
-    onPreview(null);
   }
 
   async function save() {
     setSaving(true);
     try {
       await gql(UPDATE_GEOREF, { id: project.id, lat, lon, rot, scale });
-      onPreview(null);
       toast.success('Georeference saved');
       onSaved();
     } catch (err) {

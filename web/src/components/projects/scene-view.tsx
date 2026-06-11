@@ -19,13 +19,7 @@ import type {
   RenderableOverlay,
   TerrainData,
 } from '@/components/projects/terrain-viewer';
-import type {
-  GeorefPreview,
-  InspectablePoint,
-  PointCategory,
-  Project,
-  SceneData,
-} from '@/lib/types';
+import type { InspectablePoint, PointCategory, Project, SceneData } from '@/lib/types';
 
 import { CoordinateInspectorDialog } from '@/components/projects/coordinate-inspector-dialog';
 import { CAMERA_VIEWS } from '@/components/projects/terrain-viewer';
@@ -125,63 +119,13 @@ const SCENE_QUERY = graphql(`
       offsetN
       rotationDeg
       scale
+      elevation
       visible
     }
     pointGroups(projectId: $id) {
       id
       name
       memberIds
-    }
-  }
-`);
-
-// Lightweight scene-only refetch with georeference overrides — drives the live
-// preview while the Georeference card's sliders move (terrain / buildings /
-// parsed DXF linework are unaffected and stay put, repositioning off the new
-// origin). Mirrors the `sceneData` selection in SCENE_QUERY.
-const PREVIEW_SCENE = graphql(`
-  query PreviewScene($id: UUID!, $lat: Float, $lon: Float, $rot: Float) {
-    sceneData(
-      projectId: $id
-      siteOriginLat: $lat
-      siteOriginLon: $lon
-      siteOriginRotationDeg: $rot
-    ) {
-      origin {
-        latitude
-        longitude
-        height
-      }
-      originProjectedE
-      originProjectedN
-      controlPoints {
-        id
-        label
-        latitude
-        longitude
-        height
-        easting
-        northing
-        categoryId
-      }
-      surveyPoints {
-        id
-        label
-        latitude
-        longitude
-        height
-        easting
-        northing
-        categoryId
-      }
-      gridLines {
-        label
-        coordinates {
-          latitude
-          longitude
-          height
-        }
-      }
     }
   }
 `);
@@ -286,7 +230,6 @@ function sceneBbox(
 export function SceneView({
   categories,
   focus,
-  preview,
   project,
   reloadNonce,
   stats,
@@ -295,9 +238,8 @@ export function SceneView({
   categories: PointCategory[];
   /** Request from the table to fly to a point; `nonce` re-triggers. */
   focus?: { id: string; nonce: number } | null;
-  /** Live georeference draft from the Georeference card; null = saved scene. */
-  preview?: GeorefPreview | null;
-  /** Bumped by the parent to force a scene reload (e.g. after a DXF upload). */
+  /** Bumped by the parent to force a scene reload (e.g. after a DXF upload or
+   * a georeference save). */
   reloadNonce?: number;
   /** Live stats overlaid on the viewer (bottom-left), as a label: value list. */
   stats?: { label: string; value: ReactNode }[];
@@ -313,7 +255,9 @@ export function SceneView({
   );
   const [overlays, setOverlays] = useState<RenderableOverlay[]>([]);
   const [overlayLayers, setOverlayLayers] = useState<string[]>([]);
-  const [hiddenLayers, setHiddenLayers] = useState<Set<string>>(new Set());
+  // Which DXF layers to show in the 3D view. Empty by default, so nothing shows
+  // until the user opts layers in; the selection persists across scene reloads.
+  const [shownLayers, setShownLayers] = useState<Set<string>>(new Set());
   const [groups, setGroups] = useState<{ id: string; name: string; memberIds: string[] }[]>([]);
   const [groupFilter, setGroupFilter] = useState<string>('all');
   const [refreshing, setRefreshing] = useState(false);
@@ -403,6 +347,7 @@ export function SceneView({
         offsetN: number;
         rotationDeg: number;
         scale: number;
+        elevation: number;
         visible: boolean;
       }[],
     ) => {
@@ -415,6 +360,7 @@ export function SceneView({
             const dxf = parseDxf(cadOverlayContent);
             dxf.layers.forEach((l) => layers.add(l));
             return {
+              elevation: o.elevation,
               id: o.id,
               offsetE: o.offsetE,
               offsetN: o.offsetN,
@@ -465,46 +411,14 @@ export function SceneView({
   }, [project.id, loadTerrainContent, loadBuildingsContent, loadOverlays]);
 
   // The 3D view is always present — load on mount and when the parent bumps
-  // `reloadNonce` (e.g. after a DXF overlay is uploaded or georeferenced).
+  // `reloadNonce` (e.g. after a DXF overlay is uploaded, or a georeference save).
   useEffect(() => {
     void load();
   }, [load, reloadNonce]);
 
-  // Re-fetch just the scene geometry with the draft georeference so the viewer
-  // tracks the Georeference card's sliders live. Debounced so a drag doesn't
-  // spam the API. When the preview clears (save/reset), restore the saved scene.
-  const previewLoad = useCallback(
-    async (p: GeorefPreview) => {
-      try {
-        const data = await gql(PREVIEW_SCENE, {
-          id: project.id,
-          lat: p.lat,
-          lon: p.lon,
-          rot: p.rotationDeg,
-        });
-        setScene(data.sceneData);
-      } catch {
-        // Ignore transient preview errors — the next slider move retries.
-      }
-    },
-    [project.id],
-  );
-  const wasPreviewing = useRef(false);
-  useEffect(() => {
-    if (preview) {
-      wasPreviewing.current = true;
-      const t = setTimeout(() => void previewLoad(preview), 120);
-      return () => clearTimeout(t);
-    }
-    if (wasPreviewing.current) {
-      wasPreviewing.current = false;
-      void load();
-    }
-  }, [preview, previewLoad, load]);
-
   function toggleLayer(layer: string) {
-    setHiddenLayers((h) => {
-      const next = new Set(h);
+    setShownLayers((s) => {
+      const next = new Set(s);
       if (next.has(layer)) {
         next.delete(layer);
       } else {
@@ -645,7 +559,7 @@ export function SceneView({
           : 'Fetch terrain elevation and OpenStreetMap buildings for this site.';
 
   const hiddenCount = categories.filter((c) => hidden.has(c.id)).length;
-  const hiddenLayerCount = overlayLayers.filter((l) => hiddenLayers.has(l)).length;
+  const hiddenLayerCount = overlayLayers.filter((l) => !shownLayers.has(l)).length;
   const noPoints = !!scene && scene.controlPoints.length === 0 && scene.surveyPoints.length === 0;
 
   return (
@@ -674,7 +588,7 @@ export function SceneView({
             overlays={overlays}
             originProjectedE={scene.originProjectedE}
             originProjectedN={scene.originProjectedN}
-            hiddenLayers={hiddenLayers}
+            shownLayers={shownLayers}
             projectOnTerrain={projectOnTerrain}
             view={view}
             viewNonce={viewNonce}
@@ -783,7 +697,7 @@ export function SceneView({
                   <DropdownMenuItem
                     closeOnClick={false}
                     onClick={() =>
-                      setHiddenLayers(hiddenLayerCount === 0 ? new Set(overlayLayers) : new Set())
+                      setShownLayers(hiddenLayerCount === 0 ? new Set() : new Set(overlayLayers))
                     }
                   >
                     {hiddenLayerCount === 0 ? 'Select none' : 'Select all'}
@@ -792,7 +706,7 @@ export function SceneView({
                   {overlayLayers.map((l) => (
                     <DropdownMenuCheckboxItem
                       key={l}
-                      checked={!hiddenLayers.has(l)}
+                      checked={shownLayers.has(l)}
                       onCheckedChange={() => toggleLayer(l)}
                     >
                       {l}

@@ -19,6 +19,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 import type { PointCategory, SceneData } from '@/lib/types';
 
+import { dxfExtent } from '@/lib/dxf';
 import { drapedHeight, isValidElevation, sampleElevation } from '@/lib/terrain';
 
 // `@react-three/fiber`'s render loop still constructs a `THREE.Clock`, which
@@ -99,6 +100,8 @@ export interface BuildingFootprint {
 
 /** A parsed + georeferenced DXF overlay, ready to draw. */
 export interface RenderableOverlay {
+  /** Flat placement height (meters) in the project's vertical datum. */
+  elevation: number;
   id: string;
   offsetE: number;
   offsetN: number;
@@ -115,8 +118,6 @@ export interface TerrainViewerProps {
   categories: PointCategory[];
   /** Move the camera to a point. `nonce` re-triggers. */
   focus?: { lon: number; lat: number; height: number; id: string; nonce: number };
-  /** DXF layer names to hide. */
-  hiddenLayers?: Set<string>;
   /** Called with a survey point id when picked in 3D. */
   onSelectPoint?: (id: string) => void;
   originProjectedE?: number | null;
@@ -130,6 +131,8 @@ export interface TerrainViewerProps {
   showBuildings?: boolean;
   /** Whether to draw the building-grid lines + labels. */
   showGrid?: boolean;
+  /** DXF layer names to show (empty/undefined shows none). */
+  shownLayers?: Set<string>;
   /** Master toggle for drawing the DXF overlays. */
   showOverlays?: boolean;
   /** Whether to show the point pins (control + survey markers). */
@@ -599,22 +602,19 @@ const OVERLAY_COLOR = '#f59e0b';
 
 /** Georeferenced DXF overlays as amber linework. Each polyline's drawing (x, y)
  * is placed by its offset/rotation/scale into projected E/N, then mapped to the
- * local frame via the project's projected origin. Hidden layers are skipped, and
- * vertices drape onto terrain when projecting is enabled. */
+ * local frame via the project's projected origin. The drawing renders FLAT at the
+ * overlay's elevation (a reference plane at any Z), not draped onto terrain.
+ * Hidden layers are skipped. */
 function DxfOverlays({
-  frame,
-  hiddenLayers,
   originE,
   originN,
   overlays,
-  sample,
+  shownLayers,
 }: {
   overlays: RenderableOverlay[];
   originE: number;
   originN: number;
-  frame: Frame;
-  sample: Sampler;
-  hiddenLayers?: Set<string>;
+  shownLayers?: Set<string>;
 }) {
   const lines = useMemo(() => {
     const out: { key: string; points: Vec3[] }[] = [];
@@ -622,31 +622,34 @@ function DxfOverlays({
       const theta = (ov.rotationDeg * Math.PI) / 180;
       const cos = Math.cos(theta);
       const sin = Math.sin(theta);
+      // Rotate AND scale about the drawing's robust center, with the offset
+      // placing that center in projected E/N. So offset = where the drawing's
+      // center sits, rotation spins about it, and scale grows/shrinks about it —
+      // each control independent. DXF geometry often sits far from the file's
+      // (0, 0) origin, so anchoring on the center keeps it from sliding away when
+      // scaled or rotated. The percentile center ignores stray title blocks.
+      const { cx, cy } = dxfExtent(ov.polylines);
       ov.polylines.forEach((pl, i) => {
-        if (hiddenLayers?.has(pl.layer)) {
+        // Only render layers the user has opted in (none by default).
+        if (!shownLayers?.has(pl.layer)) {
           return;
         }
         const points = pl.points.map((p): Vec3 => {
-          const worldE = ov.offsetE + ov.scale * (p.x * cos - p.y * sin);
-          const worldN = ov.offsetN + ov.scale * (p.x * sin + p.y * cos);
+          const dx = p.x - cx;
+          const dy = p.y - cy;
+          const worldE = ov.offsetE + ov.scale * (dx * cos - dy * sin);
+          const worldN = ov.offsetN + ov.scale * (dx * sin + dy * cos);
           const lx = worldE - originE;
           const lz = -(worldN - originN);
-          let y = 0.3;
-          if (sample) {
-            const lat = frame.lat0 - lz / frame.mPerLat;
-            const lon = frame.lon0 + lx / frame.mPerLon;
-            const e = sample(lat, lon);
-            if (e !== null) {
-              y = e + 0.3;
-            }
-          }
-          return [lx, y, lz];
+          // Flat reference plane at the overlay's elevation — no terrain drape,
+          // so it stays level on the x/y plane.
+          return [lx, ov.elevation, lz];
         });
         out.push({ key: `${ov.id}-${i}`, points });
       });
     }
     return out;
-  }, [overlays, originE, originN, frame, sample, hiddenLayers]);
+  }, [overlays, originE, originN, shownLayers]);
 
   if (lines.length === 0) {
     return null;
@@ -930,7 +933,6 @@ export function TerrainViewer(props: TerrainViewerProps) {
     captureRef,
     categories,
     focus,
-    hiddenLayers,
     onSelectPoint,
     originProjectedE,
     originProjectedN,
@@ -939,6 +941,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
     scene,
     showBuildings = true,
     showGrid = true,
+    shownLayers,
     showOverlays = true,
     showPins = true,
     showTerrain = true,
@@ -1061,9 +1064,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
           overlays={overlays}
           originE={originProjectedE}
           originN={originProjectedN}
-          frame={frame}
-          sample={sampler}
-          hiddenLayers={hiddenLayers}
+          shownLayers={shownLayers}
         />
       ) : null}
       {showPins ? <Markers markers={markers} onSelectPoint={onSelectPoint} /> : null}

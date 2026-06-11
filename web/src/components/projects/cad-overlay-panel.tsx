@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  IconArrowAutofitHeight,
   IconArrowsHorizontal,
   IconArrowsMaximize,
   IconArrowsVertical,
@@ -13,7 +14,7 @@ import {
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import type { CadOverlay, GeorefPreview, Project } from '@/lib/types';
+import type { CadOverlay, Project } from '@/lib/types';
 
 import { ConfirmDialog } from '@/components/projects/confirm-dialog';
 import { GeoreferenceCard } from '@/components/projects/georeference-card';
@@ -36,7 +37,7 @@ import {
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { parseDxf } from '@/lib/dxf';
+import { dxfExtent, parseDxf } from '@/lib/dxf';
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 
@@ -55,6 +56,7 @@ const SET_GEO = graphql(`
     $on: Float
     $rot: Float
     $sc: Float
+    $el: Float
     $vis: Boolean
   ) {
     setCadGeoreference(
@@ -63,6 +65,7 @@ const SET_GEO = graphql(`
       offsetN: $on
       rotationDeg: $rot
       scale: $sc
+      elevation: $el
       visible: $vis
     ) {
       id
@@ -111,15 +114,12 @@ const SCENE_POINTS = graphql(`
 
 export function CadOverlayPanel({
   onChanged,
-  onPreview,
   overlays,
   project,
 }: {
   project: Project;
   overlays: CadOverlay[];
   onChanged: () => void;
-  /** Live georeference draft for the 3D scene (from the Georeference card). */
-  onPreview: (preview: GeorefPreview | null) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -158,7 +158,7 @@ export function CadOverlayPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <GeoreferenceCard project={project} onPreview={onPreview} onSaved={onChanged} />
+      <GeoreferenceCard project={project} onSaved={onChanged} />
 
       <Card className="gap-0 overflow-hidden py-0">
         <CardHeader className="p-4">
@@ -222,6 +222,7 @@ export function CadOverlayPanel({
 }
 
 const OFFSET_WINDOW = 100; // meters of fine-nudge range on each side of the slider
+const ELEV_WINDOW = 50; // meters of fine-nudge range on each side for elevation
 
 function OverlayRow({
   onChanged,
@@ -238,10 +239,12 @@ function OverlayRow({
   const [on, setOn] = useState(overlay.offsetN);
   const [rot, setRot] = useState(overlay.rotationDeg);
   const [sc, setSc] = useState(overlay.scale);
-  // The offset sliders nudge ±OFFSET_WINDOW around a base that recenters when a
-  // value is committed (typed or auto-placed) — fine control over a huge range.
+  const [el, setEl] = useState(overlay.elevation);
+  // The offset/elevation sliders nudge ±window around a base that recenters when
+  // a value is committed (typed or auto-placed) — fine control over a huge range.
   const [baseE, setBaseE] = useState(overlay.offsetE);
   const [baseN, setBaseN] = useState(overlay.offsetN);
+  const [baseEl, setBaseEl] = useState(overlay.elevation);
   const [saving, setSaving] = useState(false);
   const [placing, setPlacing] = useState(false);
   // Only show the filename tooltip when the title is actually clipped.
@@ -263,6 +266,7 @@ function OverlayRow({
     setSaving(true);
     try {
       await gql(SET_GEO, {
+        el,
         id: overlay.id,
         oe,
         on,
@@ -299,31 +303,17 @@ function OverlayRow({
       ]);
 
       // DXF extent via 2nd–98th percentiles so a stray title block / leader line
-      // far from the floor plan doesn't skew the center or blow up the scale.
-      const xs: number[] = [];
-      const ys: number[] = [];
-      for (const pl of parseDxf(dxf.cadOverlayContent).polylines) {
-        for (const p of pl.points) {
-          xs.push(p.x);
-          ys.push(p.y);
-        }
-      }
-      if (xs.length === 0) {
+      // far from the floor plan doesn't skew the span. The viewer rotates/scales
+      // the overlay about this same center, with the offset placing that center
+      // directly — so auto-place just sets the offset to the target.
+      const polylines = parseDxf(dxf.cadOverlayContent).polylines;
+      if (polylines.length === 0) {
         toast.error('The DXF has no geometry to place.');
         return;
       }
-      xs.sort((a, b) => a - b);
-      ys.sort((a, b) => a - b);
-      const pct = (arr: number[], q: number) =>
-        arr[Math.min(arr.length - 1, Math.max(0, Math.round(q * (arr.length - 1))))];
-      const xLo = pct(xs, 0.02);
-      const xHi = pct(xs, 0.98);
-      const yLo = pct(ys, 0.02);
-      const yHi = pct(ys, 0.98);
-      const dcx = (xLo + xHi) / 2;
-      const dcy = (yLo + yHi) / 2;
-      const dSpanX = xHi - xLo || 1;
-      const dSpanY = yHi - yLo || 1;
+      const { spanX, spanY } = dxfExtent(polylines);
+      const dSpanX = spanX || 1;
+      const dSpanY = spanY || 1;
 
       // Target: the survey points' projected footprint, else the site origin.
       const surveyPts = [...pts.sceneData.controlPoints, ...pts.sceneData.surveyPoints];
@@ -351,8 +341,9 @@ function OverlayRow({
         return;
       }
 
-      const newOe = targetE - scale * dcx;
-      const newOn = targetN - scale * dcy;
+      // Offset places the drawing's center directly, so it lands on the target.
+      const newOe = targetE;
+      const newOn = targetN;
       setOe(newOe);
       setOn(newOn);
       setBaseE(newOe);
@@ -360,6 +351,7 @@ function OverlayRow({
       setRot(0);
       setSc(scale);
       await gql(SET_GEO, {
+        el,
         id: overlay.id,
         oe: newOe,
         on: newOn,
@@ -469,6 +461,18 @@ function OverlayRow({
           step={0.001}
           suffix="×"
           onChange={setSc}
+        />
+        <SliderField
+          id={`${fid}-el`}
+          label="Elevation"
+          icon={<IconArrowAutofitHeight className="size-4" />}
+          value={el}
+          base={baseEl}
+          window={ELEV_WINDOW}
+          step={0.25}
+          suffix="m"
+          onChange={setEl}
+          onCommit={(v) => setBaseEl(v)}
         />
 
         <Button size="sm" variant="outline" disabled={placing} onClick={autoPlace}>

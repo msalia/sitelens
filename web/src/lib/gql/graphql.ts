@@ -79,7 +79,7 @@ export type WorkspaceQueryVariables = Exact<{
 }>;
 
 
-export type WorkspaceQuery = { surveyPointCount: number, project: { id: string, orgId: string, name: string, description: string, epsgCode: number, displayUnit: LengthUnit, combinedScaleFactor: number, siteOriginLat: number | null, siteOriginLon: number | null, siteOriginRotationDeg: number, createdAt: string, updatedAt: string } | null, gridAxes: Array<{ id: string, projectId: string, family: GridFamily, label: string, position: number }>, controlPoints: Array<{ id: string, projectId: string, label: string, northing: number, easting: number, elevation: number | null, gridX: number | null, gridY: number | null, source: string }>, transform: { translationE: number, translationN: number, rotationDegrees: number, scale: number, rmsError: number, pointCount: number, residuals: Array<{ label: string, deltaEasting: number, deltaNorthing: number, magnitude: number }> } | null, categories: Array<{ id: string, orgId: string, name: string, color: string, icon: string, isDefault: boolean }>, cadOverlays: Array<{ id: string, projectId: string, originalFilename: string, offsetE: number, offsetN: number, rotationDeg: number, scale: number, assumeRealWorld: boolean, visible: boolean }> };
+export type WorkspaceQuery = { surveyPointCount: number, project: { id: string, orgId: string, name: string, description: string, epsgCode: number, displayUnit: LengthUnit, combinedScaleFactor: number, siteOriginLat: number | null, siteOriginLon: number | null, siteOriginRotationDeg: number, createdAt: string, updatedAt: string } | null, gridAxes: Array<{ id: string, projectId: string, family: GridFamily, label: string, position: number }>, controlPoints: Array<{ id: string, projectId: string, label: string, northing: number, easting: number, elevation: number | null, gridX: number | null, gridY: number | null, source: string }>, transform: { translationE: number, translationN: number, rotationDegrees: number, scale: number, rmsError: number, pointCount: number, residuals: Array<{ label: string, deltaEasting: number, deltaNorthing: number, magnitude: number }> } | null, categories: Array<{ id: string, orgId: string, name: string, color: string, icon: string, isDefault: boolean }>, cadOverlays: Array<{ id: string, projectId: string, originalFilename: string, offsetE: number, offsetN: number, rotationDeg: number, scale: number, elevation: number, assumeRealWorld: boolean, visible: boolean }> };
 
 export type ProjectsQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -147,6 +147,7 @@ export type SetCadGeoreferenceMutationVariables = Exact<{
   on?: number | null | undefined;
   rot?: number | null | undefined;
   sc?: number | null | undefined;
+  el?: number | null | undefined;
   vis?: boolean | null | undefined;
 }>;
 
@@ -368,17 +369,7 @@ export type SceneQueryVariables = Exact<{
 }>;
 
 
-export type SceneQuery = { sceneData: { originProjectedE: number | null, originProjectedN: number | null, origin: { latitude: number, longitude: number, height: number } | null, controlPoints: Array<{ id: string | null, label: string, latitude: number, longitude: number, height: number, easting: number, northing: number, categoryId: string | null }>, surveyPoints: Array<{ id: string | null, label: string, latitude: number, longitude: number, height: number, easting: number, northing: number, categoryId: string | null }>, gridLines: Array<{ label: string, coordinates: Array<{ latitude: number, longitude: number, height: number }> }> }, projectTerrain: { demtype: string, fetchedAt: string } | null, projectBuildings: { count: number, fetchedAt: string } | null, cadOverlays: Array<{ id: string, offsetE: number, offsetN: number, rotationDeg: number, scale: number, visible: boolean }>, pointGroups: Array<{ id: string, name: string, memberIds: Array<string> }> };
-
-export type PreviewSceneQueryVariables = Exact<{
-  id: string;
-  lat?: number | null | undefined;
-  lon?: number | null | undefined;
-  rot?: number | null | undefined;
-}>;
-
-
-export type PreviewSceneQuery = { sceneData: { originProjectedE: number | null, originProjectedN: number | null, origin: { latitude: number, longitude: number, height: number } | null, controlPoints: Array<{ id: string | null, label: string, latitude: number, longitude: number, height: number, easting: number, northing: number, categoryId: string | null }>, surveyPoints: Array<{ id: string | null, label: string, latitude: number, longitude: number, height: number, easting: number, northing: number, categoryId: string | null }>, gridLines: Array<{ label: string, coordinates: Array<{ latitude: number, longitude: number, height: number }> }> } };
+export type SceneQuery = { sceneData: { originProjectedE: number | null, originProjectedN: number | null, origin: { latitude: number, longitude: number, height: number } | null, controlPoints: Array<{ id: string | null, label: string, latitude: number, longitude: number, height: number, easting: number, northing: number, categoryId: string | null }>, surveyPoints: Array<{ id: string | null, label: string, latitude: number, longitude: number, height: number, easting: number, northing: number, categoryId: string | null }>, gridLines: Array<{ label: string, coordinates: Array<{ latitude: number, longitude: number, height: number }> }> }, projectTerrain: { demtype: string, fetchedAt: string } | null, projectBuildings: { count: number, fetchedAt: string } | null, cadOverlays: Array<{ id: string, offsetE: number, offsetN: number, rotationDeg: number, scale: number, elevation: number, visible: boolean }>, pointGroups: Array<{ id: string, name: string, memberIds: Array<string> }> };
 
 export type TerrainContentQueryVariables = Exact<{
   id: string;
@@ -575,6 +566,7 @@ export const WorkspaceDocument = new TypedDocumentString(`
     offsetN
     rotationDeg
     scale
+    elevation
     assumeRealWorld
     visible
   }
@@ -658,13 +650,14 @@ export const UploadDxfDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<UploadDxfMutation, UploadDxfMutationVariables>;
 export const SetCadGeoreferenceDocument = new TypedDocumentString(`
-    mutation SetCadGeoreference($id: UUID!, $oe: Float, $on: Float, $rot: Float, $sc: Float, $vis: Boolean) {
+    mutation SetCadGeoreference($id: UUID!, $oe: Float, $on: Float, $rot: Float, $sc: Float, $el: Float, $vis: Boolean) {
   setCadGeoreference(
     id: $id
     offsetE: $oe
     offsetN: $on
     rotationDeg: $rot
     scale: $sc
+    elevation: $el
     visible: $vis
   ) {
     id
@@ -953,6 +946,7 @@ export const SceneDocument = new TypedDocumentString(`
     offsetN
     rotationDeg
     scale
+    elevation
     visible
   }
   pointGroups(projectId: $id) {
@@ -962,52 +956,6 @@ export const SceneDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SceneQuery, SceneQueryVariables>;
-export const PreviewSceneDocument = new TypedDocumentString(`
-    query PreviewScene($id: UUID!, $lat: Float, $lon: Float, $rot: Float) {
-  sceneData(
-    projectId: $id
-    siteOriginLat: $lat
-    siteOriginLon: $lon
-    siteOriginRotationDeg: $rot
-  ) {
-    origin {
-      latitude
-      longitude
-      height
-    }
-    originProjectedE
-    originProjectedN
-    controlPoints {
-      id
-      label
-      latitude
-      longitude
-      height
-      easting
-      northing
-      categoryId
-    }
-    surveyPoints {
-      id
-      label
-      latitude
-      longitude
-      height
-      easting
-      northing
-      categoryId
-    }
-    gridLines {
-      label
-      coordinates {
-        latitude
-        longitude
-        height
-      }
-    }
-  }
-}
-    `) as unknown as TypedDocumentString<PreviewSceneQuery, PreviewSceneQueryVariables>;
 export const TerrainContentDocument = new TypedDocumentString(`
     query TerrainContent($id: UUID!) {
   projectTerrainContent(projectId: $id)

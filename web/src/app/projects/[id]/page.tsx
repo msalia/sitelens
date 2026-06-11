@@ -29,7 +29,6 @@ import { gql } from '@/lib/graphql';
 import {
   type CadOverlay,
   type ControlPoint,
-  type GeorefPreview,
   type GridAxis,
   type PointCategory,
   type Project,
@@ -103,6 +102,7 @@ const WORKSPACE_QUERY = graphql(`
       offsetN
       rotationDeg
       scale
+      elevation
       assumeRealWorld
       visible
     }
@@ -122,7 +122,6 @@ export default function ProjectWorkspace() {
   const [overlays, setOverlays] = useState<CadOverlay[]>([]);
   const [pointCount, setPointCount] = useState(0);
   const [focus, setFocus] = useState<{ id: string; nonce: number } | null>(null);
-  const [georefPreview, setGeorefPreview] = useState<GeorefPreview | null>(null);
   const [sceneReload, setSceneReload] = useState(0);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('setup');
@@ -300,7 +299,6 @@ export default function ProjectWorkspace() {
               <CadOverlayPanel
                 project={project}
                 overlays={overlays}
-                onPreview={setGeorefPreview}
                 onChanged={() => {
                   void load();
                   setSceneReload((n) => n + 1);
@@ -318,7 +316,6 @@ export default function ProjectWorkspace() {
           project={project}
           categories={categories}
           focus={focus}
-          preview={georefPreview}
           reloadNonce={sceneReload}
           stats={[
             { label: 'Control', value: points.length },

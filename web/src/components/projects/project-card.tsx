@@ -17,7 +17,7 @@ export function ProjectCard({ onDelete, project }: { project: Project; onDelete:
             {project.name}
           </Link>
         </CardTitle>
-        <CardDescription className="flex-1">
+        <CardDescription className="line-clamp-3 flex-1">
           {project.description || 'No description'}
         </CardDescription>
       </CardHeader>

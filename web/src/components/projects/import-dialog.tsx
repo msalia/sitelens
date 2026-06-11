@@ -174,151 +174,161 @@ export function ImportDialog({
           )
         }
       />
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>Import points</DialogTitle>
           <DialogDescription>From a survey-machine CSV or LandXML export.</DialogDescription>
         </DialogHeader>
-        <form onSubmit={onImport} className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Field>
-              <FieldLabel htmlFor="imp-format">Format</FieldLabel>
-              <Select value={format} onValueChange={(v) => setFormat(v as Format)}>
-                <SelectTrigger id="imp-format" className="w-full">
-                  <SelectValue placeholder="Select a format" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectLabel>Format</SelectLabel>
-                    <SelectItem value="CSV">CSV</SelectItem>
-                    <SelectItem value="LANDXML">LandXML</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="imp-unit">Unit</FieldLabel>
-              <Select value={unit} onValueChange={(v) => setUnit(v as LengthUnit)}>
-                <SelectTrigger id="imp-unit" className="w-full">
-                  <SelectValue placeholder="Select a unit" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectLabel>Unit</SelectLabel>
-                    {UNIT_OPTIONS.map((u) => (
-                      <SelectItem key={u.value} value={u.value}>
-                        {u.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Field>
-          </div>
-
-          <Field>
-            <FieldLabel htmlFor="imp-file">File</FieldLabel>
-            <Input id="imp-file" type="file" accept=".csv,.txt,.xml" onChange={onFile} />
-            <Textarea
-              placeholder="…or paste content here"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              className="font-mono text-xs"
-              rows={5}
-            />
-          </Field>
-
-          {format === 'CSV' && (
-            <div className="flex flex-col gap-4 rounded-lg border p-3">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex flex-col gap-0.5">
-                  <Label htmlFor="imp-header" className="text-sm font-medium">
-                    First row is a header
-                  </Label>
-                  <p className="text-muted-foreground text-sm">
-                    Skip the first row and use its values as column names.
-                  </p>
-                </div>
-                <Switch id="imp-header" checked={hasHeader} onCheckedChange={setHasHeader} />
-              </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                <MappingSelect
-                  label="Label"
-                  value={cols.labelCol}
-                  onChange={(v) => setCols((c) => ({ ...c, labelCol: v }))}
-                  count={columnCount}
-                  colLabel={colLabel}
-                  optional
-                />
-                <MappingSelect
-                  label="Northing"
-                  value={cols.northingCol}
-                  onChange={(v) => setCols((c) => ({ ...c, northingCol: v }))}
-                  count={columnCount}
-                  colLabel={colLabel}
-                />
-                <MappingSelect
-                  label="Easting"
-                  value={cols.eastingCol}
-                  onChange={(v) => setCols((c) => ({ ...c, eastingCol: v }))}
-                  count={columnCount}
-                  colLabel={colLabel}
-                />
-                <MappingSelect
-                  label="Elevation"
-                  value={cols.elevationCol}
-                  onChange={(v) => setCols((c) => ({ ...c, elevationCol: v }))}
-                  count={columnCount}
-                  colLabel={colLabel}
-                  optional
-                />
-                <MappingSelect
-                  label="Description"
-                  value={cols.descriptionCol}
-                  onChange={(v) => setCols((c) => ({ ...c, descriptionCol: v }))}
-                  count={columnCount}
-                  colLabel={colLabel}
-                  optional
-                />
-              </div>
+        <form onSubmit={onImport} className="flex flex-col gap-6">
+          <div className="grid gap-6 sm:grid-cols-3">
+            {/* Column 1 — source + options */}
+            <div className="flex flex-col gap-4">
               <Field>
-                <FieldLabel htmlFor="imp-profile" className="w-full">
-                  Save as import profile
+                <FieldLabel htmlFor="imp-format">Format</FieldLabel>
+                <Select value={format} onValueChange={(v) => setFormat(v as Format)}>
+                  <SelectTrigger id="imp-format" className="w-full">
+                    <SelectValue placeholder="Select a format" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Format</SelectLabel>
+                      <SelectItem value="CSV">CSV</SelectItem>
+                      <SelectItem value="LANDXML">LandXML</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="imp-unit">Unit</FieldLabel>
+                <Select value={unit} onValueChange={(v) => setUnit(v as LengthUnit)}>
+                  <SelectTrigger id="imp-unit" className="w-full">
+                    <SelectValue placeholder="Select a unit" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Unit</SelectLabel>
+                      {UNIT_OPTIONS.map((u) => (
+                        <SelectItem key={u.value} value={u.value}>
+                          {u.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="imp-cat" className="w-full">
+                  Assign category
                   <span className="text-muted-foreground ml-auto text-xs font-normal">
                     Optional
                   </span>
                 </FieldLabel>
-                <Input
-                  id="imp-profile"
-                  value={profileName}
-                  onChange={(e) => setProfileName(e.target.value)}
-                />
+                <Select value={categoryId} onValueChange={(v) => setCategoryId(v ?? NONE)}>
+                  <SelectTrigger id="imp-cat" className="w-full">
+                    <SelectValue placeholder="None" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Category</SelectLabel>
+                      <SelectItem value={NONE}>None</SelectItem>
+                      {categories.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </Field>
             </div>
-          )}
 
-          <Field>
-            <FieldLabel htmlFor="imp-cat" className="w-full">
-              Assign category
-              <span className="text-muted-foreground ml-auto text-xs font-normal">Optional</span>
-            </FieldLabel>
-            <Select value={categoryId} onValueChange={(v) => setCategoryId(v ?? NONE)}>
-              <SelectTrigger id="imp-cat" className="w-full">
-                <SelectValue placeholder="None" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectLabel>Category</SelectLabel>
-                  <SelectItem value={NONE}>None</SelectItem>
-                  {categories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Field>
+            {/* Columns 2–3 — file/paste input + CSV column map */}
+            <div className="flex flex-col gap-4 sm:col-span-2">
+              <Field>
+                <FieldLabel htmlFor="imp-file">File</FieldLabel>
+                <Input id="imp-file" type="file" accept=".csv,.txt,.xml" onChange={onFile} />
+                <Textarea
+                  placeholder="…or paste content here"
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  className="font-mono text-xs"
+                  rows={5}
+                />
+              </Field>
+              {format === 'CSV' ? (
+                <div className="flex h-full flex-col gap-4 rounded-lg border p-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex flex-col gap-0.5">
+                      <Label htmlFor="imp-header" className="text-sm font-medium">
+                        First row is a header
+                      </Label>
+                      <p className="text-muted-foreground text-sm">
+                        Skip the first row and use its values as column names.
+                      </p>
+                    </div>
+                    <Switch id="imp-header" checked={hasHeader} onCheckedChange={setHasHeader} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    <MappingSelect
+                      label="Label"
+                      value={cols.labelCol}
+                      onChange={(v) => setCols((c) => ({ ...c, labelCol: v }))}
+                      count={columnCount}
+                      colLabel={colLabel}
+                      optional
+                    />
+                    <MappingSelect
+                      label="Northing"
+                      value={cols.northingCol}
+                      onChange={(v) => setCols((c) => ({ ...c, northingCol: v }))}
+                      count={columnCount}
+                      colLabel={colLabel}
+                    />
+                    <MappingSelect
+                      label="Easting"
+                      value={cols.eastingCol}
+                      onChange={(v) => setCols((c) => ({ ...c, eastingCol: v }))}
+                      count={columnCount}
+                      colLabel={colLabel}
+                    />
+                    <MappingSelect
+                      label="Elevation"
+                      value={cols.elevationCol}
+                      onChange={(v) => setCols((c) => ({ ...c, elevationCol: v }))}
+                      count={columnCount}
+                      colLabel={colLabel}
+                      optional
+                    />
+                    <MappingSelect
+                      label="Description"
+                      value={cols.descriptionCol}
+                      onChange={(v) => setCols((c) => ({ ...c, descriptionCol: v }))}
+                      count={columnCount}
+                      colLabel={colLabel}
+                      optional
+                    />
+                  </div>
+                  <Field>
+                    <FieldLabel htmlFor="imp-profile" className="w-full">
+                      Save as import profile
+                      <span className="text-muted-foreground ml-auto text-xs font-normal">
+                        Optional
+                      </span>
+                    </FieldLabel>
+                    <Input
+                      id="imp-profile"
+                      value={profileName}
+                      onChange={(e) => setProfileName(e.target.value)}
+                    />
+                  </Field>
+                </div>
+              ) : (
+                <div className="text-muted-foreground flex h-full items-center justify-center rounded-lg border border-dashed p-6 text-center text-sm">
+                  LandXML carries its own point definitions — no column mapping needed.
+                </div>
+              )}
+            </div>
+          </div>
 
           <DialogFooter>
             <Button type="submit" className="w-full" disabled={busy}>

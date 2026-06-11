@@ -114,15 +114,6 @@ export interface SceneData {
   surveyPoints: ScenePoint[];
 }
 
-/** Draft georeference emitted by the overlays "Georeference" card so the 3D
- * scene can preview unsaved slider edits. `null` lat/lon mean "fall back to the
- * saved origin / first point" server-side. */
-export interface GeorefPreview {
-  lat: number | null;
-  lon: number | null;
-  rotationDeg: number;
-}
-
 export interface EpsgEntry {
   code: number;
   name: string;
@@ -130,6 +121,7 @@ export interface EpsgEntry {
 
 export interface CadOverlay {
   assumeRealWorld: boolean;
+  elevation: number;
   id: string;
   offsetE: number;
   offsetN: number;
