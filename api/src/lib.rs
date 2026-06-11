@@ -6,6 +6,7 @@ pub mod db;
 pub mod export;
 pub mod geo;
 pub mod import;
+pub mod mail;
 pub mod models;
 pub mod ratelimit;
 pub mod schema;
@@ -28,6 +29,7 @@ use serde_json::json;
 use sqlx::PgPool;
 
 use crate::auth::{auth_context_from_token, session_token_from_cookie_header, AuthConfig};
+use crate::mail::Mailer;
 use crate::ratelimit::{ClientIp, RateLimiter};
 use crate::schema::{MutationRoot, QueryRoot};
 use crate::storage::{LocalStorage, Storage};
@@ -77,6 +79,7 @@ pub fn build_schema_with(
     .data(config)
     .data(storage)
     .data(limiter)
+    .data(Mailer::from_env())
     .finish()
 }
 

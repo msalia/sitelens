@@ -46,6 +46,7 @@ redis = { version = "0.27", default-features = false, features = [
     "tokio-comp",
     "connection-manager",
 ] }
+resend-rs = "0.25.1"
 
 [dev-dependencies]
 criterion = "0.5"

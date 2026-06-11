@@ -41,6 +41,9 @@ services:
       STORAGE_DIR: ${STORAGE_DIR}
       CESIUM_ION_TOKEN: ${CESIUM_ION_TOKEN:-}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      SITELENS_MAIL_FROM: ${SITELENS_MAIL_FROM:-SiteLens <noreply@msalia.org>}
+      APP_URL: ${APP_URL:-http://localhost:3000}
     volumes:
       - uploads:${STORAGE_DIR}
     depends_on:

@@ -9,7 +9,7 @@
 
 | Phase | Focus                                                  | Depends On | Status      |
 | ----- | ------------------------------------------------------ | ---------- | ----------- |
-| 1     | Mail infrastructure (resend-rs)                        | —          | Not started |
+| 1     | Mail infrastructure (resend-rs)                        | —          | ✅ Done      |
 | 2     | Email verification                                     | 1          | Not started |
 | 3     | Self-service password reset                            | 1          | Not started |
 | 4     | Org user management (`/settings/users`) + operator CLI | 1          | Not started |
@@ -34,20 +34,21 @@ Wire Resend so the API can send mail, with a safe dev fallback.
 
 ### Deliverables
 
-- [ ] Add `resend-rs` dependency.
-- [ ] `api/src/mail.rs`: `Mailer` built from `RESEND_API_KEY` + `SITELENS_MAIL_FROM`;
+- [x] Add `resend-rs` dependency.
+- [x] `api/src/mail.rs`: `Mailer` built from `RESEND_API_KEY` + `SITELENS_MAIL_FROM`;
       `send_verification` / `send_password_reset` / `send_invite` with HTML+text bodies.
-- [ ] Log-mode fallback when `RESEND_API_KEY` is unset (print recipient + link).
-- [ ] Inject `Mailer` into the GraphQL context (`.data(...)` in `build_schema_with`).
-- [ ] App reads a **send-only-scoped** `RESEND_API_KEY` from **env** (SiteLens
+- [x] Log-mode fallback when `RESEND_API_KEY` is unset (print recipient + link).
+- [x] Inject `Mailer` into the GraphQL context (`.data(...)` in `build_schema_with`).
+- [x] App reads a **send-only-scoped** `RESEND_API_KEY` from **env** (SiteLens
       convention), set in Dokploy (prod) + local `.env`/compose (dev); the
       full-access devkit key (`integrations/RESEND/.creds`) is never used by the app.
-- [ ] Env documented in `.env.example` / compose / Dokploy notes.
+- [x] Env documented in `.env.example` / compose / Dokploy notes.
 
 ### Tests
 
-- [ ] Unit: log-mode renders a body and never panics with no key.
-- [ ] Manual: a real test send confirms Resend delivery (owner inbox or verified domain).
+- [x] Unit: log-mode renders a body and never panics with no key.
+- [x] Manual: a real test send confirms Resend delivery (`real_send_smoke` →
+      `delivered@resend.dev`, verified domain `noreply@msalia.org`).
 
 ### Validates
 
