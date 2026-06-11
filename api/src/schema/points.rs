@@ -279,23 +279,39 @@ impl PointsMutation {
         .fetch_one(&mut *tx)
         .await?;
 
+        // One batched multi-row INSERT (via UNNEST) instead of a query per point —
+        // an import of N points is a single round-trip, not N. The constant
+        // columns (project_id, category_id, import_batch_id) are inlined.
+        let n = parsed.len();
+        let mut labels = Vec::with_capacity(n);
+        let mut northings = Vec::with_capacity(n);
+        let mut eastings = Vec::with_capacity(n);
+        let mut elevations: Vec<Option<f64>> = Vec::with_capacity(n);
+        let mut descriptions = Vec::with_capacity(n);
         for p in &parsed {
-            sqlx::query(
-                "INSERT INTO survey_points \
-                   (project_id, label, northing, easting, elevation, description, category_id, import_batch_id) \
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-            )
-            .bind(project_id)
-            .bind(&p.label)
-            .bind(unit.to_meters(p.northing))
-            .bind(unit.to_meters(p.easting))
-            .bind(p.elevation.map(|e| unit.to_meters(e)))
-            .bind(&p.description)
-            .bind(category_id)
-            .bind(batch.id)
-            .execute(&mut *tx)
-            .await?;
+            labels.push(p.label.clone());
+            northings.push(unit.to_meters(p.northing));
+            eastings.push(unit.to_meters(p.easting));
+            elevations.push(p.elevation.map(|e| unit.to_meters(e)));
+            descriptions.push(p.description.clone());
         }
+        sqlx::query(
+            "INSERT INTO survey_points \
+               (project_id, label, northing, easting, elevation, description, category_id, import_batch_id) \
+             SELECT $1, t.label, t.northing, t.easting, t.elevation, t.description, $7, $8 \
+             FROM UNNEST($2::text[], $3::float8[], $4::float8[], $5::float8[], $6::text[]) \
+               AS t(label, northing, easting, elevation, description)",
+        )
+        .bind(project_id)
+        .bind(&labels)
+        .bind(&northings)
+        .bind(&eastings)
+        .bind(&elevations)
+        .bind(&descriptions)
+        .bind(category_id)
+        .bind(batch.id)
+        .execute(&mut *tx)
+        .await?;
 
         // Optionally persist the CSV mapping as a reusable profile.
         if let (Some(name), Some(m)) = (save_profile_name.as_ref(), mapping.as_ref()) {

@@ -12,16 +12,36 @@ impl SceneQuery {
         let pool = pool(ctx)?;
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
 
-        let (epsg, lat, lon, rot_deg): (i32, Option<f64>, Option<f64>, f64) = sqlx::query_as(
+        // The independent reads (project params, transform, centroid, control +
+        // survey points) are fetched concurrently — one round-trip instead of ~5.
+        type SurveyRow = (Uuid, String, f64, f64, Option<f64>, Option<Uuid>);
+        let proj_q = sqlx::query_as::<_, (i32, Option<f64>, Option<f64>, f64)>(
             "SELECT epsg_code, site_origin_lat, site_origin_lon, site_origin_rotation_deg \
              FROM projects WHERE id = $1",
         )
         .bind(project_id)
-        .fetch_one(pool)
-        .await?;
-        let params = load_transform_params(pool, project_id).await?;
+        .fetch_one(pool);
+        let cp_q = sqlx::query_as::<_, (String, f64, f64, Option<f64>)>(
+            "SELECT label, easting, northing, elevation FROM control_points \
+             WHERE project_id = $1 ORDER BY created_at",
+        )
+        .bind(project_id)
+        .fetch_all(pool);
+        let sp_q = sqlx::query_as::<_, SurveyRow>(
+            "SELECT id, label, easting, northing, elevation, category_id FROM survey_points \
+             WHERE project_id = $1 ORDER BY created_at",
+        )
+        .bind(project_id)
+        .fetch_all(pool);
+        let ((epsg, lat, lon, rot_deg), params, centroid, cps, sps) = tokio::try_join!(
+            async { proj_q.await.map_err(async_graphql::Error::from) },
+            load_transform_params(pool, project_id),
+            points_centroid(pool, project_id),
+            async { cp_q.await.map_err(async_graphql::Error::from) },
+            async { sp_q.await.map_err(async_graphql::Error::from) },
+        )?;
         // The site spins about the centroid of all points, not the origin.
-        let rotation = site_rotation(points_centroid(pool, project_id).await?, rot_deg);
+        let rotation = site_rotation(centroid, rot_deg);
 
         let to_scene = |id: Option<Uuid>,
                         label: String,
@@ -46,26 +66,10 @@ impl SceneQuery {
             })
         };
 
-        let cps: Vec<(String, f64, f64, Option<f64>)> = sqlx::query_as(
-            "SELECT label, easting, northing, elevation FROM control_points \
-             WHERE project_id = $1 ORDER BY created_at",
-        )
-        .bind(project_id)
-        .fetch_all(pool)
-        .await?;
         let control_points: Vec<ScenePoint> = cps
             .into_iter()
             .filter_map(|(label, e, n, z)| to_scene(None, label, e, n, z, None))
             .collect();
-
-        type SurveyRow = (Uuid, String, f64, f64, Option<f64>, Option<Uuid>);
-        let sps: Vec<SurveyRow> = sqlx::query_as(
-            "SELECT id, label, easting, northing, elevation, category_id FROM survey_points \
-             WHERE project_id = $1 ORDER BY created_at",
-        )
-        .bind(project_id)
-        .fetch_all(pool)
-        .await?;
         let survey_points: Vec<ScenePoint> = sps
             .into_iter()
             .filter_map(|(id, label, e, n, z, cat)| to_scene(Some(id), label, e, n, z, cat))

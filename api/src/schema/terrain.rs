@@ -42,7 +42,11 @@ impl TerrainQuery {
         };
         let storage = storage(ctx)?;
         let bytes = storage.get(&key).await.map_err(async_graphql::Error::new)?;
-        Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+        // Base64-encoding a multi-MB GeoTIFF is CPU-bound; do it off the async
+        // worker so it doesn't stall other requests on the same thread.
+        tokio::task::spawn_blocking(move || base64::engine::general_purpose::STANDARD.encode(bytes))
+            .await
+            .map_err(|e| async_graphql::Error::new(e.to_string()))
     }
 
     /// Cached OSM buildings metadata for a project (null when none fetched yet).
