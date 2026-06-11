@@ -350,32 +350,24 @@ impl PointsMutation {
     ) -> Result<SurveyPoint> {
         let auth = require_editor(ctx)?;
         let pool = pool(ctx)?;
-        ensure_project_in_org(pool, project_id, auth.org_id).await?;
         if label.trim().is_empty() {
             return Err(async_graphql::Error::new("point label is required"));
         }
 
         // Convert the input (in whatever space) to the stored projected value,
         // reusing the same path as the standalone coordinate converter.
-        let (epsg, csf, rot_deg): (i32, f64, f64) = sqlx::query_as(
-            "SELECT epsg_code, combined_scale_factor, site_origin_rotation_deg \
-             FROM projects WHERE id = $1",
-        )
-        .bind(project_id)
-        .fetch_one(pool)
-        .await?;
-        let params = load_transform_params(pool, project_id).await?;
-        let rotation = site_rotation(points_centroid(pool, project_id).await?, rot_deg);
-        let cspace = match space {
-            CoordinateSpace::Grid => Space::Grid,
-            CoordinateSpace::Projected => Space::Projected,
-            CoordinateSpace::Geographic => Space::Geographic,
-        };
-        let (cx, cy) = match cspace {
-            Space::Geographic => (x, y),
-            _ => (unit.to_meters(x), unit.to_meters(y)),
-        };
-        let set = convert::convert_with_rotation(cspace, cx, cy, params, epsg, csf, rotation);
+        let crs = load_project_crs(pool, project_id, auth.org_id).await?;
+        let cspace: Space = space.into();
+        let (cx, cy) = normalize_input(cspace, x, y, unit);
+        let set = convert::convert_with_rotation(
+            cspace,
+            cx,
+            cy,
+            crs.params,
+            crs.epsg,
+            crs.csf,
+            crs.rotation,
+        );
         let (easting, northing) = match (set.projected_grid_e, set.projected_grid_n) {
             (Some(e), Some(n)) => (e, n),
             // Building-grid input needs a solved transform to place the point.
@@ -424,11 +416,7 @@ impl PointsMutation {
              FROM projects p \
              WHERE sp.id = $1 AND sp.project_id = p.id AND p.org_id = $6 \
              RETURNING {}",
-            SURVEY_POINT_COLUMNS
-                .split(", ")
-                .map(|c| format!("sp.{c}"))
-                .collect::<Vec<_>>()
-                .join(", ")
+            qualify_columns(SURVEY_POINT_COLUMNS, "sp")
         ))
         .bind(id)
         .bind(label)
@@ -438,8 +426,7 @@ impl PointsMutation {
         .bind(auth.org_id)
         .fetch_optional(pool(ctx)?)
         .await?;
-        let point = point
-            .ok_or_else(|| async_graphql::Error::new("point not found in your organization"))?;
+        let point = found_in_org(point, "point")?;
         publish_scene(ctx, point.project_id);
         Ok(point)
     }
@@ -456,8 +443,7 @@ impl PointsMutation {
         .bind(auth.org_id)
         .fetch_optional(pool(ctx)?)
         .await?;
-        let (project_id,) =
-            row.ok_or_else(|| async_graphql::Error::new("point not found in your organization"))?;
+        let (project_id,) = found_in_org(row, "point")?;
         publish_scene(ctx, project_id);
         Ok(true)
     }
@@ -543,8 +529,7 @@ impl PointsMutation {
         .bind(auth.org_id)
         .fetch_optional(pool(ctx)?)
         .await?;
-        let (project_id,) =
-            row.ok_or_else(|| async_graphql::Error::new("group not found in your organization"))?;
+        let (project_id,) = found_in_org(row, "group")?;
         publish_scene(ctx, project_id);
         Ok(true)
     }
@@ -574,8 +559,7 @@ impl PointsMutation {
         .bind(auth.org_id)
         .fetch_optional(pool(ctx)?)
         .await?;
-        let group = group
-            .ok_or_else(|| async_graphql::Error::new("group not found in your organization"))?;
+        let group = found_in_org(group, "group")?;
         publish_scene(ctx, group.project_id);
         Ok(group)
     }

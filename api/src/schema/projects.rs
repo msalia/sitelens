@@ -37,7 +37,7 @@ impl ProjectQuery {
         let auth = require_auth(ctx)?;
         let pool = pool(ctx)?;
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
-        let storage = ctx.data::<Arc<dyn Storage>>()?;
+        let storage = storage(ctx)?;
         archive::export_project(pool, storage.as_ref(), project_id)
             .await
             .map_err(async_graphql::Error::new)
@@ -93,7 +93,7 @@ impl ProjectMutation {
     async fn import_project(&self, ctx: &Context<'_>, content: String) -> Result<Project> {
         let auth = require_editor(ctx)?;
         let pool = pool(ctx)?;
-        let storage = ctx.data::<Arc<dyn Storage>>()?;
+        let storage = storage(ctx)?;
         let id = archive::import_project(pool, storage.as_ref(), auth.org_id, &content)
             .await
             .map_err(async_graphql::Error::new)?;
@@ -161,21 +161,10 @@ impl ProjectMutation {
     async fn delete_project(&self, ctx: &Context<'_>, id: Uuid) -> Result<bool> {
         let auth = require_editor(ctx)?;
         let pool = pool(ctx)?;
-        let storage = ctx.data::<Arc<dyn Storage>>()?;
+        let storage = storage(ctx)?;
 
         // Verify the project belongs to the caller's org before touching anything.
-        let owned: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM projects WHERE id = $1 AND org_id = $2)",
-        )
-        .bind(id)
-        .bind(auth.org_id)
-        .fetch_one(pool)
-        .await?;
-        if !owned {
-            return Err(async_graphql::Error::new(
-                "project not found in your organization",
-            ));
-        }
+        ensure_project_in_org(pool, id, auth.org_id).await?;
 
         // Purge uploads first (deterministic per-project keys), then DB rows.
         purge_project_files(storage.as_ref(), id).await;

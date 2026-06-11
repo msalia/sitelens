@@ -24,7 +24,7 @@ impl OverlayQuery {
     async fn cad_overlay_content(&self, ctx: &Context<'_>, id: Uuid) -> Result<String> {
         let auth = require_auth(ctx)?;
         let key = overlay_key_in_org(pool(ctx)?, id, auth.org_id).await?;
-        let storage = ctx.data::<Arc<dyn Storage>>()?;
+        let storage = storage(ctx)?;
         let bytes = storage.get(&key).await.map_err(async_graphql::Error::new)?;
         String::from_utf8(bytes)
             .map_err(|_| async_graphql::Error::new("overlay is not valid UTF-8"))
@@ -59,7 +59,7 @@ impl OverlayMutation {
             return Err(async_graphql::Error::new("DXF content is empty"));
         }
 
-        let storage = ctx.data::<Arc<dyn Storage>>()?;
+        let storage = storage(ctx)?;
         let id = Uuid::new_v4();
         let key = format!("dxf/{project_id}/{id}.dxf");
         storage
@@ -107,11 +107,7 @@ impl OverlayMutation {
              FROM projects p \
              WHERE co.id = $1 AND co.project_id = p.id AND p.org_id = $8 \
              RETURNING {}",
-            CAD_OVERLAY_COLUMNS
-                .split(", ")
-                .map(|c| format!("co.{c}"))
-                .collect::<Vec<_>>()
-                .join(", ")
+            qualify_columns(CAD_OVERLAY_COLUMNS, "co")
         ))
         .bind(id)
         .bind(offset_e)
@@ -124,8 +120,7 @@ impl OverlayMutation {
         .bind(elevation)
         .fetch_optional(pool(ctx)?)
         .await?;
-        let row =
-            row.ok_or_else(|| async_graphql::Error::new("overlay not found in your organization"))?;
+        let row = found_in_org(row, "overlay")?;
         publish_scene(ctx, row.project_id);
         Ok(row)
     }
@@ -141,7 +136,7 @@ impl OverlayMutation {
                 .fetch_optional(pool)
                 .await?;
         // Best-effort file cleanup.
-        let storage = ctx.data::<Arc<dyn Storage>>()?;
+        let storage = storage(ctx)?;
         let _ = storage.delete(&key).await;
         if let Some((project_id,)) = row {
             publish_scene(ctx, project_id);

@@ -175,11 +175,7 @@ impl GridMutation {
              FROM projects p \
              WHERE cp.id = $1 AND cp.project_id = p.id AND p.org_id = $9 \
              RETURNING {}",
-            CONTROL_POINT_COLUMNS
-                .split(", ")
-                .map(|c| format!("cp.{c}"))
-                .collect::<Vec<_>>()
-                .join(", ")
+            qualify_columns(CONTROL_POINT_COLUMNS, "cp")
         ))
         .bind(id)
         .bind(label)
@@ -192,9 +188,7 @@ impl GridMutation {
         .bind(auth.org_id)
         .fetch_optional(pool(ctx)?)
         .await?;
-        let cp = cp.ok_or_else(|| {
-            async_graphql::Error::new("control point not found in your organization")
-        })?;
+        let cp = found_in_org(cp, "control point")?;
         publish_scene(ctx, cp.project_id);
         Ok(cp)
     }

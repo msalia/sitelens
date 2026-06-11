@@ -21,6 +21,7 @@ use crate::crs;
 use crate::export::{self, ExportPoint};
 use crate::geo::{solve_helmert, Correspondence, HelmertParams};
 use crate::import::{self, CsvMapping};
+use crate::mail::Mailer;
 use crate::models::{
     CadOverlay, ControlPoint, CoordinateSet, CoordinateSpace, CsvMappingInput, EpsgEntry,
     ExportColumn, ExportFormat, ExportSpace, GridAxis, GridAxisInput, GridAxisRow, ImportBatch,
@@ -70,8 +71,7 @@ async fn overlay_key_in_org(pool: &PgPool, id: Uuid, org_id: Uuid) -> Result<Str
     .bind(org_id)
     .fetch_optional(pool)
     .await?;
-    row.map(|(k,)| k)
-        .ok_or_else(|| async_graphql::Error::new("overlay not found in your organization"))
+    found_in_org(row.map(|(k,)| k), "overlay")
 }
 use crate::units::LengthUnit;
 
@@ -118,6 +118,39 @@ fn pool<'a>(ctx: &'a Context) -> Result<&'a PgPool> {
 
 fn config<'a>(ctx: &'a Context) -> Result<&'a AuthConfig> {
     ctx.data::<AuthConfig>()
+}
+
+fn storage<'a>(ctx: &'a Context) -> Result<&'a Arc<dyn Storage>> {
+    ctx.data::<Arc<dyn Storage>>()
+}
+
+fn mailer<'a>(ctx: &'a Context) -> Result<&'a Mailer> {
+    ctx.data::<Mailer>()
+}
+
+/// Maps a missing org-scoped lookup to the uniform "not found in your
+/// organization" error (e.g. `found_in_org(row, "project")`).
+fn found_in_org<T>(opt: Option<T>, what: &str) -> Result<T> {
+    opt.ok_or_else(|| async_graphql::Error::new(format!("{what} not found in your organization")))
+}
+
+/// Prefixes each comma-separated column with `alias.` — for the RETURNING clause
+/// of an org-scoped `UPDATE ... FROM projects p` join.
+fn qualify_columns(columns: &str, alias: &str) -> String {
+    columns
+        .split(", ")
+        .map(|c| format!("{alias}.{c}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Normalizes a coordinate input to the converter's units: geographic stays in
+/// degrees (x = lon, y = lat); every other space is linear, converted to meters.
+fn normalize_input(space: Space, x: f64, y: f64, unit: LengthUnit) -> (f64, f64) {
+    match space {
+        Space::Geographic => (x, y),
+        _ => (unit.to_meters(x), unit.to_meters(y)),
+    }
 }
 
 /// Enforces the per-IP auth rate limit for `action` (e.g. "login", "signup").
@@ -238,6 +271,38 @@ async fn ensure_project_in_org(pool: &PgPool, project_id: Uuid, org_id: Uuid) ->
     found
         .map(|_| ())
         .ok_or_else(|| async_graphql::Error::new("project not found in your organization"))
+}
+
+/// A project's coordinate-reference context: EPSG, combined scale factor, the
+/// solved Helmert params (if any), and the site rotation about the points'
+/// centroid (if any) — everything a coordinate-aware resolver needs. Org-scoped:
+/// errors with the uniform "not found" if the project isn't in `org_id`, so it
+/// also serves as the ownership check (no separate `ensure_project_in_org`).
+struct ProjectCrs {
+    epsg: i32,
+    csf: f64,
+    params: Option<HelmertParams>,
+    rotation: Option<convert::SiteRotation>,
+}
+
+async fn load_project_crs(pool: &PgPool, project_id: Uuid, org_id: Uuid) -> Result<ProjectCrs> {
+    let row: Option<(i32, f64, f64)> = sqlx::query_as(
+        "SELECT epsg_code, combined_scale_factor, site_origin_rotation_deg \
+         FROM projects WHERE id = $1 AND org_id = $2",
+    )
+    .bind(project_id)
+    .bind(org_id)
+    .fetch_optional(pool)
+    .await?;
+    let (epsg, csf, rot_deg) = found_in_org(row, "project")?;
+    let params = load_transform_params(pool, project_id).await?;
+    let rotation = site_rotation(points_centroid(pool, project_id).await?, rot_deg);
+    Ok(ProjectCrs {
+        epsg,
+        csf,
+        params,
+        rotation,
+    })
 }
 
 fn normalize_email(email: &str) -> String {

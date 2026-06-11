@@ -1,6 +1,5 @@
 #![allow(clippy::too_many_arguments)]
 use super::*;
-use crate::mail::Mailer;
 
 #[derive(Default)]
 pub struct AuthQuery;
@@ -157,7 +156,7 @@ impl AuthMutation {
 
         // Email the verification link. A send failure must not fail signup — the
         // user can request a new link via `resendVerification`.
-        let mailer = ctx.data::<Mailer>()?;
+        let mailer = mailer(ctx)?;
         let link = format!("{}/verify?token={}", mailer.app_url(), verification_token);
         if let Err(e) = mailer.send_verification(&email, &link).await {
             eprintln!("signup: failed to send verification email to {email}: {e}");
@@ -209,7 +208,7 @@ impl AuthMutation {
             .bind(id)
             .execute(pool)
             .await?;
-            let mailer = ctx.data::<Mailer>()?;
+            let mailer = mailer(ctx)?;
             let link = format!("{}/verify?token={}", mailer.app_url(), token);
             if let Err(e) = mailer.send_verification(&addr, &link).await {
                 eprintln!("resend_verification: send failed for {addr}: {e}");
@@ -302,7 +301,7 @@ impl AuthMutation {
             .bind(auth.org_id)
             .fetch_one(pool)
             .await?;
-        let mailer = ctx.data::<Mailer>()?;
+        let mailer = mailer(ctx)?;
         let link = format!("{}/accept-invite?token={}", mailer.app_url(), invite_token);
         if let Err(e) = mailer.send_invite(&email, &org_name, &link).await {
             eprintln!("invite_user: failed to email invite to {email}: {e}");
@@ -394,7 +393,7 @@ impl AuthMutation {
     async fn delete_organization(&self, ctx: &Context<'_>) -> Result<bool> {
         let auth = require_admin(ctx)?;
         let pool = pool(ctx)?;
-        let storage = ctx.data::<std::sync::Arc<dyn crate::storage::Storage>>()?;
+        let storage = storage(ctx)?;
 
         // Purge every project's uploaded files before dropping the rows.
         let project_ids: Vec<Uuid> =
@@ -521,7 +520,7 @@ async fn send_reset_link(
     .bind(user_id)
     .execute(pool)
     .await?;
-    let mailer = ctx.data::<Mailer>()?;
+    let mailer = mailer(ctx)?;
     let link = format!("{}/reset-password?token={}", mailer.app_url(), token);
     if let Err(e) = mailer.send_password_reset(email, &link).await {
         eprintln!("send_reset_link: failed for {email}: {e}");

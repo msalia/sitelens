@@ -40,7 +40,7 @@ impl TerrainQuery {
                 "no terrain cached for this project",
             ));
         };
-        let storage = ctx.data::<Arc<dyn Storage>>()?;
+        let storage = storage(ctx)?;
         let bytes = storage.get(&key).await.map_err(async_graphql::Error::new)?;
         Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
     }
@@ -83,7 +83,7 @@ impl TerrainQuery {
                 "no buildings cached for this project",
             ));
         };
-        let storage = ctx.data::<Arc<dyn Storage>>()?;
+        let storage = storage(ctx)?;
         let bytes = storage.get(&key).await.map_err(async_graphql::Error::new)?;
         Ok(String::from_utf8_lossy(&bytes).into_owned())
     }
@@ -192,7 +192,7 @@ impl TerrainMutation {
             }
         };
 
-        let storage = ctx.data::<Arc<dyn Storage>>()?;
+        let storage = storage(ctx)?;
         let key = format!("terrain/{project_id}.tif");
         storage
             .put(&key, &bytes)
@@ -347,7 +347,7 @@ impl TerrainMutation {
 
         let count = buildings.len() as i32;
         let payload = serde_json::Value::Array(buildings).to_string();
-        let storage = ctx.data::<Arc<dyn Storage>>()?;
+        let storage = storage(ctx)?;
         let key = format!("buildings/{project_id}.json");
         storage
             .put(&key, payload.as_bytes())

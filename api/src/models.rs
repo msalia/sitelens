@@ -267,6 +267,16 @@ pub enum CoordinateSpace {
     Geographic,
 }
 
+impl From<CoordinateSpace> for crate::convert::Space {
+    fn from(s: CoordinateSpace) -> Self {
+        match s {
+            CoordinateSpace::Grid => crate::convert::Space::Grid,
+            CoordinateSpace::Projected => crate::convert::Space::Projected,
+            CoordinateSpace::Geographic => crate::convert::Space::Geographic,
+        }
+    }
+}
+
 /// All derivable representations of a coordinate. Linear fields are meters;
 /// latitude/longitude are degrees. `None` where a representation isn't derivable.
 #[derive(SimpleObject, Default)]

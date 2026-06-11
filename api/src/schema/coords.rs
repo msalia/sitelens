@@ -19,30 +19,19 @@ impl CoordsQuery {
     ) -> Result<CoordinateSet> {
         let auth = require_auth(ctx)?;
         let pool = pool(ctx)?;
-        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        let crs = load_project_crs(pool, project_id, auth.org_id).await?;
 
-        let (epsg, csf, rot_deg): (i32, f64, f64) = sqlx::query_as(
-            "SELECT epsg_code, combined_scale_factor, site_origin_rotation_deg \
-             FROM projects WHERE id = $1",
-        )
-        .bind(project_id)
-        .fetch_one(pool)
-        .await?;
-        let params = load_transform_params(pool, project_id).await?;
-        let rotation = site_rotation(points_centroid(pool, project_id).await?, rot_deg);
-
-        let space = match space {
-            CoordinateSpace::Grid => Space::Grid,
-            CoordinateSpace::Projected => Space::Projected,
-            CoordinateSpace::Geographic => Space::Geographic,
-        };
-        // Geographic input is in degrees (x = lon, y = lat); everything else is a
-        // linear measure in `unit` that we normalize to meters first.
-        let (cx, cy) = match space {
-            Space::Geographic => (x, y),
-            _ => (unit.to_meters(x), unit.to_meters(y)),
-        };
-        let result = convert::convert_with_rotation(space, cx, cy, params, epsg, csf, rotation);
+        let space: Space = space.into();
+        let (cx, cy) = normalize_input(space, x, y, unit);
+        let result = convert::convert_with_rotation(
+            space,
+            cx,
+            cy,
+            crs.params,
+            crs.epsg,
+            crs.csf,
+            crs.rotation,
+        );
         Ok(result.into())
     }
 
@@ -76,17 +65,12 @@ impl CoordsQuery {
     ) -> Result<String> {
         let auth = require_auth(ctx)?;
         let pool = pool(ctx)?;
-        ensure_project_in_org(pool, project_id, auth.org_id).await?;
-
-        let (epsg, csf, rot_deg): (i32, f64, f64) = sqlx::query_as(
-            "SELECT epsg_code, combined_scale_factor, site_origin_rotation_deg \
-             FROM projects WHERE id = $1",
-        )
-        .bind(project_id)
-        .fetch_one(pool)
-        .await?;
-        let params = load_transform_params(pool, project_id).await?;
-        let rotation = site_rotation(points_centroid(pool, project_id).await?, rot_deg);
+        let ProjectCrs {
+            epsg,
+            csf,
+            params,
+            rotation,
+        } = load_project_crs(pool, project_id, auth.org_id).await?;
         if space == ExportSpace::Grid && params.is_none() {
             return Err(async_graphql::Error::new(
                 "grid export requires a solved transform",
