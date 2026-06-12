@@ -13,7 +13,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
@@ -162,145 +161,141 @@ export function ExportDialog({
     }
   }
 
+  const gated = !!billing && !billing.canExport;
   const triggerEl = trigger ?? (
     <Button size="sm" variant="outline">
       <IconDownload className="mr-1 size-4" /> Export
     </Button>
   );
 
-  // Exporting is a Crew feature: once billing has loaded and the org can't export,
-  // the trigger opens an upgrade prompt instead of the export form.
-  if (billing && !billing.canExport) {
-    return (
-      <>
-        {cloneElement(triggerEl as React.ReactElement<{ onClick?: () => void }>, {
-          onClick: () => setUpgradeOpen(true),
-        })}
-        <UpgradeDialog
-          open={upgradeOpen}
-          onOpenChange={setUpgradeOpen}
-          title="Exporting is a Crew feature"
-          description="Upgrade to Crew to export points as CSV or LandXML."
-        />
-      </>
-    );
-  }
-
+  // One stable trigger whose click decides what to open — avoids swapping the
+  // element while billing loads (which would drop the click). Exporting is a Crew
+  // feature, so gated orgs get an upgrade prompt instead of the form.
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger render={triggerEl} />
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>Export points</DialogTitle>
-          <DialogDescription>Download surveyed points as CSV or LandXML.</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={onExport} className="flex flex-col gap-4">
-          <div className={cn('grid gap-4', format === 'CSV' && 'sm:grid-cols-3')}>
-            <div className="flex flex-col gap-4">
-              <Field>
-                <FieldLabel htmlFor="exp-format">Format</FieldLabel>
-                <Select value={format} onValueChange={(v) => setFormat(v as ExportFormat)}>
-                  <SelectTrigger id="exp-format" className="w-full">
-                    <SelectValue placeholder="Select a format" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectLabel>Format</SelectLabel>
-                      <SelectItem value="CSV">CSV</SelectItem>
-                      <SelectItem value="LANDXML">LandXML</SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="exp-unit">Unit</FieldLabel>
-                <Select value={unit} onValueChange={(v) => setUnit(v as LengthUnit)}>
-                  <SelectTrigger id="exp-unit" className="w-full">
-                    <SelectValue placeholder="Select a unit" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectLabel>Unit</SelectLabel>
-                      {UNIT_OPTIONS.map((u) => (
-                        <SelectItem key={u.value} value={u.value}>
-                          {u.label}
+    <>
+      {cloneElement(triggerEl as React.ReactElement<{ onClick?: () => void }>, {
+        onClick: () => (gated ? setUpgradeOpen(true) : onOpenChange(true)),
+      })}
+      <UpgradeDialog
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        title="Exporting is a Crew feature"
+        description="Upgrade to Crew to export points as CSV or LandXML."
+      />
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Export points</DialogTitle>
+            <DialogDescription>Download surveyed points as CSV or LandXML.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={onExport} className="flex flex-col gap-4">
+            <div className={cn('grid gap-4', format === 'CSV' && 'sm:grid-cols-3')}>
+              <div className="flex flex-col gap-4">
+                <Field>
+                  <FieldLabel htmlFor="exp-format">Format</FieldLabel>
+                  <Select value={format} onValueChange={(v) => setFormat(v as ExportFormat)}>
+                    <SelectTrigger id="exp-format" className="w-full">
+                      <SelectValue placeholder="Select a format" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectLabel>Format</SelectLabel>
+                        <SelectItem value="CSV">CSV</SelectItem>
+                        <SelectItem value="LANDXML">LandXML</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="exp-unit">Unit</FieldLabel>
+                  <Select value={unit} onValueChange={(v) => setUnit(v as LengthUnit)}>
+                    <SelectTrigger id="exp-unit" className="w-full">
+                      <SelectValue placeholder="Select a unit" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectLabel>Unit</SelectLabel>
+                        {UNIT_OPTIONS.map((u) => (
+                          <SelectItem key={u.value} value={u.value}>
+                            {u.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="exp-space">Coordinate space</FieldLabel>
+                  <Select value={space} onValueChange={(v) => setSpace(v as ExportSpace)}>
+                    <SelectTrigger id="exp-space" className="w-full">
+                      <SelectValue placeholder="Select a space" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectLabel>Coordinate space</SelectLabel>
+                        {EXPORT_SPACE_OPTIONS.map((s) => (
+                          <SelectItem key={s.value} value={s.value}>
+                            {s.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="exp-scope">Scope</FieldLabel>
+                  <Select value={scope} onValueChange={(v) => setScope(v as Scope)}>
+                    <SelectTrigger id="exp-scope" className="w-full">
+                      <SelectValue placeholder="Select a scope" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectLabel>Scope</SelectLabel>
+                        <SelectItem value="all">All points</SelectItem>
+                        <SelectItem value="category" disabled={!categoryFilter}>
+                          Current category filter
                         </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="exp-space">Coordinate space</FieldLabel>
-                <Select value={space} onValueChange={(v) => setSpace(v as ExportSpace)}>
-                  <SelectTrigger id="exp-space" className="w-full">
-                    <SelectValue placeholder="Select a space" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectLabel>Coordinate space</SelectLabel>
-                      {EXPORT_SPACE_OPTIONS.map((s) => (
-                        <SelectItem key={s.value} value={s.value}>
-                          {s.label}
+                        <SelectItem value="selection" disabled={selectedIds.length === 0}>
+                          Selected points ({selectedIds.length})
                         </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="exp-scope">Scope</FieldLabel>
-                <Select value={scope} onValueChange={(v) => setScope(v as Scope)}>
-                  <SelectTrigger id="exp-scope" className="w-full">
-                    <SelectValue placeholder="Select a scope" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectLabel>Scope</SelectLabel>
-                      <SelectItem value="all">All points</SelectItem>
-                      <SelectItem value="category" disabled={!categoryFilter}>
-                        Current category filter
-                      </SelectItem>
-                      <SelectItem value="selection" disabled={selectedIds.length === 0}>
-                        Selected points ({selectedIds.length})
-                      </SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </Field>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </div>
+
+              {format === 'CSV' && (
+                <Field className="sm:col-span-2">
+                  <FieldLabel>Columns</FieldLabel>
+                  <div className="divide-y rounded-lg border">
+                    {EXPORT_COLUMN_OPTIONS.map((c) => (
+                      <div key={c.value} className="flex items-center justify-between gap-4 p-3">
+                        <div className="flex flex-col gap-0.5">
+                          <Label htmlFor={`col-${c.value}`} className="text-sm font-medium">
+                            {c.label}
+                          </Label>
+                          <p className="text-muted-foreground text-sm">{COLUMN_DESC[c.value]}</p>
+                        </div>
+                        <Switch
+                          id={`col-${c.value}`}
+                          checked={columns.includes(c.value)}
+                          onCheckedChange={() => toggleColumn(c.value)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </Field>
+              )}
             </div>
 
-            {format === 'CSV' && (
-              <Field className="sm:col-span-2">
-                <FieldLabel>Columns</FieldLabel>
-                <div className="divide-y rounded-lg border">
-                  {EXPORT_COLUMN_OPTIONS.map((c) => (
-                    <div key={c.value} className="flex items-center justify-between gap-4 p-3">
-                      <div className="flex flex-col gap-0.5">
-                        <Label htmlFor={`col-${c.value}`} className="text-sm font-medium">
-                          {c.label}
-                        </Label>
-                        <p className="text-muted-foreground text-sm">{COLUMN_DESC[c.value]}</p>
-                      </div>
-                      <Switch
-                        id={`col-${c.value}`}
-                        checked={columns.includes(c.value)}
-                        onCheckedChange={() => toggleColumn(c.value)}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </Field>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button type="submit" className="w-full" disabled={busy}>
-              {busy ? 'Exporting…' : 'Download'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+            <DialogFooter>
+              <Button type="submit" className="w-full" disabled={busy}>
+                {busy ? 'Exporting…' : 'Download'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

@@ -49,7 +49,15 @@ const CREATE_PROJECT = graphql(`
   }
 `);
 
-export function CreateProjectDialog({ onCreated }: { onCreated: () => void }) {
+export function CreateProjectDialog({
+  onCreated,
+  projectCount,
+}: {
+  onCreated: () => void;
+  /** Live project count from the list, so the cap reflects projects created this
+   *  session without a billing refetch. Falls back to the billing snapshot. */
+  projectCount?: number;
+}) {
   const [open, setOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [form, setForm] = useState(emptyProjectForm());
@@ -57,11 +65,9 @@ export function CreateProjectDialog({ onCreated }: { onCreated: () => void }) {
   const { billing } = useBilling();
 
   // Solo is capped at one project; offer an upgrade instead of the create form.
+  const count = projectCount ?? billing?.projects ?? 0;
   const atCap =
-    !!billing &&
-    !isPaid(billing) &&
-    billing.maxProjects >= 0 &&
-    billing.projects >= billing.maxProjects;
+    !!billing && !isPaid(billing) && billing.maxProjects >= 0 && count >= billing.maxProjects;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();

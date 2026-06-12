@@ -92,7 +92,7 @@ function ProjectsContent() {
               : 'Your organization’s building sites.'}
           </p>
         </div>
-        <CreateProjectDialog onCreated={load} />
+        <CreateProjectDialog onCreated={load} projectCount={projects.length} />
       </div>
 
       {loading ? (
