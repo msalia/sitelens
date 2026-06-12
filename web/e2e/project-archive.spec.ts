@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
-import { addControlPoint, createProjectAndOpen, signUpAndLogin } from './helpers';
+import { addControlPoint, createProjectAndOpen, signUpAndLogin, upgradeOrg } from './helpers';
 
 // Project export (.slx) → re-import round-trip.
 test.beforeEach(async ({ request }) => {
@@ -10,7 +10,9 @@ test.beforeEach(async ({ request }) => {
 });
 
 test('export a project and re-import it from the archive', async ({ page }) => {
-  await signUpAndLogin(page, 'archive');
+  const email = await signUpAndLogin(page, 'archive');
+  // Project export + re-import (a 2nd project) are Crew features.
+  upgradeOrg(email);
   await createProjectAndOpen(page, 'Archive Source');
   await addControlPoint(page, { e: 2000, gx: 0, gy: 0, label: 'MON1', n: 1000 });
 

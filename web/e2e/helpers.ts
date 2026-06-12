@@ -1,4 +1,38 @@
 import { type APIRequestContext, expect, type Page } from '@playwright/test';
+import { execSync } from 'node:child_process';
+import path from 'node:path';
+
+// --- Billing test backdoors -------------------------------------------------
+// Entitlement-gated UI needs an org on a given plan. Rather than drive Stripe
+// Checkout for every feature test (slow + flaky), we write the org's billing
+// columns directly in the dev database. The real payment path is covered
+// separately by billing-checkout.spec.ts (opt-in, Stripe CLI) and the API's
+// webhook integration tests. Requires the docker stack to be up.
+
+const COMPOSE_FILE = path.resolve(process.cwd(), '..', 'docker-compose.yml');
+
+function psql(sql: string): void {
+  execSync(
+    `docker compose -f "${COMPOSE_FILE}" exec -T db psql -U postgres -d sitelens -v ON_ERROR_STOP=1 -c "${sql}"`,
+    { stdio: 'pipe' },
+  );
+}
+
+/** Marks the org owning `email` as a paying Crew subscriber (active, renews in
+ *  30 days). */
+export function upgradeOrg(email: string): void {
+  psql(
+    `UPDATE orgs SET subscription_status='active', current_period_end=now() + interval '30 days', cancel_at_period_end=false WHERE id=(SELECT org_id FROM users WHERE email='${email}')`,
+  );
+}
+
+/** Forces the org owning `email` into the read-only lapsed state (canceled
+ *  subscription). Combine with being over the Solo caps to trigger the gate. */
+export function lapseOrg(email: string): void {
+  psql(
+    `UPDATE orgs SET subscription_status='canceled', cancel_at_period_end=false WHERE id=(SELECT org_id FROM users WHERE email='${email}')`,
+  );
+}
 
 /** Whether the API is running in MAIL_CAPTURE mode (e2e records emails instead
  *  of sending them). Tests that depend on reading emails should skip when off. */

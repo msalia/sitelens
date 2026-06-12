@@ -1,4 +1,11 @@
 import { defineConfig } from '@playwright/test';
+import { config as loadEnv } from 'dotenv';
+import path from 'node:path';
+
+// Load the stack's root .env so opt-in flags (e.g. STRIPE_E2E for the live
+// Checkout spec) can be toggled from one place. `override: false` keeps any value
+// already set in the shell.
+loadEnv({ override: false, path: path.resolve(process.cwd(), '..', '.env') });
 
 // E2E tests live in this project under ./e2e — never in any external/shared dir.
 export default defineConfig({

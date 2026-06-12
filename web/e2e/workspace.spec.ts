@@ -1,6 +1,12 @@
 import { expect, test } from '@playwright/test';
 
-import { addControlPoint, createProjectAndOpen, gotoTab, signUpAndLogin } from './helpers';
+import {
+  addControlPoint,
+  createProjectAndOpen,
+  gotoTab,
+  signUpAndLogin,
+  upgradeOrg,
+} from './helpers';
 
 // The command-center workspace: tabs, setup alerts, grid, transform, converter.
 test.beforeEach(async ({ request }) => {
@@ -9,7 +15,9 @@ test.beforeEach(async ({ request }) => {
 });
 
 test('workspace shows all tabs, setup alerts, and stat pills', async ({ page }) => {
-  await signUpAndLogin(page, 'ws-tabs');
+  const email = await signUpAndLogin(page, 'ws-tabs');
+  // Overlays is a Crew tab — upgrade so all four tabs render.
+  upgradeOrg(email);
   await createProjectAndOpen(page, 'Tabs Site');
 
   for (const tab of ['Setup', 'Grid', 'Points', 'Overlays']) {

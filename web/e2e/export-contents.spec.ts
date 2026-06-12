@@ -1,7 +1,13 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
-import { chooseSelect, createProjectAndOpen, importCsv, signUpAndLogin } from './helpers';
+import {
+  chooseSelect,
+  createProjectAndOpen,
+  importCsv,
+  signUpAndLogin,
+  upgradeOrg,
+} from './helpers';
 
 // Select points → export → verify the downloaded file contents (CSV + LandXML).
 test.beforeEach(async ({ request }) => {
@@ -10,7 +16,8 @@ test.beforeEach(async ({ request }) => {
 });
 
 test('select points → CSV export → verify file contents', async ({ page }) => {
-  await signUpAndLogin(page, 'export');
+  const email = await signUpAndLogin(page, 'export');
+  upgradeOrg(email); // exporting is a Crew feature
   await createProjectAndOpen(page, 'Export Verify');
   await importCsv(
     page,
@@ -42,7 +49,8 @@ test('select points → CSV export → verify file contents', async ({ page }) =
 });
 
 test('LandXML export emits CgPoints', async ({ page }) => {
-  await signUpAndLogin(page, 'export-xml');
+  const email = await signUpAndLogin(page, 'export-xml');
+  upgradeOrg(email); // exporting is a Crew feature
   await createProjectAndOpen(page, 'Export XML');
   await importCsv(page, ['P,N,E,Z,D', 'A1,10,20,1,MON', 'A2,11,21,,IP'].join('\n'));
 
