@@ -13,6 +13,9 @@ use uuid::Uuid;
 const STRIPE_API: &str = "https://api.stripe.com";
 /// Reject webhook events whose timestamp is older than this (replay protection).
 const WEBHOOK_TOLERANCE_SECS: i64 = 300;
+/// Cap every Stripe HTTP call so a slow/hung request can't block a resolver
+/// (notably the `billing` query's self-heal).
+const STRIPE_HTTP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 
 /// Stripe configuration from the environment. `enabled()` is false when no secret
 /// key is set, so non-billing deployments (and tests) degrade gracefully.
@@ -53,6 +56,7 @@ async fn stripe_post(
     let res = reqwest::Client::new()
         .post(format!("{STRIPE_API}{path}"))
         .bearer_auth(&cfg.secret_key)
+        .timeout(STRIPE_HTTP_TIMEOUT)
         .form(form)
         .send()
         .await
@@ -74,6 +78,7 @@ async fn stripe_get(cfg: &StripeConfig, path: &str) -> Result<serde_json::Value,
     let res = reqwest::Client::new()
         .get(format!("{STRIPE_API}{path}"))
         .bearer_auth(&cfg.secret_key)
+        .timeout(STRIPE_HTTP_TIMEOUT)
         .send()
         .await
         .map_err(|e| e.to_string())?;
