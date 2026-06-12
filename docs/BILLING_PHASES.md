@@ -4,13 +4,13 @@
 > Each phase ends working, lint/clippy/fmt clean, and (where it touches the API)
 > verified against the docker Postgres with `MAIL_CAPTURE=1`.
 
-| Phase | Focus | Status |
-| ----- | ----- | ------ |
-| 1 | Billing state + Stripe client + Checkout/Portal + webhook | ✅ Done |
-| 2 | Entitlements + enforcement guards | ✅ Done |
-| 3 | Frontend: billing page, upgrade gate + prompts | ✅ Done |
-| 4 | Subprocessors/legal + tests | ✅ Done |
-| 5 | Production go-live (Dokploy + Stripe live mode) | ⏳ Runbook below |
+| Phase | Focus                                                     | Status           |
+| ----- | --------------------------------------------------------- | ---------------- |
+| 1     | Billing state + Stripe client + Checkout/Portal + webhook | ✅ Done          |
+| 2     | Entitlements + enforcement guards                         | ✅ Done          |
+| 3     | Frontend: billing page, upgrade gate + prompts            | ✅ Done          |
+| 4     | Subprocessors/legal + tests                               | ✅ Done          |
+| 5     | Production go-live (Dokploy + Stripe live mode)           | ✅ Done          |
 
 ---
 
@@ -86,20 +86,21 @@ paid-only — all enforced server-side.
       with a test card via the Stripe CLI, asserting the webhook flips the org to Crew.
 
 **Validates:** compliance updated; enforcement + webhook logic covered without real charges.
-*(67 API integration tests + the e2e billing suite pass.)*
+_(67 API integration tests + the e2e billing suite pass.)_
 
-## Phase 5 — Production go-live ⏳
+## Phase 5 — Production go-live ✅
 
 Code is complete and verified in test mode. Going live is configuration only — no code
 changes. See the runbook: [BILLING_GO_LIVE.md](./BILLING_GO_LIVE.md).
 
-- [ ] Deploy the latest `api` + `web` to the server (Dokploy).
-- [ ] Stripe **live mode**: create the webhook endpoint
+- [x] Deploy the latest `api` + `web` to the server (Dokploy).
+- [x] Stripe **live mode**: create the webhook endpoint
       `https://sitelens.msalia.org/stripe/webhook` for
       `checkout.session.completed` + `customer.subscription.{created,updated,deleted}`.
-- [ ] Set Dokploy env: live `STRIPE_SECRET_KEY`, live `STRIPE_WEBHOOK_SECRET`, live
+- [x] Set Dokploy env: live `STRIPE_SECRET_KEY`, live `STRIPE_WEBHOOK_SECRET`, live
       `STRIPE_PRICE_MONTHLY` / `STRIPE_PRICE_ANNUAL`, `APP_URL=https://sitelens.msalia.org`;
       leave `STRIPE_E2E` unset.
-- [ ] Verify: `curl -i https://sitelens.msalia.org/stripe/webhook -X POST` → 400, then a
-      real test upgrade in the live UI.
-- [ ] Decide live-mode payment methods (Card-only vs Link/Klarna/etc.).
+- [x] Verify routing: `curl -i -X POST https://sitelens.msalia.org/stripe/webhook` → **400**
+      (proxied to the API, unsigned event rejected). A final real Admin upgrade in the live
+      UI confirms the end-to-end charge → Crew flip.
+- [x] Decide live-mode payment methods (Card-only vs Link/Klarna/etc.).
