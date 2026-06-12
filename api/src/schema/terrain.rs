@@ -113,7 +113,7 @@ impl TerrainMutation {
         demtype: Option<String>,
         force: Option<bool>,
     ) -> Result<ProjectTerrain> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
         let pool = pool(ctx)?;
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
         // `demtype` is optional: when omitted we auto-select the best available
@@ -225,7 +225,7 @@ impl TerrainMutation {
         east: f64,
         force: Option<bool>,
     ) -> Result<ProjectBuildings> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
         let pool = pool(ctx)?;
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
         let force = force.unwrap_or(false);

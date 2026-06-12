@@ -70,7 +70,7 @@ impl GridMutation {
         unit: LengthUnit,
         axes: Vec<GridAxisInput>,
     ) -> Result<Vec<GridAxis>> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
         let pool = pool(ctx)?;
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
 
@@ -123,7 +123,7 @@ impl GridMutation {
         unit: LengthUnit,
         source: Option<String>,
     ) -> Result<ControlPoint> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
         let pool = pool(ctx)?;
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
         if label.trim().is_empty() {
@@ -162,7 +162,7 @@ impl GridMutation {
         unit: LengthUnit,
         source: Option<String>,
     ) -> Result<ControlPoint> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
         let cp: Option<ControlPoint> = sqlx::query_as(&format!(
             "UPDATE control_points cp SET \
                label = COALESCE($2, cp.label), \
@@ -195,7 +195,7 @@ impl GridMutation {
 
     /// Deletes a control point in the caller's organization. Editor role required.
     async fn delete_control_point(&self, ctx: &Context<'_>, id: Uuid) -> Result<bool> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
         let row: Option<(Uuid,)> = sqlx::query_as(
             "DELETE FROM control_points cp USING projects p \
              WHERE cp.id = $1 AND cp.project_id = p.id AND p.org_id = $2 \
@@ -217,7 +217,7 @@ impl GridMutation {
     /// Solves the Helmert transform from the project's control points (those with
     /// grid coordinates) and persists it. Editor role required.
     async fn solve_transform(&self, ctx: &Context<'_>, project_id: Uuid) -> Result<Transform> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
         let pool = pool(ctx)?;
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
 

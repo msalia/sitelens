@@ -64,7 +64,8 @@ impl ProjectMutation {
         site_origin_lon: Option<f64>,
         site_origin_rotation_deg: Option<f64>,
     ) -> Result<Project> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
+        require_project_quota(ctx).await?;
         if name.trim().is_empty() {
             return Err(async_graphql::Error::new("project name is required"));
         }
@@ -91,7 +92,8 @@ impl ProjectMutation {
     /// Imports a `.slx` archive as a new project in the caller's org. Editor role
     /// required.
     async fn import_project(&self, ctx: &Context<'_>, content: String) -> Result<Project> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
+        require_project_quota(ctx).await?;
         let pool = pool(ctx)?;
         let storage = storage(ctx)?;
         let id = archive::import_project(pool, storage.as_ref(), auth.org_id, &content)
@@ -120,7 +122,7 @@ impl ProjectMutation {
         site_origin_lon: Option<f64>,
         site_origin_rotation_deg: Option<f64>,
     ) -> Result<Project> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
         let pool = pool(ctx)?;
         ensure_project_in_org(pool, id, auth.org_id).await?;
         // COALESCE keeps existing values when an argument is omitted.
@@ -159,7 +161,7 @@ impl ProjectMutation {
     /// points, survey points, transforms, imports, groups, categories links).
     /// Nothing is left behind. Editor role required.
     async fn delete_project(&self, ctx: &Context<'_>, id: Uuid) -> Result<bool> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
         let pool = pool(ctx)?;
         let storage = storage(ctx)?;
 

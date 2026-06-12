@@ -74,6 +74,16 @@ async fn signup(schema: &ApiSchema, email: &str, org: &str) -> (Uuid, Uuid, Stri
     (user_id, org_id, token)
 }
 
+/// Marks an org as a paying Crew subscriber so entitlement-gated features
+/// (exports, DXF overlays, extra projects/members) are unlocked in tests.
+async fn set_paid(pool: &PgPool, org_id: Uuid) {
+    sqlx::query("UPDATE orgs SET subscription_status = 'active' WHERE id = $1")
+        .bind(org_id)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
 fn admin_ctx(user_id: Uuid, org_id: Uuid) -> AuthContext {
     AuthContext {
         user_id,
@@ -210,9 +220,12 @@ async fn login_is_rate_limited(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn cross_org_isolation_comprehensive(pool: PgPool) {
-    let schema = schema(pool);
+    let schema = schema(pool.clone());
     let (a_admin, a_org, _) = signup(&schema, "a@example.com", "Org A").await;
     let (b_admin, b_org, _) = signup(&schema, "b@example.com", "Org B").await;
+    // Both paid so the cross-org checks (not entitlement gates) are what fire.
+    set_paid(&pool, a_org).await;
+    set_paid(&pool, b_org).await;
     let a = admin_ctx(a_admin, a_org);
     let b = admin_ctx(b_admin, b_org);
 
@@ -780,6 +793,21 @@ async fn exec_ok_vars(
     serde_json::to_value(resp.data).unwrap()
 }
 
+/// Like `exec_ok_vars`, but expects a GraphQL error and returns its message.
+async fn exec_err_vars(
+    schema: &ApiSchema,
+    query: &str,
+    vars: serde_json::Value,
+    auth: AuthContext,
+) -> String {
+    let req = async_graphql::Request::new(query)
+        .variables(async_graphql::Variables::from_json(vars))
+        .data(auth);
+    let resp = schema.execute(req).await;
+    assert!(!resp.errors.is_empty(), "expected an error, got none");
+    resp.errors[0].message.clone()
+}
+
 #[sqlx::test(migrations = "./migrations")]
 async fn default_categories_seeded_on_signup(pool: PgPool) {
     let schema = schema(pool);
@@ -1030,8 +1058,9 @@ async fn scene_data_projects_to_geographic(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn dxf_overlay_upload_georef_delete(pool: PgPool) {
-    let schema = schema(pool);
+    let schema = schema(pool.clone());
     let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    set_paid(&pool, org).await; // DXF overlays are a Crew feature
     let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
 
     let dxf = "0\nSECTION\n2\nENTITIES\n0\nLINE\n8\nWALLS\n10\n0\n20\n0\n11\n10\n21\n10\n0\nENDSEC\n0\nEOF\n";
@@ -1098,8 +1127,9 @@ async fn dxf_overlay_upload_georef_delete(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn export_points_csv_and_landxml(pool: PgPool) {
-    let schema = schema(pool);
+    let schema = schema(pool.clone());
     let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    set_paid(&pool, org).await; // exporting is a Crew feature
     let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
 
     // Import two points in meters.
@@ -1564,8 +1594,9 @@ async fn convert_ground_uses_combined_scale_factor(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn export_respects_columns_space_and_category_filter(pool: PgPool) {
-    let schema = schema(pool);
+    let schema = schema(pool.clone());
     let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    set_paid(&pool, org).await; // exporting is a Crew feature
     let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
     let imp = r#"mutation ($id: UUID!, $c: String!, $m: CsvMappingInput!) {
         importPoints(projectId: $id, format: CSV, content: $c, unit: METER, mapping: $m) { rowCount } }"#;
@@ -1774,6 +1805,7 @@ async fn delete_project_purges_db_rows_and_uploaded_files(pool: PgPool) {
     let schema = build_schema(pool.clone(), config, storage.clone());
 
     let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    set_paid(&pool, org).await; // uploads a DXF (a Crew feature) below
     let auth = admin_ctx(admin, org);
     let pid = create_project(&schema, auth.clone(), "Site").await;
 
@@ -2123,4 +2155,161 @@ async fn add_survey_point_grid_uses_the_solved_transform(pool: PgPool) {
     let data = exec_ok(&schema, &q, Some(admin_ctx(admin, org))).await;
     assert!((data["addSurveyPoint"]["easting"].as_f64().unwrap() - 110.0).abs() < 1e-6);
     assert!((data["addSurveyPoint"]["northing"].as_f64().unwrap() - 220.0).abs() < 1e-6);
+}
+
+// ---------------------------------------------------------------------------
+// Billing entitlements: Solo (free) caps vs Crew (paid) unlocks
+// ---------------------------------------------------------------------------
+
+#[sqlx::test(migrations = "./migrations")]
+async fn free_tier_blocks_crew_features(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (admin, org, _) = signup(&schema, "a@example.com", "Solo Co").await;
+    let auth = admin_ctx(admin, org);
+
+    // First project is allowed on the Solo plan.
+    let pid = create_project(&schema, auth.clone(), "Site 1").await;
+
+    // A second project is blocked (Solo cap = 1 project).
+    let second = r#"mutation { createProject(name: "Site 2", epsgCode: 2229, displayUnit: US_SURVEY_FOOT) { id } }"#;
+    let msg = exec_err(&schema, second, Some(auth.clone())).await;
+    assert!(
+        msg.contains("Solo plan is limited to 1 project"),
+        "got: {msg}"
+    );
+
+    // Exporting is blocked.
+    let export = format!(
+        r#"{{ exportPoints(projectId: "{pid}", format: CSV, space: PROJECTED_GRID, unit: METER) }}"#
+    );
+    let msg = exec_err(&schema, &export, Some(auth.clone())).await;
+    assert!(msg.contains("Crew feature"), "export not gated: {msg}");
+
+    // DXF upload is blocked.
+    let dxf = "0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n";
+    let up = r#"mutation ($id: UUID!, $c: String!) {
+        uploadDxf(projectId: $id, filename: "p.dxf", content: $c) { id } }"#;
+    let msg = exec_err_vars(
+        &schema,
+        up,
+        serde_json::json!({ "id": pid, "c": dxf }),
+        auth.clone(),
+    )
+    .await;
+    assert!(msg.contains("Crew feature"), "dxf upload not gated: {msg}");
+
+    // Viewing overlays is also a Crew feature.
+    let view = format!(r#"{{ cadOverlays(projectId: "{pid}") {{ id }} }}"#);
+    let msg = exec_err(&schema, &view, Some(auth)).await;
+    assert!(
+        msg.contains("Crew feature"),
+        "overlay view not gated: {msg}"
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn free_tier_member_caps_enforced(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "admin@example.com", "Solo Co").await;
+    let auth = admin_ctx(admin, org);
+
+    // Five non-admin members are allowed.
+    for i in 0..5 {
+        let q = format!(
+            r#"mutation {{ inviteUser(email: "m{i}@example.com", role: SURVEYOR) {{ user {{ id }} }} }}"#
+        );
+        exec_ok(&schema, &q, Some(auth.clone())).await;
+    }
+    // The sixth member is blocked.
+    let sixth =
+        r#"mutation { inviteUser(email: "m6@example.com", role: SURVEYOR) { user { id } } }"#;
+    let msg = exec_err(&schema, sixth, Some(auth.clone())).await;
+    assert!(msg.contains("up to 5 members"), "got: {msg}");
+
+    // A second admin is blocked (Solo allows 1).
+    let admin2 =
+        r#"mutation { inviteUser(email: "admin2@example.com", role: ADMIN) { user { id } } }"#;
+    let msg = exec_err(&schema, admin2, Some(auth)).await;
+    assert!(msg.contains("allows 1 admin"), "got: {msg}");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn paid_org_unlocks_crew_features(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (admin, org, _) = signup(&schema, "a@example.com", "Crew Co").await;
+    set_paid(&pool, org).await;
+    let auth = admin_ctx(admin, org);
+
+    // Multiple projects + export are allowed once paid.
+    create_project(&schema, auth.clone(), "Site 1").await;
+    let pid = create_project(&schema, auth.clone(), "Site 2").await;
+    let export = format!(
+        r#"{{ exportPoints(projectId: "{pid}", format: CSV, space: PROJECTED_GRID, unit: METER) }}"#
+    );
+    exec_ok(&schema, &export, Some(auth)).await;
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn billing_query_reflects_plan(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (admin, org, _) = signup(&schema, "a@example.com", "Co").await;
+    let auth = admin_ctx(admin, org);
+
+    let q = r#"{ billing { plan canExport restricted maxProjects maxNonAdmin projects admins } }"#;
+    let data = exec_ok(&schema, q, Some(auth.clone())).await;
+    assert_eq!(data["billing"]["plan"], Json::String("solo".into()));
+    assert_eq!(data["billing"]["canExport"], Json::Bool(false));
+    assert_eq!(data["billing"]["restricted"], Json::Bool(false));
+    assert_eq!(data["billing"]["maxProjects"].as_i64().unwrap(), 1);
+    assert_eq!(data["billing"]["maxNonAdmin"].as_i64().unwrap(), 5);
+    assert_eq!(data["billing"]["admins"].as_i64().unwrap(), 1);
+
+    set_paid(&pool, org).await;
+    let data = exec_ok(&schema, q, Some(auth)).await;
+    assert_eq!(data["billing"]["plan"], Json::String("crew".into()));
+    assert_eq!(data["billing"]["canExport"], Json::Bool(true));
+    assert_eq!(data["billing"]["maxProjects"].as_i64().unwrap(), -1);
+    assert_eq!(data["billing"]["maxNonAdmin"].as_i64().unwrap(), -1);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn lapsed_subscription_is_read_only(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (admin, org, _) = signup(&schema, "a@example.com", "Co").await;
+    let auth = admin_ctx(admin, org);
+
+    // While paid, build two projects (over the Solo cap).
+    set_paid(&pool, org).await;
+    create_project(&schema, auth.clone(), "Site 1").await;
+    let pid = create_project(&schema, auth.clone(), "Site 2").await;
+
+    // Subscription lapses: now over the caps AND unpaid => read-only.
+    sqlx::query("UPDATE orgs SET subscription_status = 'canceled' WHERE id = $1")
+        .bind(org)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // The billing query reports the restricted state.
+    let data = exec_ok(
+        &schema,
+        r#"{ billing { plan restricted } }"#,
+        Some(auth.clone()),
+    )
+    .await;
+    assert_eq!(data["billing"]["plan"], Json::String("solo".into()));
+    assert_eq!(data["billing"]["restricted"], Json::Bool(true));
+
+    // Reads still work...
+    exec_ok(
+        &schema,
+        &format!(r#"{{ project(id: "{pid}") {{ id }} }}"#),
+        Some(auth.clone()),
+    )
+    .await;
+
+    // ...but edits are blocked.
+    let edit = format!(r#"mutation {{ updateProject(id: "{pid}", name: "x") {{ id }} }}"#);
+    let msg = exec_err(&schema, &edit, Some(auth)).await;
+    assert!(msg.contains("read-only"), "got: {msg}");
 }

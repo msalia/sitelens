@@ -175,7 +175,7 @@ impl PointsMutation {
         color: String,
         icon: String,
     ) -> Result<PointCategory> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
         if name.trim().is_empty() {
             return Err(async_graphql::Error::new("category name is required"));
         }
@@ -194,7 +194,7 @@ impl PointsMutation {
 
     /// Deletes a custom (non-default) category. Points in it are uncategorized.
     async fn delete_category(&self, ctx: &Context<'_>, id: Uuid) -> Result<bool> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
         let pool = pool(ctx)?;
         let row: Option<(bool,)> =
             sqlx::query_as("SELECT is_default FROM point_categories WHERE id = $1 AND org_id = $2")
@@ -241,7 +241,7 @@ impl PointsMutation {
         category_id: Option<Uuid>,
         save_profile_name: Option<String>,
     ) -> Result<ImportBatch> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
         let pool = pool(ctx)?;
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
 
@@ -364,7 +364,7 @@ impl PointsMutation {
         tags: Option<Vec<String>>,
         unit: LengthUnit,
     ) -> Result<SurveyPoint> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
         let pool = pool(ctx)?;
         if label.trim().is_empty() {
             return Err(async_graphql::Error::new("point label is required"));
@@ -422,7 +422,7 @@ impl PointsMutation {
         category_id: Option<Uuid>,
         tags: Option<Vec<String>>,
     ) -> Result<SurveyPoint> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
         let point: Option<SurveyPoint> = sqlx::query_as(&format!(
             "UPDATE survey_points sp SET \
                label = COALESCE($2, sp.label), \
@@ -449,7 +449,7 @@ impl PointsMutation {
 
     /// Deletes a surveyed point. Editor role required.
     async fn delete_survey_point(&self, ctx: &Context<'_>, id: Uuid) -> Result<bool> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
         let row: Option<(Uuid,)> = sqlx::query_as(
             "DELETE FROM survey_points sp USING projects p \
              WHERE sp.id = $1 AND sp.project_id = p.id AND p.org_id = $2 \
@@ -467,7 +467,7 @@ impl PointsMutation {
     /// Bulk-deletes surveyed points (org-scoped). Returns how many were deleted.
     /// Editor role required.
     async fn delete_survey_points(&self, ctx: &Context<'_>, ids: Vec<Uuid>) -> Result<i64> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
         let rows: Vec<(Uuid,)> = sqlx::query_as(
             "DELETE FROM survey_points sp USING projects p \
              WHERE sp.id = ANY($1) AND sp.project_id = p.id AND p.org_id = $2 \
@@ -489,7 +489,7 @@ impl PointsMutation {
         ids: Vec<Uuid>,
         category_id: Option<Uuid>,
     ) -> Result<i64> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
         let rows: Vec<(Uuid,)> = sqlx::query_as(
             "UPDATE survey_points sp SET category_id = $3 FROM projects p \
              WHERE sp.id = ANY($1) AND sp.project_id = p.id AND p.org_id = $2 \
@@ -514,7 +514,7 @@ impl PointsMutation {
         name: String,
         member_ids: Vec<Uuid>,
     ) -> Result<PointGroup> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
         let pool = pool(ctx)?;
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
         if name.trim().is_empty() {
@@ -535,7 +535,7 @@ impl PointsMutation {
 
     /// Deletes a point group. Editor role required.
     async fn delete_point_group(&self, ctx: &Context<'_>, id: Uuid) -> Result<bool> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
         let row: Option<(Uuid,)> = sqlx::query_as(
             "DELETE FROM point_groups pg USING projects p \
              WHERE pg.id = $1 AND pg.project_id = p.id AND p.org_id = $2 \
@@ -557,7 +557,7 @@ impl PointsMutation {
         group_id: Uuid,
         member_ids: Vec<Uuid>,
     ) -> Result<PointGroup> {
-        let auth = require_editor(ctx)?;
+        let auth = require_editor_active(ctx).await?;
         if member_ids.is_empty() {
             return Err(async_graphql::Error::new("no points to add"));
         }

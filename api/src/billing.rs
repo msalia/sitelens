@@ -158,6 +158,67 @@ pub async fn create_portal_session(
         .ok_or_else(|| "Stripe returned no portal url".to_string())
 }
 
+// Solo (free) tier caps. Crew (paid) is unlimited.
+pub const FREE_MAX_PROJECTS: i64 = 1;
+pub const FREE_MAX_ADMINS: i64 = 1;
+pub const FREE_MAX_NON_ADMIN: i64 = 5;
+
+/// An org's billing posture: subscription status + current usage, with the
+/// derived plan/entitlement helpers the resolvers gate on.
+pub struct OrgBilling {
+    pub status: Option<String>,
+    pub current_period_end: Option<DateTime<Utc>>,
+    pub cancel_at_period_end: bool,
+    pub projects: i64,
+    pub admins: i64,
+    pub non_admin: i64,
+}
+
+impl OrgBilling {
+    /// Paid access — active/trialing, or past_due (Stripe is still dunning).
+    pub fn paid(&self) -> bool {
+        matches!(
+            self.status.as_deref(),
+            Some("active" | "trialing" | "past_due")
+        )
+    }
+
+    /// Read-only lock: a non-paid org whose usage exceeds the Solo caps (e.g. a
+    /// lapsed Crew org). Fresh free orgs within the caps are NOT restricted.
+    pub fn restricted(&self) -> bool {
+        !self.paid()
+            && (self.projects > FREE_MAX_PROJECTS
+                || self.admins > FREE_MAX_ADMINS
+                || self.non_admin > FREE_MAX_NON_ADMIN)
+    }
+
+    pub fn can_export(&self) -> bool {
+        self.paid()
+    }
+}
+
+/// Loads an org's subscription status + usage counts in one round-trip.
+pub async fn org_billing(pool: &PgPool, org_id: Uuid) -> Result<OrgBilling, sqlx::Error> {
+    let row: (Option<String>, Option<DateTime<Utc>>, bool, i64, i64, i64) = sqlx::query_as(
+        "SELECT o.subscription_status, o.current_period_end, o.cancel_at_period_end, \
+         (SELECT count(*) FROM projects p WHERE p.org_id = o.id), \
+         (SELECT count(*) FROM users u WHERE u.org_id = o.id AND u.role = 'admin'), \
+         (SELECT count(*) FROM users u WHERE u.org_id = o.id AND u.role <> 'admin') \
+         FROM orgs o WHERE o.id = $1",
+    )
+    .bind(org_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(OrgBilling {
+        status: row.0,
+        current_period_end: row.1,
+        cancel_at_period_end: row.2,
+        projects: row.3,
+        admins: row.4,
+        non_admin: row.5,
+    })
+}
+
 /// Verifies a Stripe webhook signature (`Stripe-Signature: t=…,v1=…`): HMAC-SHA256
 /// over `"{t}.{payload}"`, constant-time compared, within the replay tolerance.
 pub fn verify_signature(secret: &str, payload: &[u8], header: &str) -> Result<(), String> {

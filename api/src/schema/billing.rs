@@ -1,3 +1,5 @@
+use async_graphql::SimpleObject;
+
 use super::*;
 use crate::billing::{self, StripeConfig};
 
@@ -6,6 +8,54 @@ use crate::billing::{self, StripeConfig};
 pub enum BillingInterval {
     Monthly,
     Annual,
+}
+
+/// The org's billing posture for the client: plan, status, usage, and limits
+/// (`-1` = unlimited). Drives the upgrade gate, caps, and the Billing settings page.
+#[derive(SimpleObject)]
+pub struct BillingInfo {
+    /// "solo" (free) or "crew" (paid).
+    pub plan: String,
+    pub status: Option<String>,
+    pub current_period_end: Option<chrono::DateTime<chrono::Utc>>,
+    pub cancel_at_period_end: bool,
+    /// Read-only lock (lapsed sub over the Solo caps).
+    pub restricted: bool,
+    pub can_export: bool,
+    pub projects: i64,
+    pub admins: i64,
+    pub non_admin: i64,
+    pub max_projects: i64,
+    pub max_admins: i64,
+    pub max_non_admin: i64,
+}
+
+#[derive(Default)]
+pub struct BillingQuery;
+
+#[Object]
+impl BillingQuery {
+    /// The caller org's plan, subscription status, usage, and limits.
+    async fn billing(&self, ctx: &Context<'_>) -> Result<BillingInfo> {
+        let auth = require_auth(ctx)?;
+        let b = billing::org_billing(pool(ctx)?, auth.org_id).await?;
+        let paid = b.paid();
+        let lim = |free: i64| if paid { -1 } else { free };
+        Ok(BillingInfo {
+            plan: if paid { "crew" } else { "solo" }.to_string(),
+            status: b.status.clone(),
+            current_period_end: b.current_period_end,
+            cancel_at_period_end: b.cancel_at_period_end,
+            restricted: b.restricted(),
+            can_export: b.can_export(),
+            projects: b.projects,
+            admins: b.admins,
+            non_admin: b.non_admin,
+            max_projects: lim(billing::FREE_MAX_PROJECTS),
+            max_admins: lim(billing::FREE_MAX_ADMINS),
+            max_non_admin: lim(billing::FREE_MAX_NON_ADMIN),
+        })
+    }
 }
 
 #[derive(Default)]

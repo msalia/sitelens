@@ -64,6 +64,7 @@ impl CoordsQuery {
         category_id: Option<Uuid>,
     ) -> Result<String> {
         let auth = require_auth(ctx)?;
+        require_export(ctx).await?;
         let pool = pool(ctx)?;
         let ProjectCrs {
             epsg,

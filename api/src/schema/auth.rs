@@ -275,6 +275,7 @@ impl AuthMutation {
         role: Role,
     ) -> Result<InviteResult> {
         let auth = require_admin(ctx)?;
+        require_member_quota(ctx, role == Role::Admin).await?;
         let email = normalize_email(&email);
         if email.is_empty() || !email.contains('@') {
             return Err(async_graphql::Error::new("a valid email is required"));
@@ -348,6 +349,10 @@ impl AuthMutation {
     /// Changes a user's role within the caller's organization. Admin only.
     async fn update_user_role(&self, ctx: &Context<'_>, user_id: Uuid, role: Role) -> Result<User> {
         let auth = require_admin(ctx)?;
+        // Promoting to admin past the Solo cap requires Crew.
+        if role == Role::Admin {
+            require_member_quota(ctx, true).await?;
+        }
         let pool = pool(ctx)?;
         // Never demote the org's last admin.
         if role != Role::Admin && is_last_admin(pool, auth.org_id, user_id).await? {

@@ -193,6 +193,75 @@ fn require_editor<'a>(ctx: &'a Context) -> Result<&'a AuthContext> {
     Ok(auth)
 }
 
+/// Like [`require_editor`], but also blocks every data mutation when the org is in
+/// the read-only (restricted) billing state — a lapsed subscription over the Solo
+/// caps. Used by all data-editing resolvers; billing mutations intentionally don't
+/// call it (so a restricted org can still upgrade).
+async fn require_editor_active<'a>(ctx: &'a Context<'a>) -> Result<&'a AuthContext> {
+    let auth = require_editor(ctx)?;
+    if crate::billing::org_billing(pool(ctx)?, auth.org_id)
+        .await?
+        .restricted()
+    {
+        return Err(async_graphql::Error::new(
+            "Your organization is read-only — its subscription has lapsed. Upgrade to Crew to make changes.",
+        ));
+    }
+    Ok(auth)
+}
+
+/// Blocks a Crew-only feature unless the org is on a paid plan.
+async fn require_paid(ctx: &Context<'_>, feature: &str) -> Result<()> {
+    let auth = require_auth(ctx)?;
+    if !crate::billing::org_billing(pool(ctx)?, auth.org_id)
+        .await?
+        .paid()
+    {
+        return Err(async_graphql::Error::new(format!(
+            "{feature} is a Crew feature. Upgrade to use it."
+        )));
+    }
+    Ok(())
+}
+
+/// Blocks exports unless the org is on a paid plan (Solo has no export).
+async fn require_export(ctx: &Context<'_>) -> Result<()> {
+    require_paid(ctx, "Exporting points").await
+}
+
+/// Blocks creating another project once a free org is at the Solo project cap.
+async fn require_project_quota(ctx: &Context<'_>) -> Result<()> {
+    let auth = require_auth(ctx)?;
+    let b = crate::billing::org_billing(pool(ctx)?, auth.org_id).await?;
+    if !b.paid() && b.projects >= crate::billing::FREE_MAX_PROJECTS {
+        return Err(async_graphql::Error::new(
+            "The Solo plan is limited to 1 project. Upgrade to Crew for unlimited projects.",
+        ));
+    }
+    Ok(())
+}
+
+/// Blocks adding a member/admin beyond the Solo caps. `new_admin` = the user being
+/// added/promoted will be an admin.
+async fn require_member_quota(ctx: &Context<'_>, new_admin: bool) -> Result<()> {
+    let auth = require_auth(ctx)?;
+    let b = crate::billing::org_billing(pool(ctx)?, auth.org_id).await?;
+    if b.paid() {
+        return Ok(());
+    }
+    if new_admin && b.admins >= crate::billing::FREE_MAX_ADMINS {
+        return Err(async_graphql::Error::new(
+            "The Solo plan allows 1 admin. Upgrade to Crew for more.",
+        ));
+    }
+    if !new_admin && b.non_admin >= crate::billing::FREE_MAX_NON_ADMIN {
+        return Err(async_graphql::Error::new(
+            "The Solo plan allows up to 5 members. Upgrade to Crew for unlimited members.",
+        ));
+    }
+    Ok(())
+}
+
 /// Notifies live scene subscribers that the project changed. Best-effort: a
 /// missing hub (e.g. in a minimal test schema) is silently ignored.
 fn publish_scene(ctx: &Context<'_>, project_id: Uuid) {
@@ -395,6 +464,7 @@ pub struct QueryRoot(
     terrain::TerrainQuery,
     coords::CoordsQuery,
     scene::SceneQuery,
+    billing::BillingQuery,
 );
 
 /// The GraphQL mutation root — a merge of the per-domain mutation objects.

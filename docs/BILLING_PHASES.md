@@ -7,7 +7,7 @@
 | Phase | Focus | Status |
 | ----- | ----- | ------ |
 | 1 | Billing state + Stripe client + Checkout/Portal + webhook | ✅ Done |
-| 2 | Entitlements + enforcement guards | Not started |
+| 2 | Entitlements + enforcement guards | ✅ Done |
 | 3 | Frontend: billing page, upgrade gate + prompts | Not started |
 | 4 | Subprocessors/legal + tests | Not started |
 
@@ -35,18 +35,24 @@
 columns reflect the subscription via the webhook. *(Manual Checkout verification pending
 the webhook secret; full suite of 50 integration tests passes with the migration.)*
 
-## Phase 2 — Entitlements + enforcement
+## Phase 2 — Entitlements + enforcement ✅
 
-- [ ] `org_billing(pool, org_id)` → status, derived plan, usage counts, `restricted`,
-      `can_export`, limits.
-- [ ] Guards in `schema/mod.rs`: `require_not_restricted`, `require_project_quota`,
-      `require_member_quota`, `require_admin_quota`, `require_export`.
-- [ ] Apply: project create; user invite + role change (admin/member caps); `export_points`;
-      and `require_not_restricted` across editor mutations.
-- [ ] `billing` query exposing the above for the client.
+- [x] `org_billing(pool, org_id)` → status, `paid`/`restricted`/`can_export`, usage counts
+      (one round-trip with subselect counts); Solo caps as consts.
+- [x] Guards in `schema/mod.rs`: `require_editor_active` (read-only lock),
+      `require_paid`/`require_export`, `require_project_quota`, `require_member_quota`.
+- [x] Applied: editor mutations across terrain/points/grid/projects/overlays use
+      `require_editor_active`; project create/import → quota; invite + promote-to-admin →
+      member/admin caps; `export_points` → export gate.
+- [x] DXF made Crew-only: `require_paid` on `cadOverlays`, `cadOverlayContent`, `uploadDxf`,
+      `setCadGeoreference`, `deleteCadOverlay` (upload **and** viewing).
+- [x] `billing` query → plan, status, period end, cancel flag, `restricted`, `canExport`,
+      usage + limits (`-1` = unlimited).
+- [x] Integration tests: free-tier blocks (2nd project, export, DXF, overlay view), member
+      caps (6th member, 2nd admin), paid unlocks, `billing` query per plan, lapsed → read-only.
 
-**Validates:** free orgs are capped at Solo limits, lapsed orgs go read-only, exports are
-paid-only — all enforced server-side.
+**Validates:** free orgs are capped at Solo limits, lapsed orgs go read-only, exports + DXF are
+paid-only — all enforced server-side. *(55 integration tests pass.)*
 
 ## Phase 3 — Frontend
 
@@ -62,9 +68,8 @@ paid-only — all enforced server-side.
 ## Phase 4 — Legal + tests
 
 - [ ] Add Stripe to `docs/legal/SUBPROCESSORS.md`, `/subprocessors`, privacy policy.
-- [ ] Integration tests: signed webhook events drive billing state; entitlement guards
-      block (over-cap create, restricted mutation, free export) and allow when paid
-      (seeded subscription state — no real charge).
+- [ ] Integration tests: signed webhook events drive billing state (no real charge).
+      *(Entitlement-guard tests landed in Phase 2.)*
 - [ ] e2e: upgrade gate renders for a restricted org; billing page shows plan/CTAs.
 
 **Validates:** compliance updated; enforcement + webhook logic covered without real charges.
