@@ -34,8 +34,10 @@ export function ExportProjectButton({ project }: { project: Project }) {
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
-  const { billing } = useBilling();
-  const gated = !!billing && !billing.canExport;
+  const { billing, loading } = useBilling();
+  // Default to gated until billing confirms the org can export, so a free org
+  // never momentarily sees the real export flow while billing is still loading.
+  const gated = !billing?.canExport;
 
   async function exportProject() {
     setBusy(true);
@@ -67,7 +69,9 @@ export function ExportProjectButton({ project }: { project: Project }) {
               variant="outline"
               size="icon-sm"
               aria-label="Export project"
-              disabled={busy}
+              // Block interaction until billing resolves so the click always
+              // routes to the correct dialog (upgrade vs. export).
+              disabled={busy || loading}
               onClick={() => (gated ? setUpgradeOpen(true) : setOpen(true))}
             >
               <IconDownload className="size-4" />

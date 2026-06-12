@@ -100,7 +100,7 @@ export function ExportDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
-  const { billing } = useBilling();
+  const { billing, loading } = useBilling();
   const [format, setFormat] = useState<ExportFormat>('CSV');
   const [space, setSpace] = useState<ExportSpace>('PROJECTED_GRID');
   const [unit, setUnit] = useState<LengthUnit>(project.displayUnit);
@@ -161,7 +161,9 @@ export function ExportDialog({
     }
   }
 
-  const gated = !!billing && !billing.canExport;
+  // Default to gated until billing confirms the org can export, so a free org
+  // never momentarily sees the real export form while billing is still loading.
+  const gated = !billing?.canExport;
   const triggerEl = trigger ?? (
     <Button size="sm" variant="outline">
       <IconDownload className="mr-1 size-4" /> Export
@@ -170,10 +172,12 @@ export function ExportDialog({
 
   // One stable trigger whose click decides what to open — avoids swapping the
   // element while billing loads (which would drop the click). Exporting is a Crew
-  // feature, so gated orgs get an upgrade prompt instead of the form.
+  // feature, so gated orgs get an upgrade prompt instead of the form. The trigger
+  // is disabled until billing resolves so the click always routes correctly.
   return (
     <>
-      {cloneElement(triggerEl as React.ReactElement<{ onClick?: () => void }>, {
+      {cloneElement(triggerEl as React.ReactElement<{ onClick?: () => void; disabled?: boolean }>, {
+        disabled: loading,
         onClick: () => (gated ? setUpgradeOpen(true) : onOpenChange(true)),
       })}
       <UpgradeDialog

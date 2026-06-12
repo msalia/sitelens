@@ -1,8 +1,11 @@
 'use client';
 
-import { IconPlus, IconTrash } from '@tabler/icons-react';
+import { IconDotsVertical, IconPencil, IconPlus, IconTrash, IconUpload } from '@tabler/icons-react';
 import { useState } from 'react';
 
+import { ConfirmDialog } from '@/components/projects/confirm-dialog';
+import { GridAxisDialog } from '@/components/projects/grid-axis-dialog';
+import { GridImportDialog } from '@/components/projects/grid-import-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -12,16 +15,12 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Table,
   TableBody,
@@ -32,7 +31,7 @@ import {
 } from '@/components/ui/table';
 import { graphql } from '@/lib/gql';
 import { gql, useMutation } from '@/lib/graphql';
-import { type GridAxis, type GridFamily, type Project } from '@/lib/types';
+import { type GridAxis, type Project } from '@/lib/types';
 import { fromMeters, unitName } from '@/lib/units';
 
 const SET_GRID_AXES = graphql(`
@@ -43,7 +42,10 @@ const SET_GRID_AXES = graphql(`
   }
 `);
 
-type AxisDraft = { family: GridFamily; label: string; position: string };
+const FAMILY_LABELS: Record<GridAxis['family'], string> = {
+  LETTERED: 'Lettered',
+  NUMBERED: 'Numbered',
+};
 
 export function GridEditor({
   axes,
@@ -55,40 +57,40 @@ export function GridEditor({
   onSaved: () => void;
 }) {
   const unitLabel = unitName(project.displayUnit);
-  const [draft, setDraft] = useState<AxisDraft[]>([]);
-  const { busy, run } = useMutation();
+  // The same dialog handles add (axis === null) and edit (axis set).
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<GridAxis | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<GridAxis | null>(null);
+  const { run } = useMutation();
 
-  // Rebuild the editable draft from the saved axes whenever they (or the display
-  // unit) change. Done during render rather than in an effect.
-  const [synced, setSynced] = useState<{ axes: GridAxis[]; unit: string } | null>(null);
-  if (synced?.axes !== axes || synced.unit !== project.displayUnit) {
-    setSynced({ axes, unit: project.displayUnit });
-    setDraft(
-      axes.map((a) => ({
-        family: a.family,
-        label: a.label,
-        position: fromMeters(a.position, project.displayUnit).toFixed(4),
-      })),
-    );
+  function openAdd() {
+    setEditing(null);
+    setDialogOpen(true);
   }
 
-  function update(i: number, patch: Partial<AxisDraft>) {
-    setDraft((d) => d.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
+  function openEdit(a: GridAxis) {
+    setEditing(a);
+    setDialogOpen(true);
   }
 
-  async function save() {
+  // The API only exposes the bulk `setGridAxes` mutation, so deleting rebuilds
+  // the full list (in display units) without the removed axis.
+  async function remove(id: string) {
+    const unit = project.displayUnit;
     await run(
       () =>
         gql(SET_GRID_AXES, {
-          axes: draft.map((r) => ({
-            family: r.family,
-            label: r.label,
-            position: parseFloat(r.position) || 0,
-          })),
+          axes: axes
+            .filter((a) => a.id !== id)
+            .map((a) => ({
+              family: a.family,
+              label: a.label,
+              position: fromMeters(a.position, unit),
+            })),
           id: project.id,
-          unit: project.displayUnit,
+          unit,
         }),
-      { error: 'Save failed', onDone: onSaved, success: 'Grid saved' },
+      { error: 'Delete failed', onDone: onSaved, success: 'Axis deleted' },
     );
   }
 
@@ -100,66 +102,48 @@ export function GridEditor({
           Lettered and numbered axes with their offsets, in {unitLabel}.
         </CardDescription>
       </CardHeader>
-      {/* `-mb` collapses the gap so the table sits flush against the footer. */}
-      <CardContent className="-mb-(--card-spacing) flex flex-col gap-4">
-        {/* Full-bleed table: the top border frames it; the footer's border-t
-            closes the bottom. First/last cells keep the card padding. */}
-        <div className="-mx-(--card-spacing) border-t [&_[data-slot=table-container]]:overscroll-x-none [&_td:first-child]:pl-(--card-spacing) [&_td:last-child]:pr-(--card-spacing) [&_th:first-child]:pl-(--card-spacing) [&_th:last-child]:pr-(--card-spacing)">
+
+      <CardContent>
+        {/* Full-bleed table: dividers span the card edges; first/last cells
+            keep the card's horizontal padding so text aligns with the header. */}
+        <div className="-mx-(--card-spacing) border-y [&_[data-slot=table-container]]:overscroll-x-none [&_td:first-child]:pl-(--card-spacing) [&_td:last-child]:pr-(--card-spacing) [&_th:first-child]:pl-(--card-spacing) [&_th:last-child]:pr-(--card-spacing)">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted">
+                <TableHead className="w-12" />
                 <TableHead>Family</TableHead>
                 <TableHead>Label</TableHead>
                 <TableHead>Position</TableHead>
-                <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {draft.map((row, i) => (
-                <TableRow key={i}>
-                  <TableCell>
-                    <Select
-                      value={row.family}
-                      onValueChange={(v) => update(i, { family: v as GridFamily })}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectLabel>Axis type</SelectLabel>
-                          <SelectItem value="LETTERED">Lettered</SelectItem>
-                          <SelectItem value="NUMBERED">Numbered</SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
+              {axes.map((a) => (
+                <TableRow key={a.id}>
+                  <TableCell className="w-12">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button variant="ghost" size="icon-sm" aria-label="Axis actions">
+                            <IconDotsVertical className="size-4" />
+                          </Button>
+                        }
+                      />
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuItem onClick={() => openEdit(a)}>
+                          <IconPencil className="size-4" /> Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem variant="destructive" onClick={() => setPendingDelete(a)}>
+                          <IconTrash className="size-4" /> Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
-                  <TableCell>
-                    <Input
-                      value={row.label}
-                      onChange={(e) => update(i, { label: e.target.value })}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      type="number"
-                      value={row.position}
-                      onChange={(e) => update(i, { position: e.target.value })}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="Remove axis"
-                      onClick={() => setDraft((d) => d.filter((_, idx) => idx !== i))}
-                    >
-                      <IconTrash className="size-4" />
-                    </Button>
-                  </TableCell>
+                  <TableCell>{FAMILY_LABELS[a.family]}</TableCell>
+                  <TableCell className="font-medium">{a.label}</TableCell>
+                  <TableCell>{fromMeters(a.position, project.displayUnit).toFixed(3)}</TableCell>
                 </TableRow>
               ))}
-              {draft.length === 0 && (
+              {axes.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={4} className="text-muted-foreground text-center text-sm">
                     No axes yet.
@@ -170,17 +154,53 @@ export function GridEditor({
           </Table>
         </div>
       </CardContent>
-      <CardFooter className="justify-between">
-        <Button
-          variant="outline"
-          onClick={() => setDraft((d) => [...d, { family: 'LETTERED', label: '', position: '0' }])}
-        >
+
+      <CardFooter className="gap-2">
+        <GridImportDialog
+          project={project}
+          axes={axes}
+          onImported={onSaved}
+          trigger={
+            <Button variant="outline">
+              <IconUpload className="mr-1 size-4" /> Import
+            </Button>
+          }
+        />
+        <Button className="flex-1" onClick={openAdd}>
           <IconPlus className="mr-1 size-4" /> Add axis
         </Button>
-        <Button onClick={save} disabled={busy}>
-          {busy ? 'Saving…' : 'Save grid'}
-        </Button>
       </CardFooter>
+
+      <GridAxisDialog
+        project={project}
+        axes={axes}
+        axis={editing}
+        open={dialogOpen}
+        onOpenChange={(o) => {
+          setDialogOpen(o);
+          if (!o) {
+            setEditing(null);
+          }
+        }}
+        onSaved={() => {
+          setDialogOpen(false);
+          setEditing(null);
+          onSaved();
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(o) => !o && setPendingDelete(null)}
+        title={pendingDelete ? `Delete axis ${pendingDelete.label}?` : 'Delete axis?'}
+        description="This grid axis will be removed. This can’t be undone."
+        onConfirm={() => {
+          if (pendingDelete) {
+            void remove(pendingDelete.id);
+          }
+          setPendingDelete(null);
+        }}
+      />
     </Card>
   );
 }

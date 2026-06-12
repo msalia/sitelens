@@ -39,6 +39,24 @@ test('server-side search filters the table', async ({ page }) => {
   await expect(page.getByText('MON1', { exact: true })).toBeHidden();
 });
 
+test('edit a point from the row dropdown', async ({ page }) => {
+  await signUpAndLogin(page, 'sp-edit');
+  await createProjectAndOpen(page, 'SP Edit');
+  await importCsv(page, CSV);
+
+  await page.getByRole('button', { name: 'Point actions' }).first().click();
+  await page.getByRole('menuitem', { name: 'Edit' }).click();
+  await expect(page.getByRole('heading', { name: 'Edit point' })).toBeVisible();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('#esp-label').fill('RENAMED');
+  await dialog.locator('#esp-description').fill('updated note');
+  await dialog.getByRole('button', { name: 'Save changes' }).click();
+  await expect(dialog).toBeHidden();
+
+  await expect(page.getByText('RENAMED', { exact: true })).toBeVisible();
+  await expect(page.getByText('updated note', { exact: true })).toBeVisible();
+});
+
 test('delete a point from the row dropdown with confirmation', async ({ page }) => {
   await signUpAndLogin(page, 'sp-del');
   await createProjectAndOpen(page, 'SP Del');

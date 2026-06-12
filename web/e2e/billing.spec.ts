@@ -58,6 +58,9 @@ test.describe('Solo (free) tier', () => {
     await expect(dialog.getByRole('link', { name: 'See plans' })).toBeVisible();
   });
 
+  // Export/overlays triggers stay disabled until billing resolves, so Playwright
+  // auto-waits for "enabled" before clicking — the free tier always gets the
+  // upsell, never the real form, with no manual billing wait needed.
   test('point export is gated behind Crew', async ({ page }) => {
     await signUpAndLogin(page, 'free-export');
     await createProjectAndOpen(page, 'Free Site');
@@ -73,11 +76,14 @@ test.describe('Solo (free) tier', () => {
     await expect(page.getByRole('dialog').getByText('Exporting is a Crew feature')).toBeVisible();
   });
 
-  test('the DXF Overlays tab is hidden', async ({ page }) => {
+  test('the DXF Overlays tab upsells on the free tier', async ({ page }) => {
     await signUpAndLogin(page, 'free-dxf');
     await createProjectAndOpen(page, 'Free DXF');
-    await expect(page.getByRole('button', { exact: true, name: 'Setup' })).toBeVisible();
-    await expect(page.getByRole('button', { exact: true, name: 'Overlays' })).toHaveCount(0);
+    // The tab is shown on the free tier; clicking it opens the upgrade prompt.
+    await page.getByRole('button', { exact: true, name: 'Overlays' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText('DXF overlays are a Crew feature')).toBeVisible();
+    await expect(dialog.getByRole('link', { name: 'See plans' })).toBeVisible();
   });
 });
 

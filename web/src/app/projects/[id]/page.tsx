@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import { UpgradeDialog } from '@/components/billing/upgrade-dialog';
 import { CadOverlayPanel } from '@/components/projects/cad-overlay-panel';
 import { ControlPointsEditor } from '@/components/projects/control-points-editor';
 import { ConverterPanel } from '@/components/projects/converter-panel';
@@ -117,9 +118,13 @@ type Tab = 'setup' | 'control' | 'points' | 'overlays';
 
 export default function ProjectWorkspace() {
   const { id } = useParams<{ id: string }>();
-  const { billing } = useBilling();
-  // DXF overlays are a Crew feature — hide the tab entirely on the free tier.
-  const showOverlays = isPaid(billing);
+  const { billing, loading: billingLoading } = useBilling();
+  // DXF overlays are a Crew feature. We still show the tab on the free tier,
+  // but clicking it opens an upsell dialog instead of switching to the panel.
+  // Default to gated (and disable the tab) until billing resolves, so a free org
+  // never momentarily lands on the panel while billing is still loading.
+  const overlaysGated = !isPaid(billing);
+  const [overlayUpgradeOpen, setOverlayUpgradeOpen] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
   const [axes, setAxes] = useState<GridAxis[]>([]);
   const [points, setPoints] = useState<ControlPoint[]>([]);
@@ -218,7 +223,7 @@ export default function ProjectWorkspace() {
   return (
     <div className="flex h-full min-h-0">
       {/* Detail panel */}
-      <aside className="flex w-[440px] shrink-0 flex-col border-r">
+      <aside className="flex w-[480px] shrink-0 flex-col border-r">
         <header className="border-b px-4 py-3">
           <Link
             href="/projects"
@@ -247,15 +252,20 @@ export default function ProjectWorkspace() {
               ['setup', 'Setup'],
               ['control', 'Grid'],
               ['points', 'Points'],
-              ...(showOverlays ? [['overlays', 'Overlays'] as const] : []),
+              ['overlays', 'Overlays'],
             ] as const
           ).map(([key, label]) => (
             <button
               key={key}
               type="button"
-              onClick={() => setTab(key)}
+              // Hold the Overlays tab inert until billing resolves so the click
+              // routes to the upsell (free) or the panel (Crew), never the wrong one.
+              disabled={key === 'overlays' && billingLoading}
+              onClick={() =>
+                key === 'overlays' && overlaysGated ? setOverlayUpgradeOpen(true) : setTab(key)
+              }
               className={cn(
-                'flex-1 rounded-lg px-3 py-1.5 text-center text-sm font-medium transition-colors',
+                'flex-1 rounded-lg px-3 py-1.5 text-center text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50',
                 tab === key
                   ? 'bg-primary/10 text-primary'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -306,7 +316,7 @@ export default function ProjectWorkspace() {
               </section>
             </>
           )}
-          {tab === 'overlays' && showOverlays && (
+          {tab === 'overlays' && !overlaysGated && (
             <section id="panel-overlays">
               <CadOverlayPanel
                 project={project}
@@ -320,6 +330,13 @@ export default function ProjectWorkspace() {
           )}
         </div>
       </aside>
+
+      <UpgradeDialog
+        open={overlayUpgradeOpen}
+        onOpenChange={setOverlayUpgradeOpen}
+        title="DXF overlays are a Crew feature"
+        description="Upgrade to Crew to overlay DXF drawings in the 3D view."
+      />
 
       {/* Hero — persistent, full-bleed 3D scene. Stats render as an overlay
           inside the viewer (bottom-left), so the scene fills the whole pane. */}

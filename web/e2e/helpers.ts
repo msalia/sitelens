@@ -153,6 +153,24 @@ export async function addControlPoint(
   await expect(page.getByRole('cell', { exact: true, name: point.label })).toBeVisible();
 }
 
+/** Adds a grid axis (Grid tab → Building grid card) via the add/edit dialog. */
+export async function addGridAxis(
+  page: Page,
+  axis: { family: 'Lettered' | 'Numbered'; label: string; position: number },
+): Promise<void> {
+  await gotoTab(page, 'Grid');
+  await page.locator('#panel-grid').getByRole('button', { name: 'Add axis' }).click();
+  const dialog = page.getByRole('dialog');
+  await chooseSelect(page, 'gad-family', axis.family);
+  await dialog.locator('#gad-label').fill(axis.label);
+  await dialog.locator('#gad-position').fill(String(axis.position));
+  await dialog.getByRole('button', { name: 'Add axis' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(
+    page.locator('#panel-grid').getByRole('cell', { exact: true, name: axis.label }),
+  ).toBeVisible();
+}
+
 /**
  * Imports points from pasted CSV (Points tab → "Import points" action row).
  * `unitLabel` is the human label shown in the unit Select (e.g. "Meter").

@@ -62,7 +62,7 @@ export function CreateProjectDialog({
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [form, setForm] = useState(emptyProjectForm());
   const { busy, run } = useMutation();
-  const { billing } = useBilling();
+  const { billing, loading } = useBilling();
 
   // Solo is capped at one project; offer an upgrade instead of the create form.
   const count = projectCount ?? billing?.projects ?? 0;
@@ -80,6 +80,17 @@ export function CreateProjectDialog({
       },
       success: 'Project created',
     });
+  }
+
+  // Until billing resolves the cap is unknown, so hold the button disabled rather
+  // than guess — avoids briefly opening the create form for an at-cap org (or the
+  // upsell for an under-cap one). Playwright likewise waits for it to enable.
+  if (loading) {
+    return (
+      <Button disabled>
+        <IconPlus className="mr-1 size-4" /> New project
+      </Button>
+    );
   }
 
   if (atCap) {

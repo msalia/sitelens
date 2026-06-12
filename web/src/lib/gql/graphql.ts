@@ -437,6 +437,15 @@ export type UpdateProjectMutationVariables = Exact<{
 
 export type UpdateProjectMutation = { updateProject: { id: string } };
 
+export type UpdateSurveyPointMutationVariables = Exact<{
+  id: string;
+  label?: string | null | undefined;
+  description?: string | null | undefined;
+  categoryId?: string | null | undefined;
+}>;
+
+export type UpdateSurveyPointMutation = { updateSurveyPoint: { id: string } };
+
 export type SearchEpsgQueryVariables = Exact<{
   q: string;
   limit?: number | null | undefined;
@@ -1210,6 +1219,21 @@ export const UpdateProjectDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<UpdateProjectMutation, UpdateProjectMutationVariables>;
+export const UpdateSurveyPointDocument = new TypedDocumentString(`
+    mutation UpdateSurveyPoint($id: UUID!, $label: String, $description: String, $categoryId: UUID) {
+  updateSurveyPoint(
+    id: $id
+    label: $label
+    description: $description
+    categoryId: $categoryId
+  ) {
+    id
+  }
+}
+    `) as unknown as TypedDocumentString<
+  UpdateSurveyPointMutation,
+  UpdateSurveyPointMutationVariables
+>;
 export const SearchEpsgDocument = new TypedDocumentString(`
     query SearchEpsg($q: String!, $limit: Int) {
   searchEpsg(query: $q, limit: $limit) {

@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import {
   addControlPoint,
+  addGridAxis,
   createProjectAndOpen,
   gotoTab,
   signUpAndLogin,
@@ -16,7 +17,8 @@ test.beforeEach(async ({ request }) => {
 
 test('workspace shows all tabs, setup alerts, and stat pills', async ({ page }) => {
   const email = await signUpAndLogin(page, 'ws-tabs');
-  // Overlays is a Crew tab — upgrade so all four tabs render.
+  // Overlays is a Crew feature; the tab always renders (free tier gets an upsell
+  // on click). Upgrade here so clicking through to its panel would be allowed.
   upgradeOrg(email);
   await createProjectAndOpen(page, 'Tabs Site');
 
@@ -32,16 +34,15 @@ test('workspace shows all tabs, setup alerts, and stat pills', async ({ page }) 
   await expect(page.getByText('Not tied')).toBeVisible();
 });
 
-test('define and save the building grid', async ({ page }) => {
+test('define the building grid', async ({ page }) => {
   await signUpAndLogin(page, 'ws-grid');
   await createProjectAndOpen(page, 'Grid Site');
-  await gotoTab(page, 'Grid');
-
-  await page.getByRole('button', { name: 'Add axis' }).click();
-  await page.locator('#panel-grid').getByRole('textbox').first().fill('A');
-  await page.locator('#panel-grid').getByRole('spinbutton').first().fill('0');
-  await page.getByRole('button', { name: 'Save grid' }).click();
-  await expect(page.getByText('Grid saved')).toBeVisible();
+  // Axes are added through the add/edit dialog and persist immediately (the
+  // table is read-only with row actions, like control points).
+  await addGridAxis(page, { family: 'Lettered', label: 'A', position: 0 });
+  await expect(
+    page.locator('#panel-grid').getByRole('cell', { exact: true, name: 'A' }),
+  ).toBeVisible();
 });
 
 test('solve the Helmert transform shows residuals', async ({ page }) => {

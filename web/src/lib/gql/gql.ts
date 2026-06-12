@@ -48,6 +48,7 @@ type Documents = {
   '\n  query ConvertCoordinate($id: UUID!, $x: Float!, $y: Float!) {\n    convertCoordinate(projectId: $id, space: PROJECTED, x: $x, y: $y, unit: METER) {\n      gridX\n      gridY\n      projectedGridE\n      projectedGridN\n      projectedGroundE\n      projectedGroundN\n      latitude\n      longitude\n    }\n  }\n': typeof types.ConvertCoordinateDocument;
   '\n  mutation CreateProject(\n    $name: String!\n    $desc: String\n    $epsg: Int!\n    $unit: LengthUnit!\n    $scale: Float\n    $lat: Float\n    $lon: Float\n    $rot: Float\n  ) {\n    createProject(\n      name: $name\n      description: $desc\n      epsgCode: $epsg\n      displayUnit: $unit\n      combinedScaleFactor: $scale\n      siteOriginLat: $lat\n      siteOriginLon: $lon\n      siteOriginRotationDeg: $rot\n    ) {\n      id\n    }\n  }\n': typeof types.CreateProjectDocument;
   '\n  mutation UpdateProject(\n    $id: UUID!\n    $name: String\n    $desc: String\n    $epsg: Int\n    $unit: LengthUnit\n    $scale: Float\n    $lat: Float\n    $lon: Float\n    $rot: Float\n  ) {\n    updateProject(\n      id: $id\n      name: $name\n      description: $desc\n      epsgCode: $epsg\n      displayUnit: $unit\n      combinedScaleFactor: $scale\n      siteOriginLat: $lat\n      siteOriginLon: $lon\n      siteOriginRotationDeg: $rot\n    ) {\n      id\n    }\n  }\n': typeof types.UpdateProjectDocument;
+  '\n  mutation UpdateSurveyPoint($id: UUID!, $label: String, $description: String, $categoryId: UUID) {\n    updateSurveyPoint(id: $id, label: $label, description: $description, categoryId: $categoryId) {\n      id\n    }\n  }\n': typeof types.UpdateSurveyPointDocument;
   '\n  query SearchEpsg($q: String!, $limit: Int) {\n    searchEpsg(query: $q, limit: $limit) {\n      code\n      name\n    }\n  }\n': typeof types.SearchEpsgDocument;
   '\n  query ExportPoints(\n    $id: UUID!\n    $format: ExportFormat!\n    $space: ExportSpace!\n    $unit: LengthUnit!\n    $columns: [ExportColumn!]\n    $pointIds: [UUID!]\n    $categoryId: UUID\n  ) {\n    exportPoints(\n      projectId: $id\n      format: $format\n      space: $space\n      unit: $unit\n      columns: $columns\n      pointIds: $pointIds\n      categoryId: $categoryId\n    )\n  }\n': typeof types.ExportPointsDocument;
   '\n  query ProjectExport($id: UUID!) {\n    projectExport(projectId: $id)\n  }\n': typeof types.ProjectExportDocument;
@@ -149,6 +150,8 @@ const documents: Documents = {
     types.CreateProjectDocument,
   '\n  mutation UpdateProject(\n    $id: UUID!\n    $name: String\n    $desc: String\n    $epsg: Int\n    $unit: LengthUnit\n    $scale: Float\n    $lat: Float\n    $lon: Float\n    $rot: Float\n  ) {\n    updateProject(\n      id: $id\n      name: $name\n      description: $desc\n      epsgCode: $epsg\n      displayUnit: $unit\n      combinedScaleFactor: $scale\n      siteOriginLat: $lat\n      siteOriginLon: $lon\n      siteOriginRotationDeg: $rot\n    ) {\n      id\n    }\n  }\n':
     types.UpdateProjectDocument,
+  '\n  mutation UpdateSurveyPoint($id: UUID!, $label: String, $description: String, $categoryId: UUID) {\n    updateSurveyPoint(id: $id, label: $label, description: $description, categoryId: $categoryId) {\n      id\n    }\n  }\n':
+    types.UpdateSurveyPointDocument,
   '\n  query SearchEpsg($q: String!, $limit: Int) {\n    searchEpsg(query: $q, limit: $limit) {\n      code\n      name\n    }\n  }\n':
     types.SearchEpsgDocument,
   '\n  query ExportPoints(\n    $id: UUID!\n    $format: ExportFormat!\n    $space: ExportSpace!\n    $unit: LengthUnit!\n    $columns: [ExportColumn!]\n    $pointIds: [UUID!]\n    $categoryId: UUID\n  ) {\n    exportPoints(\n      projectId: $id\n      format: $format\n      space: $space\n      unit: $unit\n      columns: $columns\n      pointIds: $pointIds\n      categoryId: $categoryId\n    )\n  }\n':
@@ -423,6 +426,12 @@ export function graphql(
 export function graphql(
   source: '\n  mutation UpdateProject(\n    $id: UUID!\n    $name: String\n    $desc: String\n    $epsg: Int\n    $unit: LengthUnit\n    $scale: Float\n    $lat: Float\n    $lon: Float\n    $rot: Float\n  ) {\n    updateProject(\n      id: $id\n      name: $name\n      description: $desc\n      epsgCode: $epsg\n      displayUnit: $unit\n      combinedScaleFactor: $scale\n      siteOriginLat: $lat\n      siteOriginLon: $lon\n      siteOriginRotationDeg: $rot\n    ) {\n      id\n    }\n  }\n',
 ): typeof import('./graphql').UpdateProjectDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  mutation UpdateSurveyPoint($id: UUID!, $label: String, $description: String, $categoryId: UUID) {\n    updateSurveyPoint(id: $id, label: $label, description: $description, categoryId: $categoryId) {\n      id\n    }\n  }\n',
+): typeof import('./graphql').UpdateSurveyPointDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

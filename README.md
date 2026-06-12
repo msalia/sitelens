@@ -30,9 +30,8 @@ docker compose up --build
 # API:  http://localhost:4000/health
 ```
 
-See [docs/SETUP.md](./docs/SETUP.md) for hybrid dev and tests,
-[docs/SPEC.md](./docs/SPEC.md) for the full specification, and
-[docs/PHASES.md](./docs/PHASES.md) for the implementation roadmap.
+See [docs/SETUP.md](./docs/SETUP.md) for hybrid dev and tests, and
+[docs/SPEC.md](./docs/SPEC.md) for the full product & architecture specification.
 
 ## Features
 
@@ -55,9 +54,8 @@ See [docs/SETUP.md](./docs/SETUP.md) for hybrid dev and tests,
 
 ## Project status
 
-**v1 feature-complete** (Phases 1–10): foundation, auth/tenancy, projects/grid/
-control, the transform, conversion, import, 3D + DXF, export, performance, and
-hardening. Per-phase detail and remaining follow-ups are in
-[docs/PHASES.md](./docs/PHASES.md); performance baselines and budgets in
-[docs/PERFORMANCE.md](./docs/PERFORMANCE.md); key decisions in
-[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
+**v1 feature-complete**: foundation, auth/tenancy, projects/grid/control, the
+transform, conversion, import, 3D + DXF, export, billing, performance, and
+hardening. The full product & architecture spec (including billing) is in
+[docs/SPEC.md](./docs/SPEC.md); performance baselines and budgets in
+[docs/PERFORMANCE.md](./docs/PERFORMANCE.md).

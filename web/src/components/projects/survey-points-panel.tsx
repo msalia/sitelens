@@ -10,6 +10,7 @@ import {
   IconDownload,
   IconMapPin,
   IconMapPinPlus,
+  IconPencil,
   IconTag,
   IconTrash,
   IconUpload,
@@ -30,6 +31,7 @@ import { AddSurveyPointDialog } from '@/components/projects/add-survey-point-dia
 import { CategoryManagerDialog } from '@/components/projects/category-manager-dialog';
 import { ConfirmDialog } from '@/components/projects/confirm-dialog';
 import { CoordinateInspectorDialog } from '@/components/projects/coordinate-inspector-dialog';
+import { EditSurveyPointDialog } from '@/components/projects/edit-survey-point-dialog';
 import { ExportDialog } from '@/components/projects/export-dialog';
 import { GroupManagerDialog } from '@/components/projects/group-manager-dialog';
 import { ImportDialog } from '@/components/projects/import-dialog';
@@ -134,6 +136,7 @@ export function SurveyPointsPanel({
   const [sortDesc, setSortDesc] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [inspecting, setInspecting] = useState<InspectablePoint | null>(null);
+  const [editing, setEditing] = useState<SurveyPoint | null>(null);
   const [pendingDelete, setPendingDelete] = useState<SurveyPoint | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -522,6 +525,9 @@ export function SurveyPointsPanel({
                             <DropdownMenuItem onClick={() => setInspecting(p)}>
                               <IconMapPin className="size-4" /> Inspect
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setEditing(p)}>
+                              <IconPencil className="size-4" /> Edit
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               variant="destructive"
                               onClick={() => setPendingDelete(p)}
@@ -623,6 +629,17 @@ export function SurveyPointsPanel({
           project={project}
           point={inspecting}
           onClose={() => setInspecting(null)}
+        />
+
+        <EditSurveyPointDialog
+          categories={categories}
+          point={editing}
+          open={editing !== null}
+          onOpenChange={(o) => !o && setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            void load();
+          }}
         />
 
         <ConfirmDialog
