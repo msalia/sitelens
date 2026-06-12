@@ -1,4 +1,42 @@
 """
+The org's billing posture for the client: plan, status, usage, and limits
+(`-1` = unlimited). Drives the upgrade gate, caps, and the Billing settings page.
+"""
+type BillingInfo {
+	"""
+	"solo" (free) or "crew" (paid).
+	"""
+	plan: String!
+	status: String
+	currentPeriodEnd: DateTime
+	cancelAtPeriodEnd: Boolean!
+	"""
+	Read-only lock (lapsed sub over the Solo caps).
+	"""
+	restricted: Boolean!
+	canExport: Boolean!
+	projects: Int!
+	admins: Int!
+	nonAdmin: Int!
+	maxProjects: Int!
+	maxAdmins: Int!
+	maxNonAdmin: Int!
+	"""
+	Emails of this org's admins, so non-admin members can reach out about
+	upgrading/managing the subscription.
+	"""
+	adminEmails: [String!]!
+}
+
+"""
+Billing interval for a Crew subscription.
+"""
+enum BillingInterval {
+	MONTHLY
+	ANNUAL
+}
+
+"""
 A georeferenced DXF overlay. The raw file lives in storage (key not exposed).
 """
 type CadOverlay {
@@ -386,6 +424,16 @@ type MutationRoot {
 	the free Overpass API. Same 7-day cooldown as terrain. Visual context only.
 	"""
 	refreshBuildings(projectId: UUID!, south: Float!, north: Float!, west: Float!, east: Float!, force: Boolean): ProjectBuildings!
+	"""
+	Starts a hosted Stripe Checkout for the Crew plan; returns the redirect URL
+	the client sends the browser to. Admin-only.
+	"""
+	createCheckoutSession(interval: BillingInterval!): String!
+	"""
+	Opens the Stripe Customer Portal (manage card / cancel / invoices); returns
+	the redirect URL. Admin-only.
+	"""
+	createBillingPortalSession: String!
 }
 
 """
@@ -586,7 +634,9 @@ type QueryRoot {
 	"""
 	pointGroups(projectId: UUID!): [PointGroup!]!
 	"""
-	DXF overlays for a project.
+	DXF overlays for a project. DXF is a Crew feature: non-paid orgs simply see
+	no overlays (empty list) so the bundled scene query still loads — the upload
+	path is what's gated with an upgrade prompt.
 	"""
 	cadOverlays(projectId: UUID!): [CadOverlay!]!
 	"""
@@ -629,6 +679,10 @@ type QueryRoot {
 	Everything the 3D viewer needs, pre-projected to geographic coordinates.
 	"""
 	sceneData(projectId: UUID!): SceneData!
+	"""
+	The caller org's plan, subscription status, usage, and limits.
+	"""
+	billing: BillingInfo!
 }
 
 """

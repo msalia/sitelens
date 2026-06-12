@@ -69,6 +69,42 @@ async fn stripe_post(
     Ok(v)
 }
 
+/// GETs a Stripe resource as JSON (or the Stripe error message).
+async fn stripe_get(cfg: &StripeConfig, path: &str) -> Result<serde_json::Value, String> {
+    let res = reqwest::Client::new()
+        .get(format!("{STRIPE_API}{path}"))
+        .bearer_auth(&cfg.secret_key)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    let status = res.status();
+    let body = res.text().await.map_err(|e| e.to_string())?;
+    let v: serde_json::Value = serde_json::from_str(&body).map_err(|e| e.to_string())?;
+    if !status.is_success() {
+        return Err(v["error"]["message"]
+            .as_str()
+            .unwrap_or("Stripe request failed")
+            .to_string());
+    }
+    Ok(v)
+}
+
+/// Pulls a subscription's current state from Stripe and writes it to the org by
+/// reusing [`apply_event`]. Used to backfill/repair billing columns when a webhook
+/// was missed or a Stripe schema change left a field unset.
+pub async fn resync_subscription(
+    cfg: &StripeConfig,
+    pool: &PgPool,
+    sub_id: &str,
+) -> Result<(), String> {
+    let sub = stripe_get(cfg, &format!("/v1/subscriptions/{sub_id}")).await?;
+    let event = serde_json::json!({
+        "type": "customer.subscription.updated",
+        "data": { "object": sub },
+    });
+    apply_event(pool, &event).await
+}
+
 /// Returns the org's Stripe customer id, creating (and persisting) one if needed.
 /// The customer carries `metadata.org_id` so webhooks can map back to the org.
 pub async fn ensure_customer(
@@ -282,8 +318,12 @@ pub async fn apply_event(pool: &PgPool, event: &serde_json::Value) -> Result<(),
             } else {
                 obj["status"].as_str().unwrap_or("canceled")
             };
+            // Newer Stripe API versions dropped the top-level `current_period_end`
+            // on the Subscription; it now lives on each subscription item. Read the
+            // top-level for older versions, then fall back to the first item.
             let period_end = obj["current_period_end"]
                 .as_i64()
+                .or_else(|| obj["items"]["data"][0]["current_period_end"].as_i64())
                 .and_then(|t| DateTime::<Utc>::from_timestamp(t, 0));
             let cancel_at_period_end = obj["cancel_at_period_end"].as_bool().unwrap_or(false);
             let sub_id = obj["id"].as_str();

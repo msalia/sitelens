@@ -35,6 +35,7 @@ impl ProjectQuery {
     /// of its authored data. Re-import with `importProject`.
     async fn project_export(&self, ctx: &Context<'_>, project_id: Uuid) -> Result<String> {
         let auth = require_auth(ctx)?;
+        require_export(ctx).await?;
         let pool = pool(ctx)?;
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
         let storage = storage(ctx)?;

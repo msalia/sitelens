@@ -28,6 +28,9 @@ pub struct BillingInfo {
     pub max_projects: i64,
     pub max_admins: i64,
     pub max_non_admin: i64,
+    /// Emails of this org's admins, so non-admin members can reach out about
+    /// upgrading/managing the subscription.
+    pub admin_emails: Vec<String>,
 }
 
 #[derive(Default)]
@@ -38,7 +41,34 @@ impl BillingQuery {
     /// The caller org's plan, subscription status, usage, and limits.
     async fn billing(&self, ctx: &Context<'_>) -> Result<BillingInfo> {
         let auth = require_auth(ctx)?;
-        let b = billing::org_billing(pool(ctx)?, auth.org_id).await?;
+        let pool = pool(ctx)?;
+        let mut b = billing::org_billing(pool, auth.org_id).await?;
+
+        // Self-heal: a paid org with no renewal date means a webhook was missed or
+        // didn't carry the period (e.g. a Stripe schema change). Pull the live
+        // subscription state from Stripe once; subsequent loads skip this.
+        if b.paid() && b.current_period_end.is_none() {
+            if let Ok(cfg) = ctx.data::<StripeConfig>() {
+                if cfg.enabled() {
+                    let sub: Option<(Option<String>,)> =
+                        sqlx::query_as("SELECT stripe_subscription_id FROM orgs WHERE id = $1")
+                            .bind(auth.org_id)
+                            .fetch_optional(pool)
+                            .await?;
+                    if let Some((Some(sub_id),)) = sub {
+                        let _ = billing::resync_subscription(cfg, pool, &sub_id).await;
+                        b = billing::org_billing(pool, auth.org_id).await?;
+                    }
+                }
+            }
+        }
+
+        let admin_emails: Vec<String> = sqlx::query_scalar(
+            "SELECT email FROM users WHERE org_id = $1 AND role = 'admin' ORDER BY email",
+        )
+        .bind(auth.org_id)
+        .fetch_all(pool)
+        .await?;
         let paid = b.paid();
         let lim = |free: i64| if paid { -1 } else { free };
         Ok(BillingInfo {
@@ -54,6 +84,7 @@ impl BillingQuery {
             max_projects: lim(billing::FREE_MAX_PROJECTS),
             max_admins: lim(billing::FREE_MAX_ADMINS),
             max_non_admin: lim(billing::FREE_MAX_NON_ADMIN),
+            admin_emails,
         })
     }
 }

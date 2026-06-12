@@ -6,11 +6,15 @@ pub struct OverlayQuery;
 
 #[Object]
 impl OverlayQuery {
-    /// DXF overlays for a project.
+    /// DXF overlays for a project. DXF is a Crew feature: non-paid orgs simply see
+    /// no overlays (empty list) so the bundled scene query still loads — the upload
+    /// path is what's gated with an upgrade prompt.
     async fn cad_overlays(&self, ctx: &Context<'_>, project_id: Uuid) -> Result<Vec<CadOverlay>> {
         let auth = require_auth(ctx)?;
-        require_paid(ctx, "DXF overlays").await?;
         let pool = pool(ctx)?;
+        if !crate::billing::org_billing(pool, auth.org_id).await?.paid() {
+            return Ok(Vec::new());
+        }
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
         let rows: Vec<CadOverlay> = sqlx::query_as(&format!(
             "SELECT {CAD_OVERLAY_COLUMNS} FROM cad_overlays WHERE project_id = $1 ORDER BY created_at"
