@@ -17,6 +17,7 @@ data-protection grounds.
 | Sub-processor | Purpose | Location | Transfer safeguard |
 | --- | --- | --- | --- |
 | Resend | Transactional email (verification, password reset, invitations) | United States | DPA + EU Standard Contractual Clauses |
+| Stripe | Subscription billing and payment processing | United States | DPA + EU Standard Contractual Clauses |
 
 ## Hosting
 

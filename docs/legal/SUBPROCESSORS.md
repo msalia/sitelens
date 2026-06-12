@@ -9,6 +9,7 @@
 | Sub-processor | Purpose                                                                  | Data processed                            | Location      | Transfer safeguard                                                                                                            |
 | ------------- | ------------------------------------------------------------------------ | ----------------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | **Resend**    | Transactional email delivery (verification, password reset, invitations) | Recipient email address + message content | United States | DPA + EU SCCs (Module 3, processor→processor); UK IDTA where applicable. ✅ Signed DPA/SCCs on file (`resend-dpa-signed.pdf`) |
+| **Stripe**    | Subscription billing and payment processing                              | Billing admin email + payment details (held by Stripe) | United States | DPA + EU SCCs (Module 3, processor→processor); UK IDTA where applicable. [TODO: confirm Stripe DPA acceptance on file]        |
 
 ## Hosting
 

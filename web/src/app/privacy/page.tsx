@@ -65,9 +65,10 @@ We do **not** sell your information or use your project data for advertising.
 - **Within your organization** — your projects are visible to members of your
   organization according to their assigned roles.
 - **Service providers (subprocessors)** — we use a small number of trusted
-  providers to help operate the Service (for example, hosting and email delivery),
-  bound by data-processing agreements and used only to deliver the Service. The
-  current list is published at [/subprocessors](/subprocessors).
+  providers to help operate the Service (for example, email delivery and
+  subscription billing/payment processing), bound by data-processing agreements
+  and used only to deliver the Service. The current list is published at
+  [/subprocessors](/subprocessors).
 - **Legal** — we may disclose information if required by law or to protect the
   rights, safety, or security of users and the Service.
 
