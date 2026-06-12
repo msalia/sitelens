@@ -26,6 +26,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
+import { isPaid, useBilling } from '@/lib/billing';
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 import {
@@ -116,6 +117,9 @@ type Tab = 'setup' | 'control' | 'points' | 'overlays';
 
 export default function ProjectWorkspace() {
   const { id } = useParams<{ id: string }>();
+  const { billing } = useBilling();
+  // DXF overlays are a Crew feature — hide the tab entirely on the free tier.
+  const showOverlays = isPaid(billing);
   const [project, setProject] = useState<Project | null>(null);
   const [axes, setAxes] = useState<GridAxis[]>([]);
   const [points, setPoints] = useState<ControlPoint[]>([]);
@@ -243,7 +247,7 @@ export default function ProjectWorkspace() {
               ['setup', 'Setup'],
               ['control', 'Grid'],
               ['points', 'Points'],
-              ['overlays', 'Overlays'],
+              ...(showOverlays ? [['overlays', 'Overlays'] as const] : []),
             ] as const
           ).map(([key, label]) => (
             <button
@@ -302,7 +306,7 @@ export default function ProjectWorkspace() {
               </section>
             </>
           )}
-          {tab === 'overlays' && (
+          {tab === 'overlays' && showOverlays && (
             <section id="panel-overlays">
               <CadOverlayPanel
                 project={project}

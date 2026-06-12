@@ -4,6 +4,7 @@ import {
   IconBook2,
   IconChevronDown,
   IconCompass,
+  IconCreditCard,
   IconFileText,
   IconLayoutGrid,
   IconLogout,
@@ -18,9 +19,11 @@ import { useEffect, useRef, useState } from 'react';
 
 import type { Me } from '@/lib/types';
 
+import { UpgradeGate } from '@/components/billing/upgrade-gate';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useBilling } from '@/lib/billing';
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 import { cn } from '@/lib/utils';
@@ -58,6 +61,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
+  const { billing } = useBilling();
 
   useEffect(() => {
     gql(ME)
@@ -138,6 +142,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               />
             ) : null}
             <RailLink
+              href="/settings/billing"
+              icon={IconCreditCard}
+              label="Billing"
+              active={pathname.startsWith('/settings/billing')}
+            />
+            <RailLink
               href="/settings"
               icon={IconSettings}
               label="Settings"
@@ -147,7 +157,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </nav>
 
-        <main className="min-w-0 flex-1 overflow-auto">{children}</main>
+        <main className="min-w-0 flex-1 overflow-auto">
+          {/* Lapsed-subscription lock: full-screen read-only gate everywhere except
+              the billing page itself, so admins can still resubscribe. */}
+          {billing?.restricted && !pathname.startsWith('/settings/billing') ? (
+            <UpgradeGate billing={billing} isAdmin={me.role === 'ADMIN'} />
+          ) : (
+            children
+          )}
+        </main>
       </div>
     </div>
   );
@@ -259,6 +277,13 @@ function UserMenu({ me, onLogout }: { me: Me; onLogout: () => void }) {
             className="hover:bg-muted flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
           >
             <IconSettings className="size-4" /> Settings
+          </Link>
+          <Link
+            href="/settings/billing"
+            onClick={() => setOpen(false)}
+            className="hover:bg-muted flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
+          >
+            <IconCreditCard className="size-4" /> Billing
           </Link>
           <Link
             href="/terms"

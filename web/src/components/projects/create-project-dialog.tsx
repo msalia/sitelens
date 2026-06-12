@@ -3,6 +3,7 @@
 import { IconPlus } from '@tabler/icons-react';
 import { useState } from 'react';
 
+import { UpgradeDialog } from '@/components/billing/upgrade-dialog';
 import {
   emptyProjectForm,
   ProjectFormFields,
@@ -18,6 +19,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { isPaid, useBilling } from '@/lib/billing';
 import { graphql } from '@/lib/gql';
 import { gql, useMutation } from '@/lib/graphql';
 
@@ -49,8 +51,17 @@ const CREATE_PROJECT = graphql(`
 
 export function CreateProjectDialog({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [form, setForm] = useState(emptyProjectForm());
   const { busy, run } = useMutation();
+  const { billing } = useBilling();
+
+  // Solo is capped at one project; offer an upgrade instead of the create form.
+  const atCap =
+    !!billing &&
+    !isPaid(billing) &&
+    billing.maxProjects >= 0 &&
+    billing.projects >= billing.maxProjects;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -63,6 +74,22 @@ export function CreateProjectDialog({ onCreated }: { onCreated: () => void }) {
       },
       success: 'Project created',
     });
+  }
+
+  if (atCap) {
+    return (
+      <>
+        <Button onClick={() => setUpgradeOpen(true)}>
+          <IconPlus className="mr-1 size-4" /> New project
+        </Button>
+        <UpgradeDialog
+          open={upgradeOpen}
+          onOpenChange={setUpgradeOpen}
+          title="You've reached the Solo limit"
+          description="The free Solo plan includes one project. Upgrade to Crew for unlimited projects."
+        />
+      </>
+    );
   }
 
   return (

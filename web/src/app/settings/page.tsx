@@ -1,6 +1,12 @@
 'use client';
 
-import { IconAlertTriangle, IconChevronRight, IconUsers } from '@tabler/icons-react';
+import {
+  IconAlertTriangle,
+  IconChevronRight,
+  IconCreditCard,
+  IconSparkles,
+  IconUsers,
+} from '@tabler/icons-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -12,8 +18,10 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { TypeToConfirmDialog } from '@/components/type-to-confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { isPaid, useBilling } from '@/lib/billing';
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
+import { cn } from '@/lib/utils';
 
 const SETTINGS_DATA = graphql(`
   query SettingsData {
@@ -47,8 +55,10 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 
 export default function SettingsPage() {
   const router = useRouter();
+  const { billing } = useBilling();
   const [me, setMe] = useState<Me | null>(null);
   const [orgName, setOrgName] = useState<string | null>(null);
+  const paid = isPaid(billing);
 
   useEffect(() => {
     gql(SETTINGS_DATA)
@@ -124,6 +134,44 @@ export default function SettingsPage() {
             </Card>
           </Link>
         ) : null}
+
+        <Link href="/settings/billing" className="block">
+          <Card className="hover:ring-primary/40 transition-shadow">
+            <CardContent className="flex items-center gap-4">
+              <div className="bg-primary/10 text-primary flex size-10 items-center justify-center rounded-lg">
+                <IconCreditCard className="size-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="flex items-center gap-2 font-medium">
+                  Billing
+                  {billing ? (
+                    <span
+                      className={cn(
+                        'rounded-full px-2 py-0.5 text-xs font-medium',
+                        paid
+                          ? 'bg-primary/10 text-primary'
+                          : 'bg-muted text-muted-foreground border',
+                      )}
+                    >
+                      {paid ? 'Crew' : 'Solo · Free'}
+                    </span>
+                  ) : null}
+                </p>
+                <p className="text-muted-foreground text-sm">
+                  {paid
+                    ? 'View your plan, usage, and manage your subscription.'
+                    : 'You’re on the free Solo plan — upgrade to Crew to unlock more.'}
+                </p>
+              </div>
+              {billing && !paid ? (
+                <span className="bg-primary/10 text-primary flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium">
+                  <IconSparkles className="size-3.5" /> Upgrade
+                </span>
+              ) : null}
+              <IconChevronRight className="text-muted-foreground size-5" />
+            </CardContent>
+          </Card>
+        </Link>
 
         <Card>
           <CardHeader>

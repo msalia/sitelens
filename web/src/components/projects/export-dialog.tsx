@@ -1,9 +1,10 @@
 'use client';
 
 import { IconDownload } from '@tabler/icons-react';
-import { useState } from 'react';
+import { cloneElement, useState } from 'react';
 import { toast } from 'sonner';
 
+import { UpgradeDialog } from '@/components/billing/upgrade-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -26,6 +27,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { useBilling } from '@/lib/billing';
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 import {
@@ -98,6 +100,8 @@ export function ExportDialog({
   trigger?: React.ReactElement;
 }) {
   const [open, setOpen] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const { billing } = useBilling();
   const [format, setFormat] = useState<ExportFormat>('CSV');
   const [space, setSpace] = useState<ExportSpace>('PROJECTED_GRID');
   const [unit, setUnit] = useState<LengthUnit>(project.displayUnit);
@@ -158,17 +162,33 @@ export function ExportDialog({
     }
   }
 
+  const triggerEl = trigger ?? (
+    <Button size="sm" variant="outline">
+      <IconDownload className="mr-1 size-4" /> Export
+    </Button>
+  );
+
+  // Exporting is a Crew feature: once billing has loaded and the org can't export,
+  // the trigger opens an upgrade prompt instead of the export form.
+  if (billing && !billing.canExport) {
+    return (
+      <>
+        {cloneElement(triggerEl as React.ReactElement<{ onClick?: () => void }>, {
+          onClick: () => setUpgradeOpen(true),
+        })}
+        <UpgradeDialog
+          open={upgradeOpen}
+          onOpenChange={setUpgradeOpen}
+          title="Exporting is a Crew feature"
+          description="Upgrade to Crew to export points as CSV or LandXML."
+        />
+      </>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger
-        render={
-          trigger ?? (
-            <Button size="sm" variant="outline">
-              <IconDownload className="mr-1 size-4" /> Export
-            </Button>
-          )
-        }
-      />
+      <DialogTrigger render={triggerEl} />
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Export points</DialogTitle>

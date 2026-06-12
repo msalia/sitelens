@@ -16,6 +16,7 @@ type Documents = {
   '\n  query Workspace($id: UUID!) {\n    project(id: $id) {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      siteOriginRotationDeg\n      createdAt\n      updatedAt\n    }\n    gridAxes(projectId: $id) {\n      id\n      projectId\n      family\n      label\n      position\n    }\n    controlPoints(projectId: $id) {\n      id\n      projectId\n      label\n      northing\n      easting\n      elevation\n      gridX\n      gridY\n      source\n    }\n    transform(projectId: $id) {\n      translationE\n      translationN\n      rotationDegrees\n      scale\n      rmsError\n      pointCount\n      residuals {\n        label\n        deltaEasting\n        deltaNorthing\n        magnitude\n      }\n    }\n    categories {\n      id\n      orgId\n      name\n      color\n      icon\n      isDefault\n    }\n    cadOverlays(projectId: $id) {\n      id\n      projectId\n      originalFilename\n      offsetE\n      offsetN\n      rotationDeg\n      scale\n      elevation\n      assumeRealWorld\n      visible\n    }\n    surveyPointCount(projectId: $id)\n  }\n': typeof types.WorkspaceDocument;
   '\n  query Projects {\n    projects {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      siteOriginRotationDeg\n      createdAt\n      updatedAt\n    }\n  }\n': typeof types.ProjectsDocument;
   '\n  mutation DeleteProject($id: UUID!) {\n    deleteProject(id: $id)\n  }\n': typeof types.DeleteProjectDocument;
+  '\n  query BillingMe {\n    me {\n      id\n      orgId\n      email\n      role\n      emailVerified\n    }\n  }\n': typeof types.BillingMeDocument;
   '\n  query SettingsData {\n    me {\n      id\n      orgId\n      email\n      role\n      emailVerified\n    }\n    organization {\n      id\n      name\n    }\n  }\n': typeof types.SettingsDataDocument;
   '\n  mutation DeleteOrganization {\n    deleteOrganization\n  }\n': typeof types.DeleteOrganizationDocument;
   '\n  query UsersMe {\n    me {\n      id\n      orgId\n      email\n      role\n      emailVerified\n    }\n  }\n': typeof types.UsersMeDocument;
@@ -74,6 +75,9 @@ type Documents = {
   '\n  mutation ResetPassword($t: String!, $p: String!) {\n    resetPassword(token: $t, newPassword: $p)\n  }\n': typeof types.ResetPasswordDocument;
   '\n  mutation Signup($e: String!, $p: String!, $o: String!) {\n    signup(email: $e, password: $p, orgName: $o) {\n      verificationToken\n    }\n  }\n': typeof types.SignupDocument;
   '\n  mutation VerifyEmail($t: String!) {\n    verifyEmail(token: $t)\n  }\n': typeof types.VerifyEmailDocument;
+  '\n  query Billing {\n    billing {\n      plan\n      status\n      currentPeriodEnd\n      cancelAtPeriodEnd\n      restricted\n      canExport\n      projects\n      admins\n      nonAdmin\n      maxProjects\n      maxAdmins\n      maxNonAdmin\n      adminEmails\n    }\n  }\n': typeof types.BillingDocument;
+  '\n  mutation CreateCheckoutSession($interval: BillingInterval!) {\n    createCheckoutSession(interval: $interval)\n  }\n': typeof types.CreateCheckoutSessionDocument;
+  '\n  mutation CreateBillingPortalSession {\n    createBillingPortalSession\n  }\n': typeof types.CreateBillingPortalSessionDocument;
   '\n  subscription ProjectChanged($projectId: UUID!) {\n    projectChanged(projectId: $projectId)\n  }\n': typeof types.ProjectChangedDocument;
 };
 const documents: Documents = {
@@ -83,6 +87,8 @@ const documents: Documents = {
     types.ProjectsDocument,
   '\n  mutation DeleteProject($id: UUID!) {\n    deleteProject(id: $id)\n  }\n':
     types.DeleteProjectDocument,
+  '\n  query BillingMe {\n    me {\n      id\n      orgId\n      email\n      role\n      emailVerified\n    }\n  }\n':
+    types.BillingMeDocument,
   '\n  query SettingsData {\n    me {\n      id\n      orgId\n      email\n      role\n      emailVerified\n    }\n    organization {\n      id\n      name\n    }\n  }\n':
     types.SettingsDataDocument,
   '\n  mutation DeleteOrganization {\n    deleteOrganization\n  }\n':
@@ -197,6 +203,12 @@ const documents: Documents = {
     types.SignupDocument,
   '\n  mutation VerifyEmail($t: String!) {\n    verifyEmail(token: $t)\n  }\n':
     types.VerifyEmailDocument,
+  '\n  query Billing {\n    billing {\n      plan\n      status\n      currentPeriodEnd\n      cancelAtPeriodEnd\n      restricted\n      canExport\n      projects\n      admins\n      nonAdmin\n      maxProjects\n      maxAdmins\n      maxNonAdmin\n      adminEmails\n    }\n  }\n':
+    types.BillingDocument,
+  '\n  mutation CreateCheckoutSession($interval: BillingInterval!) {\n    createCheckoutSession(interval: $interval)\n  }\n':
+    types.CreateCheckoutSessionDocument,
+  '\n  mutation CreateBillingPortalSession {\n    createBillingPortalSession\n  }\n':
+    types.CreateBillingPortalSessionDocument,
   '\n  subscription ProjectChanged($projectId: UUID!) {\n    projectChanged(projectId: $projectId)\n  }\n':
     types.ProjectChangedDocument,
 };
@@ -219,6 +231,12 @@ export function graphql(
 export function graphql(
   source: '\n  mutation DeleteProject($id: UUID!) {\n    deleteProject(id: $id)\n  }\n',
 ): typeof import('./graphql').DeleteProjectDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  query BillingMe {\n    me {\n      id\n      orgId\n      email\n      role\n      emailVerified\n    }\n  }\n',
+): typeof import('./graphql').BillingMeDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -567,6 +585,24 @@ export function graphql(
 export function graphql(
   source: '\n  mutation VerifyEmail($t: String!) {\n    verifyEmail(token: $t)\n  }\n',
 ): typeof import('./graphql').VerifyEmailDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  query Billing {\n    billing {\n      plan\n      status\n      currentPeriodEnd\n      cancelAtPeriodEnd\n      restricted\n      canExport\n      projects\n      admins\n      nonAdmin\n      maxProjects\n      maxAdmins\n      maxNonAdmin\n      adminEmails\n    }\n  }\n',
+): typeof import('./graphql').BillingDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  mutation CreateCheckoutSession($interval: BillingInterval!) {\n    createCheckoutSession(interval: $interval)\n  }\n',
+): typeof import('./graphql').CreateCheckoutSessionDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  mutation CreateBillingPortalSession {\n    createBillingPortalSession\n  }\n',
+): typeof import('./graphql').CreateBillingPortalSessionDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

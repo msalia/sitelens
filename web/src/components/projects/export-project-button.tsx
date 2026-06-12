@@ -6,9 +6,11 @@ import { toast } from 'sonner';
 
 import type { Project } from '@/lib/types';
 
+import { UpgradeDialog } from '@/components/billing/upgrade-dialog';
 import { ConfirmDialog } from '@/components/projects/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useBilling } from '@/lib/billing';
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
 
@@ -31,6 +33,9 @@ function slugify(name: string): string {
 export function ExportProjectButton({ project }: { project: Project }) {
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const { billing } = useBilling();
+  const gated = !!billing && !billing.canExport;
 
   async function exportProject() {
     setBusy(true);
@@ -63,7 +68,7 @@ export function ExportProjectButton({ project }: { project: Project }) {
               size="icon-sm"
               aria-label="Export project"
               disabled={busy}
-              onClick={() => setOpen(true)}
+              onClick={() => (gated ? setUpgradeOpen(true) : setOpen(true))}
             >
               <IconDownload className="size-4" />
             </Button>
@@ -71,6 +76,12 @@ export function ExportProjectButton({ project }: { project: Project }) {
         />
         <TooltipContent>Export project</TooltipContent>
       </Tooltip>
+      <UpgradeDialog
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        title="Exporting is a Crew feature"
+        description="Upgrade to Crew to download a full project archive."
+      />
       <ConfirmDialog
         open={open}
         onOpenChange={setOpen}

@@ -6,6 +6,9 @@ export type Incremental<T> =
   | T
   | { [P in keyof T]?: P extends ' $fragmentName' | '__typename' ? T[P] : never };
 import { DocumentTypeDecoration } from '@graphql-typed-document-node/core';
+/** Billing interval for a Crew subscription. */
+export type BillingInterval = 'ANNUAL' | 'MONTHLY';
+
 /** The space an input coordinate is expressed in (GraphQL enum). */
 export type CoordinateSpace =
   /**
@@ -156,6 +159,12 @@ export type DeleteProjectMutationVariables = Exact<{
 }>;
 
 export type DeleteProjectMutation = { deleteProject: boolean };
+
+export type BillingMeQueryVariables = Exact<{ [key: string]: never }>;
+
+export type BillingMeQuery = {
+  me: { id: string; orgId: string; email: string; role: Role; emailVerified: boolean } | null;
+};
 
 export type SettingsDataQueryVariables = Exact<{ [key: string]: never }>;
 
@@ -713,6 +722,36 @@ export type VerifyEmailMutationVariables = Exact<{
 
 export type VerifyEmailMutation = { verifyEmail: boolean };
 
+export type BillingQueryVariables = Exact<{ [key: string]: never }>;
+
+export type BillingQuery = {
+  billing: {
+    plan: string;
+    status: string | null;
+    currentPeriodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
+    restricted: boolean;
+    canExport: boolean;
+    projects: number;
+    admins: number;
+    nonAdmin: number;
+    maxProjects: number;
+    maxAdmins: number;
+    maxNonAdmin: number;
+    adminEmails: Array<string>;
+  };
+};
+
+export type CreateCheckoutSessionMutationVariables = Exact<{
+  interval: BillingInterval;
+}>;
+
+export type CreateCheckoutSessionMutation = { createCheckoutSession: string };
+
+export type CreateBillingPortalSessionMutationVariables = Exact<{ [key: string]: never }>;
+
+export type CreateBillingPortalSessionMutation = { createBillingPortalSession: string };
+
 export type ProjectChangedSubscriptionVariables = Exact<{
   projectId: string;
 }>;
@@ -832,6 +871,17 @@ export const DeleteProjectDocument = new TypedDocumentString(`
   deleteProject(id: $id)
 }
     `) as unknown as TypedDocumentString<DeleteProjectMutation, DeleteProjectMutationVariables>;
+export const BillingMeDocument = new TypedDocumentString(`
+    query BillingMe {
+  me {
+    id
+    orgId
+    email
+    role
+    emailVerified
+  }
+}
+    `) as unknown as TypedDocumentString<BillingMeQuery, BillingMeQueryVariables>;
 export const SettingsDataDocument = new TypedDocumentString(`
     query SettingsData {
   me {
@@ -1490,6 +1540,41 @@ export const VerifyEmailDocument = new TypedDocumentString(`
   verifyEmail(token: $t)
 }
     `) as unknown as TypedDocumentString<VerifyEmailMutation, VerifyEmailMutationVariables>;
+export const BillingDocument = new TypedDocumentString(`
+    query Billing {
+  billing {
+    plan
+    status
+    currentPeriodEnd
+    cancelAtPeriodEnd
+    restricted
+    canExport
+    projects
+    admins
+    nonAdmin
+    maxProjects
+    maxAdmins
+    maxNonAdmin
+    adminEmails
+  }
+}
+    `) as unknown as TypedDocumentString<BillingQuery, BillingQueryVariables>;
+export const CreateCheckoutSessionDocument = new TypedDocumentString(`
+    mutation CreateCheckoutSession($interval: BillingInterval!) {
+  createCheckoutSession(interval: $interval)
+}
+    `) as unknown as TypedDocumentString<
+  CreateCheckoutSessionMutation,
+  CreateCheckoutSessionMutationVariables
+>;
+export const CreateBillingPortalSessionDocument = new TypedDocumentString(`
+    mutation CreateBillingPortalSession {
+  createBillingPortalSession
+}
+    `) as unknown as TypedDocumentString<
+  CreateBillingPortalSessionMutation,
+  CreateBillingPortalSessionMutationVariables
+>;
 export const ProjectChangedDocument = new TypedDocumentString(`
     subscription ProjectChanged($projectId: UUID!) {
   projectChanged(projectId: $projectId)
