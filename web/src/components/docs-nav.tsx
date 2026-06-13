@@ -12,6 +12,7 @@ const GROUPS: DocGroup[] = [
   'Coordinates & Transform',
   'Working with Data',
   'Visualization',
+  'Plans & Pricing',
 ];
 
 interface DocsNavProps {

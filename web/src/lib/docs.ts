@@ -5,7 +5,8 @@ export type DocGroup =
   | 'Getting Started'
   | 'Coordinates & Transform'
   | 'Working with Data'
-  | 'Visualization';
+  | 'Visualization'
+  | 'Plans & Pricing';
 
 export interface DocMeta {
   description: string;
@@ -81,6 +82,13 @@ export const docsOrder: DocMeta[] = [
     href: '/docs/dxf-overlay',
     slug: 'dxf-overlay',
     title: 'DXF Overlay',
+  },
+  {
+    description: 'What the Solo and Crew plans unlock, and how billing works.',
+    group: 'Plans & Pricing',
+    href: '/docs/plans',
+    slug: 'plans',
+    title: 'Plans & Pricing',
   },
 ];
 
