@@ -6,6 +6,11 @@ import { LoginForm } from '@/components/login-form';
 import { LoginShowcase } from '@/components/login-showcase';
 import { isAuthenticated } from '@/lib/auth-server';
 
+export const metadata = {
+  robots: { follow: false, index: false },
+  title: 'Log in',
+};
+
 export default async function LoginPage() {
   if (await isAuthenticated()) {
     redirect('/projects');

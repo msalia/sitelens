@@ -33,9 +33,11 @@ test('signup page renders the create-organization card', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Log in' })).toBeVisible();
 });
 
-test('docs are behind the auth wall', async ({ page }) => {
+test('docs are public and render content without login', async ({ page }) => {
+  // Docs are a public, server-rendered help site (for SEO) — no auth wall.
   await page.goto('/docs');
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(/\/docs$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Introduction' })).toBeVisible();
 });
 
 test.describe('full auth flow', () => {

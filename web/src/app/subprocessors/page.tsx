@@ -1,8 +1,9 @@
 import { LegalPage } from '@/components/legal-page';
 
 export const metadata = {
+  alternates: { canonical: '/subprocessors' },
   description: 'Third parties KeshavTech uses to operate SiteLens.',
-  title: 'Sub-processors — SiteLens',
+  title: 'Sub-processors',
 };
 
 const CONTENT = `

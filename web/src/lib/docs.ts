@@ -1,5 +1,9 @@
+import type { Metadata } from 'next';
+
 import fs from 'fs';
 import path from 'path';
+
+import { absoluteUrl, SITE_NAME } from '@/lib/site';
 
 export type DocGroup =
   | 'Getting Started'
@@ -91,6 +95,63 @@ export const docsOrder: DocMeta[] = [
     title: 'Plans & Pricing',
   },
 ];
+
+/** Per-page SEO metadata for a documentation route, derived from `docsOrder`.
+ *  Used by each docs `page.tsx` via `export const metadata`. */
+export function getDocMetadata(href: string): Metadata {
+  const doc = docsOrder.find((d) => d.href === href);
+  if (!doc) {
+    return {};
+  }
+  const ogTitle = `${doc.title} — ${SITE_NAME}`;
+  // Defining a per-page `openGraph`/`twitter` object replaces the inherited
+  // root one (including its file-based share image), so re-attach the image.
+  const shareImage = absoluteUrl('/opengraph-image');
+  return {
+    alternates: { canonical: doc.href },
+    description: doc.description,
+    openGraph: {
+      description: doc.description,
+      images: [shareImage],
+      title: ogTitle,
+      type: 'article',
+      url: doc.href,
+    },
+    title: doc.title,
+    twitter: {
+      card: 'summary_large_image',
+      description: doc.description,
+      images: [shareImage],
+      title: ogTitle,
+    },
+  };
+}
+
+/** BreadcrumbList JSON-LD (Home › Docs › page) for a documentation route. */
+export function getDocBreadcrumb(href: string): Record<string, unknown> | null {
+  const doc = docsOrder.find((d) => d.href === href);
+  if (!doc) {
+    return null;
+  }
+  const items = [
+    { name: 'Home', url: absoluteUrl('/') },
+    { name: 'Documentation', url: absoluteUrl('/docs') },
+  ];
+  // The introduction page *is* /docs, so don't repeat it as a third crumb.
+  if (doc.href !== '/docs') {
+    items.push({ name: doc.title, url: absoluteUrl(doc.href) });
+  }
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((item, index) => ({
+      '@type': 'ListItem',
+      item: item.url,
+      name: item.name,
+      position: index + 1,
+    })),
+  };
+}
 
 export function getDocContent(slug: string): string {
   const filePath = path.join(process.cwd(), 'src/content/docs', `${slug}.md`);

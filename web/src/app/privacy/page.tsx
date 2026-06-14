@@ -1,8 +1,9 @@
 import { LegalPage } from '@/components/legal-page';
 
 export const metadata = {
+  alternates: { canonical: '/privacy' },
   description: 'How SiteLens handles your data.',
-  title: 'Privacy Policy — SiteLens',
+  title: 'Privacy Policy',
 };
 
 const CONTENT = `

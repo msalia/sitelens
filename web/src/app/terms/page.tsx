@@ -1,8 +1,9 @@
 import { LegalPage } from '@/components/legal-page';
 
 export const metadata = {
+  alternates: { canonical: '/terms' },
   description: 'The terms that govern your use of SiteLens.',
-  title: 'Terms of Service — SiteLens',
+  title: 'Terms of Service',
 };
 
 const CONTENT = `

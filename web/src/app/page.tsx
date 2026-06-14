@@ -3,16 +3,34 @@ import type { Metadata } from 'next';
 import { IconArrowRight, IconArrowUpRight } from '@tabler/icons-react';
 import Link from 'next/link';
 
+import { JsonLd } from '@/components/json-ld';
 import { Features } from '@/components/marketing/features';
 import { HeroGlobe } from '@/components/marketing/hero-globe';
 import { Pricing } from '@/components/marketing/pricing';
 import { SiteFooter } from '@/components/marketing/site-footer';
 import { SiteHeader } from '@/components/marketing/site-header';
+import { ORG_NAME, SITE_DESCRIPTION, SITE_NAME, SITE_URL } from '@/lib/site';
 
 export const metadata: Metadata = {
-  description:
-    'SiteLens ties an architect grid to ground truth with a least-squares Helmert transform, then renders control, points, and CAD in a live 3D scene.',
-  title: 'SiteLens — Coordinate-tie & 3D visualization for surveyors',
+  // Title + description inherit the root defaults; we only pin the canonical.
+  alternates: { canonical: '/' },
+};
+
+/** SoftwareApplication structured data — makes SiteLens eligible for rich
+ *  product results and clarifies the entity to search engines. */
+const SOFTWARE_APPLICATION_JSONLD = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  applicationCategory: 'BusinessApplication',
+  description: SITE_DESCRIPTION,
+  name: SITE_NAME,
+  offers: [
+    { '@type': 'Offer', name: 'Solo', price: '0', priceCurrency: 'USD' },
+    { '@type': 'Offer', name: 'Crew', priceCurrency: 'USD' },
+  ],
+  operatingSystem: 'Web',
+  publisher: { '@type': 'Organization', name: ORG_NAME },
+  url: SITE_URL,
 };
 
 /** A small floating glass stat card that overlaps the hero globe. */
@@ -45,6 +63,7 @@ export default function Home() {
     // The marketing page is a self-contained dark experience, independent of the
     // app's light/dark setting — `dark` forces shadcn tokens to their dark values.
     <div className="dark flex min-h-screen flex-col bg-[#070b16] text-white">
+      <JsonLd data={SOFTWARE_APPLICATION_JSONLD} />
       <SiteHeader />
 
       <main className="flex-1">
