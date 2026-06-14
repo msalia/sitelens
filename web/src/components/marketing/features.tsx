@@ -34,7 +34,7 @@ const FEATURES: Feature[] = [
   },
   {
     description:
-      'See control, grid, and points in a live CesiumJS 3D scene over real terrain — imported elevations stay the source of truth.',
+      'See control, grid, and points in a live 3D scene over real terrain — imported elevations stay the source of truth.',
     Icon: IconBox,
     title: '3D visualization',
   },
@@ -58,7 +58,9 @@ export function Features() {
       <div className="mx-auto max-w-2xl text-center">
         <p className="text-sm font-semibold tracking-wide text-indigo-400 uppercase">Features</p>
         <h2 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">
-          From control points to a 3D site, in one tool.
+          From control points to a 3D site,
+          <br />
+          in one tool.
         </h2>
         <p className="mt-4 text-base text-white/55">
           Everything a surveyor needs to tie an architect&apos;s grid to the real world and see it

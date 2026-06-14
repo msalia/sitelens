@@ -24,7 +24,7 @@ const SOLO_FEATURES = [
   'Team up to 6 (1 admin + 5 members)',
   'Coordinate-tie + conversion & inspector',
   'CSV / LandXML point import',
-  '3D Cesium visualization',
+  '3D visualization',
 ];
 
 const CREW_FEATURES = [
