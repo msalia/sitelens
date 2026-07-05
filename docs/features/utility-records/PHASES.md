@@ -107,7 +107,7 @@ The reference + handoff surface.
 ### Deliverables
 
 - [ ] Inventory list (filter by type/level/tag, search) + attribute editor + per-entity audit history in the panel.
-- [ ] `api/src/utilities/export.rs`: **PDF** (server-side `printpdf`: utility schedule + plan-view snapshot + provenance header), **DXF** (3D polylines on APWA layers + structure blocks), **GeoJSON** (geometry + full attrs), **LandXML** (with documented weak-support caveat).
+- [ ] `api/src/utilities/export.rs`: **PDF** (shared WeasyPrint report service, not `printpdf`: utility schedule + client-rasterized plan-view PNG + provenance header), **DXF** (3D polylines on APWA layers + structure blocks), **GeoJSON** (geometry + full attrs), **LandXML** (with documented weak-support caveat).
 - [ ] `exportUtilities` query returning package blob (via Storage); export UI (format + scope picker).
 
 ### Tests

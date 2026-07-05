@@ -132,7 +132,7 @@ The deliverables surveyors hand to the GC.
 ### Deliverables
 
 - [ ] `api/src/field/report.rs` — CSV report (reuse CSV writer).
-- [ ] PDF report via **`printpdf`**: project header, tolerance spec, summary stats (counts, max/RMS miss), per-point table.
+- [ ] PDF report via the **shared WeasyPrint report service** (not `printpdf`): project header, tolerance spec, summary stats (counts, max/RMS miss), per-point table.
 - [ ] `comparisonReportCsv` + `comparisonReportPdf` queries returning blobs; download buttons in the Field panel.
 
 ### Tests

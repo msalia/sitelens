@@ -106,7 +106,7 @@ Second surface source and all deliverables.
 ### Deliverables
 
 - [ ] `api/src/surface/dem.rs` — uploaded GeoTIFF → `dem` surface (sample + reproject via `crs.rs`); `uploadDem` + build as `kind: dem`; client preview via `geotiff.js`.
-- [ ] `api/src/surface/export.rs`: **LandXML** surface (faces + breaklines), **DXF** (3DFACE + contour layers), **GeoTIFF DEM**, **volume report** (server-side `printpdf` + CSV: cut/fill/net/area, method, cell size, surface versions).
+- [ ] `api/src/surface/export.rs`: **LandXML** surface (faces + breaklines), **DXF** (3DFACE + contour layers), **GeoTIFF DEM**, **volume report** (shared WeasyPrint report service, not `printpdf`, + CSV: cut/fill/net/area, method, cell size, surface versions).
 - [ ] `exportSurface` + `exportVolumeReport`; export UI (formats + scope).
 
 ### Tests

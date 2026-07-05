@@ -4,6 +4,12 @@
 
 This is a **feature within the existing SiteLens project**, not a standalone project. It builds on the shipped survey points, categories, control points, Helmert transform (grid ↔ projected), coordinate conversion, Three.js/React Three Fiber 3D scene, DXF parsing, and the Storage abstraction.
 
+> **Depends on the [shared feature foundation](../_shared-foundation/SPEC.md).** This feature
+> consumes the shared plan editor (digitize with snap + numeric entry), the format codec
+> layer (DXF/GeoJSON/LandXML), labeled DXF export, scene overlay primitives, the WeasyPrint
+> report service (§8 — **replaces `printpdf`**), the snapshot/audit pattern, and gating.
+> Build against those shared blocks, not private copies.
+
 ---
 
 ## 1. Overview
@@ -19,7 +25,7 @@ Two things this is **not**: it is not a hydraulic/network-analysis tool (no flow
 - **A record outlives the app.** Geometry is snapshotted (immutable against later point edits), every change is audited, and the whole record exports to portable formats (PDF/DXF/GeoJSON/LandXML).
 - **Absolute elevation is truth.** Utilities are measured by invert elevation; depth-of-cover is derived, never the stored source — a regrade must never silently invalidate the archive.
 - **Industry conventions, built in.** Curated utility types with APWA color coding and the right typed attributes per type, so the record reads correctly to any surveyor.
-- **Reuse before rebuild.** Lean on existing points, the transform, DXF parsing, the Three.js/R3F scene, Storage, and the server-side PDF approach.
+- **Reuse before rebuild.** Lean on existing points, the transform, DXF parsing, the Three.js/R3F scene, Storage, and the shared WeasyPrint report service (see [foundation §8](../_shared-foundation/SPEC.md)).
 
 ---
 
@@ -29,7 +35,7 @@ Two things this is **not**: it is not a hydraulic/network-analysis tool (no flow
 - **Admins:** same, plus manage utility-type defaults if exposed.
 - **Viewers:** browse the inventory, inspect attributes, view in 3D, and export — read-only (no capture/edit).
 
-**Plan gating:** the entire feature rides on the existing **Crew** tier (consistent with export + field-exchange). Solo users get the existing upgrade prompt. No new tier, no billing changes (Stripe remains deferred). Reuses the current plan-check mechanism.
+**Plan gating:** the entire feature rides on the existing **Crew** tier (consistent with export + field-exchange). Solo users get the existing upgrade prompt. Gates via the **existing live plan-check** — `require_paid` on export resolvers, `require_editor_active` on mutations ([foundation §13](../_shared-foundation/SPEC.md)). No new tier. (Billing is live Stripe, **not** deferred — earlier "deferred" notes are stale.)
 
 ---
 
@@ -134,7 +140,7 @@ Runs render as **tubes** scaled by diameter; structures as **3D solids** (manhol
 
 ### Export/archive (`api/src/utilities/export.rs`)
 
-- **PDF** (server-side `printpdf`): utility schedule (per run: type, size, material, length, invert up/down, slope, depth; per structure: rim/invert/depth) + plan-view snapshot + project/provenance header.
+- **PDF** (shared **WeasyPrint report service**, [foundation §8](../_shared-foundation/SPEC.md); **not** `printpdf`): utility schedule (per run: type, size, material, length, invert up/down, slope, depth; per structure: rim/invert/depth) + plan-view snapshot (client-rasterized PNG) + project/provenance header.
 - **DXF:** 3D polylines on APWA-named layers + structure blocks (Civil 3D/AutoCAD handoff).
 - **GeoJSON:** geometry + full attributes (durable, machine-readable).
 - **LandXML:** included for completeness; **flagged — LandXML utility support is weak/inconsistent**, lower fidelity than the other three.
@@ -218,8 +224,8 @@ Per SiteLens conventions (shared utils get tests; Playwright in `web/e2e`).
 
 ## 9. Deployment
 
-- Migration **0006**: `utility_types` (seeded), `utility_runs`, `utility_vertices`, `utility_structures`, `utility_audit`. (Apply pending **0005** then **0006**.)
-- Rust deps: reuse `printpdf` (PDF), existing DXF parsing, `roxmltree`; add a GeoJSON serde (`geojson` crate or `serde_json` shapes). No headless browser.
+- Migration **0006**: `utility_types` (seeded), `utility_runs`, `utility_vertices`, `utility_structures`, `utility_audit`. (Apply pending **0005** then **0006**.) **Migration number collides with other feature specs — assign the real sequential number at build time in ship order; see [foundation §14](../_shared-foundation/SPEC.md).**
+- Rust deps: existing DXF parsing, `roxmltree`; add a GeoJSON serde (`geojson` crate or `serde_json` shapes). **PDF via the shared WeasyPrint report service — no `printpdf`, no headless browser in the API.**
 - Web: Utilities panel + Three.js/R3F tube/solid rendering + the docs page; reuse existing DXF parse path where applicable.
 - Standard flow: lint → format → test → commit → push → deploy (Dokploy compose, server-1); apply migrations on deploy. Docs page ships with the web build.
 

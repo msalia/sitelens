@@ -4,6 +4,13 @@
 
 This is a **feature within the existing SiteLens project**, not a standalone project. It builds on the shipped point import/export, coordinate conversion, Helmert transform, and Three.js/React Three Fiber scene.
 
+> **Depends on the [shared feature foundation](../_shared-foundation/SPEC.md).** Consumes the
+> format codec layer (§4 — this feature's trait-based codec design is the model the shared
+> layer generalizes: CSV presets, LandXML, JobXML), scene overlay primitives (§9 — status
+> coloring / leader lines), the WeasyPrint report service (§8 — **replaces `printpdf`**), the
+> snapshot/audit pattern, FileBlob/Storage, and gating. This feature does **not** use the
+> plan editor (file-based import, no digitizing).
+
 ---
 
 ## 1. Overview
@@ -34,7 +41,7 @@ Both ship under the existing **Crew** tier. Transport is **file-based** ("direct
 - **Admins:** same, plus manage per-project tolerance defaults.
 - **Viewers:** view comparison results and reports (read-only); no import/export.
 
-**Plan gating:** the entire feature (field formats *and* as-built QC) rides on the existing **Crew** tier. Solo users get the existing upgrade prompt. No new tier, no billing changes (Stripe remains deferred). Gating reuses the current plan-check mechanism that already guards export.
+**Plan gating:** the entire feature (field formats *and* as-built QC) rides on the existing **Crew** tier. Solo users get the existing upgrade prompt. Gates via the **existing live plan-check** — `require_paid` on export/report resolvers, `require_editor_active` on mutations ([foundation §13](../_shared-foundation/SPEC.md)); export is already Crew-gated. No new tier. (Billing is live Stripe, **not** deferred — earlier "deferred" notes are stale.)
 
 ---
 
@@ -122,7 +129,7 @@ Sensible construction defaults on creation, e.g. H warn 0.05 ft / fail 0.10 ft, 
    │                                  └───────┬───────────────┬──────────┘ │
    │  Results table ◄──comparison(id)─────────┘               │            │
    │  3D overlay (Three.js leader lines) ◄────────────────────┘            │
-   │  Report ◄──reportCsv / reportPdf (printpdf)──────────────────────────┐│
+   │  Report ◄──reportCsv / reportPdf (WeasyPrint report service)─────────┐│
    └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -156,7 +163,7 @@ api/src/field/
 ### Report generation (Rust, `api/src/field/report.rs`)
 
 - **CSV report:** reuse the existing CSV writer — point, design N/E/Z, as-built N/E/Z, ΔN/ΔE/ΔZ, radial, status.
-- **PDF report:** server-side via the **`printpdf`** crate — project header, tolerance spec, summary stats (counts pass/warn/fail/unmatched, max/RMS miss), and the per-point table. Returned as a downloadable blob from a GraphQL query.
+- **PDF report:** via the shared **WeasyPrint report service** ([foundation §8](../_shared-foundation/SPEC.md); **not** `printpdf`) — project header, tolerance spec, summary stats (counts pass/warn/fail/unmatched, max/RMS miss), and the per-point table. The API assembles the JSON payload (+ any client-rasterized figure); the service returns the PDF, delivered as a downloadable blob from the GraphQL query.
 
 ---
 
@@ -257,9 +264,9 @@ Per SiteLens conventions (shared utils get tests; Playwright lives in `web/e2e`)
 
 ## 9. Deployment
 
-- New migration (next in sequence, **0006**) adding `point_type`, `as_built_batches`, `as_built_comparisons`, and `projects` tolerance columns. (Note: 0005 cad_overlays still pending deploy per project state — apply 0005 then 0006.)
-- New Rust dep: `printpdf` (PDF). JobXML implemented in-crate (no heavy deps); CSV/XML reuse existing `csv` + `roxmltree`.
-- No new web runtime deps required for PDF (server-side). Web only adds UI + the docs page.
+- New migration (provisional **0006**) adding `point_type`, `as_built_batches`, `as_built_comparisons`, and `projects` tolerance columns. (Note: 0005 cad_overlays still pending deploy per project state — apply 0005 first.) **Migration number collides with other feature specs — assign the real sequential number at build time in ship order; see [foundation §14](../_shared-foundation/SPEC.md).**
+- No `printpdf` — **PDF via the shared WeasyPrint report service** ([foundation §8](../_shared-foundation/SPEC.md)). JobXML implemented in-crate (no heavy deps); CSV/XML reuse existing `csv` + `roxmltree`.
+- Web only adds UI + the docs page. CSV report generated in-API (unchanged); PDF payload assembled in-API and rendered by the report service.
 - Standard SiteLens flow: lint → format → test → commit → push → deploy (Dokploy compose, server-1). Apply migrations on deploy.
 - Customer docs page ships with the web build — no separate deploy.
 

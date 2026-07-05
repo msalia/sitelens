@@ -2,7 +2,15 @@
 
 > Build survey-grade surfaces (TIN) from points + breaklines, derive contours, and compute cut/fill volumes — rendered in the existing Three.js / React Three Fiber viewer.
 
-This is a **feature within the existing SiteLens project**, not a standalone project. It builds on the shipped survey points, categories/groups/tags, the Helmert transform + coordinate conversion, the OpenTopography terrain pipeline, `geotiff.js` parsing, DXF parsing, the Storage abstraction, and the server-side `printpdf` report pattern.
+This is a **feature within the existing SiteLens project**, not a standalone project. It builds on the shipped survey points, categories/groups/tags, the Helmert transform + coordinate conversion, the OpenTopography terrain pipeline, `geotiff.js` parsing, DXF parsing, and the Storage abstraction.
+
+> **Depends on — and provides — parts of the [shared feature foundation](../_shared-foundation/SPEC.md).**
+> Consumes: the shared plan editor (digitize breaklines/boundary with snap + numeric entry),
+> the format codec layer (DXF/LandXML/GeoTIFF), labeled DXF export, the Rust geometry stack
+> (`geo`/`spade`), scene overlay primitives, the async job pattern, the WeasyPrint report
+> service (§8 — **replaces `printpdf`**), the snapshot/audit pattern, and gating.
+> **Provides:** the **surface abstraction** (§7) — its TIN + uploaded-DEM surfaces are the
+> grid-samplable surfaces that `site-analysis` hydrology runs flow analysis on.
 
 ---
 
@@ -18,7 +26,7 @@ Critically, this rides on the **existing Three.js/R3F renderer** — *not* Cesiu
 - **Absolute elevation, reproducible records.** Surfaces are named + versioned with their inputs snapshotted, so a volume report computed last month never silently changes.
 - **Compute in Rust, render in Three.js.** Heavy geometry on the server; the client renders an indexed mesh + polylines through the existing BufferGeometry pipeline. No Cesium.
 - **Two surface sources.** A point-built TIN *and* an uploaded high-res DEM (drone/LiDAR), unified so volumes can compare any two. Coarse OpenTopography stays context-only.
-- **Reuse before rebuild.** Lean on points/categories/groups, the transform, `geotiff.js`, DXF parsing, Storage, and `printpdf`.
+- **Reuse before rebuild.** Lean on points/categories/groups, the transform, `geotiff.js`, DXF parsing, Storage, and the shared WeasyPrint report service (see [foundation §8](../_shared-foundation/SPEC.md)).
 
 ---
 
@@ -28,7 +36,7 @@ Critically, this rides on the **existing Three.js/R3F renderer** — *not* Cesiu
 - **Admins:** same, plus manage any project-level defaults.
 - **Viewers:** view surfaces/contours/volumes in 3D, read volume results, export — read-only (no build/edit).
 
-**Plan gating:** entire feature on the existing **Crew** tier (consistent with export / field-exchange / utility-records). Solo users get the existing upgrade prompt. No new tier, no billing changes. Reuses the current plan-check mechanism.
+**Plan gating:** entire feature on the existing **Crew** tier (consistent with export / field-exchange / utility-records). Solo users get the existing upgrade prompt. Gates via the **existing live plan-check** — `require_paid` on build/export resolvers, `require_editor_active` on mutations ([foundation §13](../_shared-foundation/SPEC.md)). No new tier. (Billing is live Stripe, **not** deferred — earlier "deferred" notes are stale.)
 
 ---
 
@@ -215,8 +223,8 @@ Per SiteLens conventions (shared utils tested; Playwright in `web/e2e`).
 
 ## 9. Deployment
 
-- Migration **0008**: `surfaces`, `surface_breaklines`, `surface_dems`, `volumes`. (Apply pending **0005**, then **0008**; 0007 terrain already exists.)
-- New Rust deps: **`spade`** (constrained Delaunay), **`geo`/`geo-types`** (geometry ops), a GeoTIFF reader for server-side DEM sampling (e.g. `tiff`), reuse `printpdf` (PDF) + `csv`. First computational-geometry surface in the backend.
+- Migration **0008**: `surfaces`, `surface_breaklines`, `surface_dems`, `volumes`. (Apply pending **0005**, then **0008**; 0007 terrain already exists.) **Migration number is provisional and collides with other feature specs — assign the real sequential number at build time in ship order; see [foundation §14](../_shared-foundation/SPEC.md).**
+- New Rust deps (shared geometry stack, [foundation §6](../_shared-foundation/SPEC.md)): **`spade`** (constrained Delaunay), **`geo`/`geo-types`** (geometry ops), a GeoTIFF reader for server-side DEM sampling (e.g. `tiff`), plus `csv`. First computational-geometry surface in the backend; these deps are shared with `site-analysis`. **PDF via the shared WeasyPrint report service — no `printpdf`.**
 - Web: Surfaces panel + Three.js TIN/contour/heatmap rendering (extends `terrain-mesh.ts`) + docs page; reuse `geotiff.js` for DEM preview and existing DXF parse path.
 - **Performance:** triangulation + volume grid run server-side; mesh decimation/LOD for large surfaces before render (consistent with existing 256² terrain decimation); async build status. Coordinate with the project's existing Performance phase.
 - Standard flow: lint → format → test → commit → push → deploy (Dokploy compose, server-1); apply migrations on deploy. Docs page ships with the web build.
@@ -240,6 +248,6 @@ Per SiteLens conventions (shared utils tested; Playwright in `web/e2e`).
 - Prismoidal / exact TIN-intersection volumes; bounded-region (drawn footprint) quantities.
 - Triangle-level surface editing (edge swap, delete triangle, add/move point).
 - Depression hachures; dedicated hillshade-only / extra cartographic modes.
-- Grading design, watershed / drainage / flow analysis.
+- Grading design, watershed / drainage / flow analysis. *(Flow/watershed analysis is owned by [site-analysis](../site-analysis/SPEC.md) hydrology, which consumes this feature's surfaces via [foundation §7](../_shared-foundation/SPEC.md) — complementary, not built here.)*
 - OpenTopography (coarse) as a volume surface; DWG.
 - User-defined volume units beyond cubic yards (default) / cubic meters.
