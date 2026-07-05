@@ -334,8 +334,7 @@ export default function ProjectWorkspace() {
       <UpgradeDialog
         open={overlayUpgradeOpen}
         onOpenChange={setOverlayUpgradeOpen}
-        title="DXF overlays are a Crew feature"
-        description="Upgrade to Crew to overlay DXF drawings in the 3D view."
+        feature="dxf_overlays"
       />
 
       {/* Hero — persistent, full-bleed 3D scene. Stats render as an overlay

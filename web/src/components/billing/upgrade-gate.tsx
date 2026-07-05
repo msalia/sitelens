@@ -11,13 +11,20 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
-import { type Billing, CREW_FEATURES, PRICING, useCheckout } from '@/lib/billing';
+import {
+  type Billing,
+  crewSellingPoints,
+  PRICING,
+  useCheckout,
+  usePlanCatalog,
+} from '@/lib/billing';
 
 /** Full-screen read-only gate shown when an org's subscription has lapsed while it
  *  is over the Solo caps. Admins can re-subscribe (Checkout) or open the Portal;
  *  others are told to ask an admin. */
 export function UpgradeGate({ billing, isAdmin }: { billing: Billing; isAdmin: boolean }) {
   const { busy, openPortal, startCheckout } = useCheckout();
+  const { catalog } = usePlanCatalog();
 
   const over: string[] = [];
   if (billing.projects > billing.maxProjects && billing.maxProjects >= 0) {
@@ -47,7 +54,7 @@ export function UpgradeGate({ billing, isAdmin }: { billing: Billing; isAdmin: b
 
         <EmptyContent>
           <ul className="text-muted-foreground mb-2 flex flex-col gap-1.5 text-left text-sm">
-            {CREW_FEATURES.map((f) => (
+            {crewSellingPoints(catalog).map((f) => (
               <li key={f} className="flex items-center gap-2">
                 <IconCheck className="text-primary size-4 shrink-0" /> {f}
               </li>

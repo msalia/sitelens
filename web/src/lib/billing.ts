@@ -5,7 +5,22 @@ import { toast } from 'sonner';
 
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
+import { PLAN_CATALOG_QUERY, type PlanCatalog } from '@/lib/plan';
 import { errMsg } from '@/lib/utils';
+
+// The plan catalog (types, query, PRICING, and pure helpers) lives in the neutral
+// `@/lib/plan` module so server components can use it too. Re-exported here so the
+// existing `@/lib/billing` import sites keep working.
+export {
+  crewSellingPoints,
+  featureMeta,
+  fetchPlanCatalog,
+  PLAN_CATALOG_QUERY,
+  type PlanCatalog,
+  type PlanFeature,
+  type PlanLimits,
+  PRICING,
+} from '@/lib/plan';
 
 /** The org's billing posture, mirroring the API's `BillingInfo`. Limits use
  *  `-1` for "unlimited" (Crew). `plan` is `'solo'` (free) or `'crew'` (paid). */
@@ -57,20 +72,6 @@ const CREATE_PORTAL = graphql(`
   }
 `);
 
-/** Display-only pricing (the source of truth lives in Stripe). */
-export const PRICING = {
-  annual: { cadence: '/yr', label: '$99', note: 'Save ~17%' },
-  monthly: { cadence: '/mo', label: '$10' },
-} as const;
-
-/** The Crew plan's selling points — shared across upgrade surfaces. */
-export const CREW_FEATURES = [
-  'Unlimited projects',
-  'Unlimited admins & members',
-  'CSV / LandXML & full project exports',
-  'DXF overlays in the 3D view',
-] as const;
-
 export const isPaid = (b: Billing | null) => b?.plan === 'crew';
 
 /** A `mailto:` to the org's admins for non-admins to ask about the subscription,
@@ -106,6 +107,31 @@ export function useBilling() {
   }, [reload]);
 
   return { billing, loading, reload };
+}
+
+/** Fetches the static plan/feature catalog (drives upgrade UI + selling points). */
+export function usePlanCatalog() {
+  const [catalog, setCatalog] = useState<PlanCatalog | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const data = await gql(PLAN_CATALOG_QUERY);
+        if (active) {setCatalog(data.planCatalog);}
+      } catch {
+        if (active) {setCatalog(null);}
+      } finally {
+        if (active) {setLoading(false);}
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return { catalog, loading };
 }
 
 /** Redirects to hosted Stripe Checkout / the Customer Portal. Admin-only on the

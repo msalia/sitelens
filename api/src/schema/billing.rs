@@ -69,10 +69,11 @@ impl BillingQuery {
         .bind(auth.org_id)
         .fetch_all(pool)
         .await?;
-        let paid = b.paid();
-        let lim = |free: i64| if paid { -1 } else { free };
+        // Caps come from the plan catalog: Crew resolves to unlimited (-1).
+        let plan = b.plan();
+        let limits = plan.limits();
         Ok(BillingInfo {
-            plan: if paid { "crew" } else { "solo" }.to_string(),
+            plan: plan.as_str().to_string(),
             status: b.status.clone(),
             current_period_end: b.current_period_end,
             cancel_at_period_end: b.cancel_at_period_end,
@@ -81,11 +82,77 @@ impl BillingQuery {
             projects: b.projects,
             admins: b.admins,
             non_admin: b.non_admin,
-            max_projects: lim(billing::FREE_MAX_PROJECTS),
-            max_admins: lim(billing::FREE_MAX_ADMINS),
-            max_non_admin: lim(billing::FREE_MAX_NON_ADMIN),
+            max_projects: limits.projects,
+            max_admins: limits.admins,
+            max_non_admin: limits.non_admin,
             admin_emails,
         })
+    }
+}
+
+/// A gated feature in the plan catalog (static metadata; drives the web's upgrade
+/// dialogs + selling points). See `crate::plan`.
+#[derive(SimpleObject)]
+pub struct PlanFeature {
+    /// Stable snake_case id (upgrade dialogs key off this).
+    pub key: String,
+    pub label: String,
+    pub blurb: String,
+    pub min_plan: crate::plan::Plan,
+}
+
+/// A plan's usage caps (`-1` = unlimited).
+#[derive(SimpleObject)]
+pub struct PlanLimits {
+    pub plan: crate::plan::Plan,
+    pub max_projects: i64,
+    pub max_admins: i64,
+    pub max_non_admin: i64,
+}
+
+/// The static plan → capability catalog: the single source of truth for what each
+/// plan unlocks. The web renders upgrade UI + selling points from this instead of
+/// hard-coding feature lists.
+#[derive(SimpleObject)]
+pub struct PlanCatalog {
+    pub features: Vec<PlanFeature>,
+    pub plans: Vec<PlanLimits>,
+}
+
+#[derive(Default)]
+pub struct PlanCatalogQuery;
+
+#[Object]
+impl PlanCatalogQuery {
+    /// The static plan/feature catalog. No auth required — it's marketing/gating
+    /// metadata, safe to render on public pricing surfaces.
+    async fn plan_catalog(&self, _ctx: &Context<'_>) -> Result<PlanCatalog> {
+        use crate::plan::{Feature, Plan};
+        let features = Feature::all()
+            .iter()
+            .map(|&f| {
+                let m = f.meta();
+                PlanFeature {
+                    key: m.key.to_string(),
+                    label: m.label.to_string(),
+                    blurb: m.blurb.to_string(),
+                    min_plan: m.min_plan,
+                }
+            })
+            .collect();
+        let plans = Plan::all()
+            .iter()
+            .map(|&p| {
+                let l = p.limits();
+                PlanLimits {
+                    plan: p,
+                    max_projects: l.projects,
+                    max_admins: l.admins,
+                    max_non_admin: l.non_admin,
+                }
+            })
+            .collect();
+        Ok(PlanCatalog { features, plans })
     }
 }
 

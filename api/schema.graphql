@@ -461,6 +461,54 @@ type OrgMember {
 }
 
 """
+The subscription plans. Binary today: free `Solo` vs paid `Crew`.
+"""
+enum Plan {
+	"""
+	Free tier.
+	"""
+	SOLO
+	"""
+	Paid tier.
+	"""
+	CREW
+}
+
+"""
+The static plan → capability catalog: the single source of truth for what each
+plan unlocks. The web renders upgrade UI + selling points from this instead of
+hard-coding feature lists.
+"""
+type PlanCatalog {
+	features: [PlanFeature!]!
+	plans: [PlanLimits!]!
+}
+
+"""
+A gated feature in the plan catalog (static metadata; drives the web's upgrade
+dialogs + selling points). See `crate::plan`.
+"""
+type PlanFeature {
+	"""
+	Stable snake_case id (upgrade dialogs key off this).
+	"""
+	key: String!
+	label: String!
+	blurb: String!
+	minPlan: Plan!
+}
+
+"""
+A plan's usage caps (`-1` = unlimited).
+"""
+type PlanLimits {
+	plan: Plan!
+	maxProjects: Int!
+	maxAdmins: Int!
+	maxNonAdmin: Int!
+}
+
+"""
 A point category (color/icon). Default set is seeded per org; orgs add custom.
 """
 type PointCategory {
@@ -683,6 +731,11 @@ type QueryRoot {
 	The caller org's plan, subscription status, usage, and limits.
 	"""
 	billing: BillingInfo!
+	"""
+	The static plan/feature catalog. No auth required — it's marketing/gating
+	metadata, safe to render on public pricing surfaces.
+	"""
+	planCatalog: PlanCatalog!
 }
 
 """

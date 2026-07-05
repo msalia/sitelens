@@ -13,36 +13,48 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { CREW_FEATURES } from '@/lib/billing';
+import { crewSellingPoints, featureMeta, usePlanCatalog } from '@/lib/billing';
 
 /** A controlled "Upgrade to Crew" prompt shown when a Solo cap is hit (extra
  *  project, export, etc.). Sends the user to the billing page, the single place
- *  that handles Checkout + admin/non-admin. */
+ *  that handles Checkout + admin/non-admin.
+ *
+ *  Copy + selling points come from the plan catalog: pass `feature` (a catalog
+ *  key like `"dxf_overlays"`) to auto-fill the title/description, or override
+ *  `title`/`description` explicitly. */
 export function UpgradeDialog({
   description,
+  feature,
   onOpenChange,
   open,
-  title = 'Upgrade to Crew',
+  title,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  feature?: string;
   title?: string;
   description?: string;
 }) {
+  const { catalog } = usePlanCatalog();
+  const meta = feature ? featureMeta(catalog, feature) : undefined;
+  const resolvedTitle = title ?? (meta ? `${meta.label} is a Crew feature` : 'Upgrade to Crew');
+  const resolvedDescription =
+    description ??
+    meta?.blurb ??
+    'This is a Crew feature. Upgrade to unlock it for your whole team.';
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <IconSparkles className="text-primary size-5" /> {title}
+            <IconSparkles className="text-primary size-5" /> {resolvedTitle}
           </DialogTitle>
-          <DialogDescription>
-            {description ?? 'This is a Crew feature. Upgrade to unlock it for your whole team.'}
-          </DialogDescription>
+          <DialogDescription>{resolvedDescription}</DialogDescription>
         </DialogHeader>
 
         <ul className="flex flex-col gap-2 text-sm">
-          {CREW_FEATURES.map((f) => (
+          {crewSellingPoints(catalog).map((f) => (
             <li key={f} className="flex items-center gap-2">
               <IconCheck className="text-primary size-4 shrink-0" /> {f}
             </li>

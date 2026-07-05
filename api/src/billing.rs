@@ -10,6 +10,8 @@ use sha2::Sha256;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::plan::{Feature, Plan};
+
 const STRIPE_API: &str = "https://api.stripe.com";
 /// Reject webhook events whose timestamp is older than this (replay protection).
 const WEBHOOK_TOLERANCE_SECS: i64 = 300;
@@ -199,13 +201,9 @@ pub async fn create_portal_session(
         .ok_or_else(|| "Stripe returned no portal url".to_string())
 }
 
-// Solo (free) tier caps. Crew (paid) is unlimited.
-pub const FREE_MAX_PROJECTS: i64 = 1;
-pub const FREE_MAX_ADMINS: i64 = 1;
-pub const FREE_MAX_NON_ADMIN: i64 = 5;
-
 /// An org's billing posture: subscription status + current usage, with the
-/// derived plan/entitlement helpers the resolvers gate on.
+/// derived plan/entitlement helpers the resolvers gate on. Plan caps + feature
+/// gating come from [`crate::plan`] — the single source of truth.
 pub struct OrgBilling {
     pub status: Option<String>,
     pub current_period_end: Option<DateTime<Utc>>,
@@ -224,17 +222,32 @@ impl OrgBilling {
         )
     }
 
+    /// The org's current plan, derived from Stripe status.
+    pub fn plan(&self) -> Plan {
+        if self.paid() {
+            Plan::Crew
+        } else {
+            Plan::Solo
+        }
+    }
+
+    /// Whether the org's plan unlocks `feature` (per the [`crate::plan`] catalog).
+    pub fn has_feature(&self, feature: Feature) -> bool {
+        self.plan().allows(feature)
+    }
+
     /// Read-only lock: a non-paid org whose usage exceeds the Solo caps (e.g. a
     /// lapsed Crew org). Fresh free orgs within the caps are NOT restricted.
     pub fn restricted(&self) -> bool {
+        let caps = Plan::Solo.limits();
         !self.paid()
-            && (self.projects > FREE_MAX_PROJECTS
-                || self.admins > FREE_MAX_ADMINS
-                || self.non_admin > FREE_MAX_NON_ADMIN)
+            && (self.projects > caps.projects
+                || self.admins > caps.admins
+                || self.non_admin > caps.non_admin)
     }
 
     pub fn can_export(&self) -> bool {
-        self.paid()
+        self.has_feature(Feature::Export)
     }
 }
 

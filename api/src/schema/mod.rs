@@ -30,6 +30,7 @@ use crate::models::{
     PublicConfig, SceneData, SceneLine, ScenePoint, SignupResult, SurveyPoint, Transform,
     TransformResidual, User, UserRow,
 };
+use crate::plan::{Feature, Plan};
 use crate::pubsub::ScenePubSub;
 use crate::ratelimit::{ClientIp, RateLimiter};
 use crate::storage::Storage;
@@ -210,30 +211,34 @@ async fn require_editor_active<'a>(ctx: &'a Context<'a>) -> Result<&'a AuthConte
     Ok(auth)
 }
 
-/// Blocks a Crew-only feature unless the org is on a paid plan.
-async fn require_paid(ctx: &Context<'_>, feature: &str) -> Result<()> {
+/// Blocks a gated feature unless the org's plan unlocks it (per the `plan`
+/// catalog). The error message is built from the feature's catalog label, so
+/// call sites never hard-code feature names.
+async fn require_feature(ctx: &Context<'_>, feature: Feature) -> Result<()> {
     let auth = require_auth(ctx)?;
     if !crate::billing::org_billing(pool(ctx)?, auth.org_id)
         .await?
-        .paid()
+        .has_feature(feature)
     {
+        let meta = feature.meta();
         return Err(async_graphql::Error::new(format!(
-            "{feature} is a Crew feature. Upgrade to use it."
+            "{} is a Crew feature. Upgrade to use it.",
+            meta.label
         )));
     }
     Ok(())
 }
 
-/// Blocks exports unless the org is on a paid plan (Solo has no export).
+/// Blocks exports unless the org's plan includes the export feature.
 async fn require_export(ctx: &Context<'_>) -> Result<()> {
-    require_paid(ctx, "Exporting points").await
+    require_feature(ctx, Feature::Export).await
 }
 
 /// Blocks creating another project once a free org is at the Solo project cap.
 async fn require_project_quota(ctx: &Context<'_>) -> Result<()> {
     let auth = require_auth(ctx)?;
     let b = crate::billing::org_billing(pool(ctx)?, auth.org_id).await?;
-    if !b.paid() && b.projects >= crate::billing::FREE_MAX_PROJECTS {
+    if !b.paid() && b.projects >= Plan::Solo.limits().projects {
         return Err(async_graphql::Error::new(
             "The Solo plan is limited to 1 project. Upgrade to Crew for unlimited projects.",
         ));
@@ -249,12 +254,13 @@ async fn require_member_quota(ctx: &Context<'_>, new_admin: bool) -> Result<()> 
     if b.paid() {
         return Ok(());
     }
-    if new_admin && b.admins >= crate::billing::FREE_MAX_ADMINS {
+    let caps = Plan::Solo.limits();
+    if new_admin && b.admins >= caps.admins {
         return Err(async_graphql::Error::new(
             "The Solo plan allows 1 admin. Upgrade to Crew for more.",
         ));
     }
-    if !new_admin && b.non_admin >= crate::billing::FREE_MAX_NON_ADMIN {
+    if !new_admin && b.non_admin >= caps.non_admin {
         return Err(async_graphql::Error::new(
             "The Solo plan allows up to 5 members. Upgrade to Crew for unlimited members.",
         ));
@@ -465,6 +471,7 @@ pub struct QueryRoot(
     coords::CoordsQuery,
     scene::SceneQuery,
     billing::BillingQuery,
+    billing::PlanCatalogQuery,
 );
 
 /// The GraphQL mutation root — a merge of the per-domain mutation objects.

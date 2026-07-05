@@ -12,7 +12,10 @@ impl OverlayQuery {
     async fn cad_overlays(&self, ctx: &Context<'_>, project_id: Uuid) -> Result<Vec<CadOverlay>> {
         let auth = require_auth(ctx)?;
         let pool = pool(ctx)?;
-        if !crate::billing::org_billing(pool, auth.org_id).await?.paid() {
+        if !crate::billing::org_billing(pool, auth.org_id)
+            .await?
+            .has_feature(Feature::DxfOverlays)
+        {
             return Ok(Vec::new());
         }
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
@@ -28,7 +31,7 @@ impl OverlayQuery {
     /// The raw DXF text of an overlay (for client-side parsing/rendering).
     async fn cad_overlay_content(&self, ctx: &Context<'_>, id: Uuid) -> Result<String> {
         let auth = require_auth(ctx)?;
-        require_paid(ctx, "DXF overlays").await?;
+        require_feature(ctx, Feature::DxfOverlays).await?;
         let key = overlay_key_in_org(pool(ctx)?, id, auth.org_id).await?;
         let storage = storage(ctx)?;
         let bytes = storage.get(&key).await.map_err(async_graphql::Error::new)?;
@@ -54,7 +57,7 @@ impl OverlayMutation {
         content: String,
     ) -> Result<CadOverlay> {
         let auth = require_editor_active(ctx).await?;
-        require_paid(ctx, "DXF overlays").await?;
+        require_feature(ctx, Feature::DxfOverlays).await?;
         let pool = pool(ctx)?;
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
         if content.len() > import::MAX_DXF_BYTES {
@@ -102,7 +105,7 @@ impl OverlayMutation {
         visible: Option<bool>,
     ) -> Result<CadOverlay> {
         let auth = require_editor_active(ctx).await?;
-        require_paid(ctx, "DXF overlays").await?;
+        require_feature(ctx, Feature::DxfOverlays).await?;
         let row: Option<CadOverlay> = sqlx::query_as(&format!(
             "UPDATE cad_overlays co SET \
                offset_e = COALESCE($2, co.offset_e), \
@@ -136,7 +139,7 @@ impl OverlayMutation {
     /// Deletes an overlay and its stored file. Editor role required.
     async fn delete_cad_overlay(&self, ctx: &Context<'_>, id: Uuid) -> Result<bool> {
         let auth = require_editor_active(ctx).await?;
-        require_paid(ctx, "DXF overlays").await?;
+        require_feature(ctx, Feature::DxfOverlays).await?;
         let pool = pool(ctx)?;
         let key = overlay_key_in_org(pool, id, auth.org_id).await?;
         let row: Option<(Uuid,)> =

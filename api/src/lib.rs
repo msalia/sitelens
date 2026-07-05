@@ -9,6 +9,7 @@ pub mod geo;
 pub mod import;
 pub mod mail;
 pub mod models;
+pub mod plan;
 pub mod pubsub;
 pub mod ratelimit;
 pub mod schema;

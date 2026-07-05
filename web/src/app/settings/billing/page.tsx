@@ -25,11 +25,12 @@ import {
 } from '@/components/ui/empty';
 import {
   contactAdminHref,
-  CREW_FEATURES,
+  crewSellingPoints,
   isPaid,
   PRICING,
   useBilling,
   useCheckout,
+  usePlanCatalog,
 } from '@/lib/billing';
 import { graphql } from '@/lib/gql';
 import { gql } from '@/lib/graphql';
@@ -69,6 +70,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 function BillingContent() {
   const searchParams = useSearchParams();
   const { billing, loading, reload } = useBilling();
+  const { catalog } = usePlanCatalog();
   const { busy, openPortal, startCheckout } = useCheckout();
   const [me, setMe] = useState<Me | null>(null);
   const handledReturn = useRef(false);
@@ -217,7 +219,7 @@ function BillingContent() {
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <ul className="flex flex-col gap-2 text-sm">
-                {CREW_FEATURES.map((f) => (
+                {crewSellingPoints(catalog).map((f) => (
                   <li key={f} className="flex items-center gap-2">
                     <IconCheck className="text-primary size-4 shrink-0" /> {f}
                   </li>

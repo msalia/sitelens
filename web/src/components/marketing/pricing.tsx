@@ -1,10 +1,8 @@
-'use client';
-
 import { IconCheck } from '@tabler/icons-react';
 import Link from 'next/link';
 
 import { Badge } from '@/components/ui/badge';
-import { PRICING } from '@/lib/billing';
+import { crewSellingPoints, fetchPlanCatalog, PRICING } from '@/lib/plan';
 import { cn } from '@/lib/utils';
 
 interface Plan {
@@ -27,42 +25,39 @@ const SOLO_FEATURES = [
   '3D visualization',
 ];
 
-const CREW_FEATURES = [
-  'Unlimited projects',
-  'Unlimited admins & members',
-  'CSV / LandXML & full project exports',
-  'DXF overlays in the 3D view',
-];
-
-const PLANS: Plan[] = [
-  {
-    cta: 'Get started',
-    features: SOLO_FEATURES,
-    name: 'Solo',
-    price: 'Free',
-    tagline: 'Everything to tie and visualize a single site.',
-  },
-  {
-    cadence: PRICING.monthly.cadence,
-    cta: 'Start with Crew',
-    features: CREW_FEATURES,
-    featuresLead: 'Everything in Solo, plus:',
-    name: 'Crew · Monthly',
-    price: PRICING.monthly.label,
-    tagline: 'For teams running multiple jobs at once.',
-  },
-  {
-    cadence: PRICING.annual.cadence,
-    cta: 'Start with Crew',
-    featured: true,
-    features: CREW_FEATURES,
-    featuresLead: 'Everything in Solo, plus:',
-    name: 'Crew · Yearly',
-    note: PRICING.annual.note,
-    price: PRICING.annual.label,
-    tagline: 'The full toolkit at the best price.',
-  },
-];
+/** The Crew tier's cards, with the gated-feature list sourced from the plan
+ *  catalog (single source of truth) rather than a hand-maintained copy. */
+function buildPlans(crewFeatures: string[]): Plan[] {
+  return [
+    {
+      cta: 'Get started',
+      features: SOLO_FEATURES,
+      name: 'Solo',
+      price: 'Free',
+      tagline: 'Everything to tie and visualize a single site.',
+    },
+    {
+      cadence: PRICING.monthly.cadence,
+      cta: 'Start with Crew',
+      features: crewFeatures,
+      featuresLead: 'Everything in Solo, plus:',
+      name: 'Crew · Monthly',
+      price: PRICING.monthly.label,
+      tagline: 'For teams running multiple jobs at once.',
+    },
+    {
+      cadence: PRICING.annual.cadence,
+      cta: 'Start with Crew',
+      featured: true,
+      features: crewFeatures,
+      featuresLead: 'Everything in Solo, plus:',
+      name: 'Crew · Yearly',
+      note: PRICING.annual.note,
+      price: PRICING.annual.label,
+      tagline: 'The full toolkit at the best price.',
+    },
+  ];
+}
 
 function PlanCard({ plan }: { plan: Plan }) {
   return (
@@ -117,7 +112,9 @@ function PlanCard({ plan }: { plan: Plan }) {
   );
 }
 
-export function Pricing() {
+export async function Pricing() {
+  const catalog = await fetchPlanCatalog();
+  const plans = buildPlans(crewSellingPoints(catalog));
   return (
     <section id="pricing" className="mx-auto w-full max-w-6xl scroll-mt-20 px-6 py-24">
       <div className="mx-auto max-w-2xl text-center">
@@ -132,7 +129,7 @@ export function Pricing() {
       </div>
 
       <div className="mt-14 grid gap-6 lg:grid-cols-3">
-        {PLANS.map((plan) => (
+        {plans.map((plan) => (
           <PlanCard key={plan.name} plan={plan} />
         ))}
       </div>
