@@ -486,6 +486,7 @@ pub struct MutationRoot(
     points::PointsMutation,
     overlays::OverlayMutation,
     terrain::TerrainMutation,
+    field::FieldMutation,
     billing::BillingMutation,
 );
 

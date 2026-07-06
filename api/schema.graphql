@@ -1,4 +1,32 @@
 """
+An inbound as-built import + comparison run (snapshots the tolerance spec).
+"""
+type AsBuiltBatch {
+	id: UUID!
+	projectId: UUID!
+	sourceFilename: String!
+	format: FieldFormat!
+	baselineScope: BaselineScope!
+	baselineRefId: UUID
+	deltaSpace: String!
+	tolHWarn: Float!
+	tolHFail: Float!
+	tolVWarn: Float!
+	tolVFail: Float!
+	reportUnit: LengthUnit!
+	createdAt: DateTime!
+}
+
+"""
+The design-point set an as-built import is compared against.
+"""
+enum BaselineScope {
+	ALL
+	CATEGORY
+	GROUP
+}
+
+"""
 The org's billing posture for the client: plan, status, usage, and limits
 (`-1` = unlimited). Drives the upgrade gate, caps, and the Billing settings page.
 """
@@ -70,6 +98,64 @@ enum CodeField {
 }
 
 """
+A full comparison: batch metadata + per-point rows + summary.
+"""
+type Comparison {
+	batch: AsBuiltBatch!
+	rows: [ComparisonRow!]!
+	summary: ComparisonSummary!
+}
+
+"""
+One paired/unpaired as-built point. Coords + deltas are canonical meters
+(projected-ground frame for the primary deltas, building-grid for the grid
+deltas); the client converts to `AsBuiltBatch.reportUnit`.
+"""
+type ComparisonRow {
+	id: UUID!
+	asBuiltLabel: String!
+	asBuiltN: Float!
+	asBuiltE: Float!
+	asBuiltZ: Float
+	designPointId: UUID
+	designN: Float
+	designE: Float
+	designZ: Float
+	matchMethod: FieldMatchMethod!
+	deltaN: Float
+	deltaE: Float
+	deltaZ: Float
+	deltaHRadial: Float
+	deltaGridN: Float
+	deltaGridE: Float
+	status: ComparisonStatus!
+}
+
+"""
+Tolerance classification of a compared point.
+"""
+enum ComparisonStatus {
+	PASS
+	WARN
+	FAIL
+	UNMATCHED
+	NO_VERTICAL
+}
+
+"""
+Rollup counts + horizontal miss stats for a comparison.
+"""
+type ComparisonSummary {
+	pass: Int!
+	warn: Int!
+	fail: Int!
+	unmatched: Int!
+	noVertical: Int!
+	maxMiss: Float
+	rmsMiss: Float
+}
+
+"""
 A city-published control point. Coordinates are meters. `grid_x`/`grid_y` are
 the point's location in building-grid space, used to solve the transform.
 """
@@ -133,6 +219,17 @@ The input/output is a string in RFC3339 format.
 scalar DateTime
 
 """
+Result of auto-detecting an uploaded file's format.
+"""
+type DetectedFormat {
+	format: FieldFormat!
+	"""
+	CSV needs a preset/column mapping chosen before import.
+	"""
+	needsMapping: Boolean!
+}
+
+"""
 An EPSG coordinate-reference-system entry for the picker.
 """
 type EpsgEntry {
@@ -184,6 +281,15 @@ enum FieldFormat {
 	CSV
 	LAND_XML
 	JOB_XML
+}
+
+"""
+How an as-built row was paired to a design point.
+"""
+enum FieldMatchMethod {
+	NUMBER
+	MANUAL
+	UNMATCHED
 }
 
 """
@@ -474,6 +580,25 @@ type MutationRoot {
 	the free Overpass API. Same 7-day cooldown as terrain. Visual context only.
 	"""
 	refreshBuildings(projectId: UUID!, south: Float!, north: Float!, west: Float!, east: Float!, force: Boolean): ProjectBuildings!
+	"""
+	Sniffs an uploaded file's format (base64) for the import UI.
+	"""
+	detectFieldFormat(contentBase64: String!): DetectedFormat!
+	"""
+	Decodes an as-built file, compares it to a design baseline, snapshots the
+	result, and returns the new batch. Coordinates arrive in `space`/`unit`
+	(default projected-ground / US survey foot); CSV requires a `presetId`.
+	"""
+	importAsBuilt(projectId: UUID!, contentBase64: String!, filename: String, format: FieldFormat, presetId: String, space: ExportSpace, unit: LengthUnit, baselineScope: BaselineScope, baselineRefId: UUID, tolOverride: ToleranceInput, reportUnit: LengthUnit): AsBuiltBatch!
+	"""
+	Manually re-pairs an as-built row to a chosen design point and recomputes
+	that row's deltas against the (snapshotted) as-built coords + batch tolerance.
+	"""
+	repairComparison(batchId: UUID!, asBuiltCompId: UUID!, designPointId: UUID!): ComparisonRow!
+	"""
+	Deletes an as-built batch and its comparison rows (cascade). Editor role.
+	"""
+	deleteAsBuiltBatch(batchId: UUID!): Boolean!
 	"""
 	Starts a hosted Stripe Checkout for the Crew plan; returns the redirect URL
 	the client sends the browser to. Admin-only.
@@ -796,6 +921,14 @@ type QueryRoot {
 	"""
 	exportField(projectId: UUID!, presetId: String!, space: ExportSpace, unit: LengthUnit, pointIds: [UUID!], categoryId: UUID, codeField: CodeField): FieldExportResult!
 	"""
+	All as-built comparison batches for a project (newest first).
+	"""
+	asBuiltBatches(projectId: UUID!): [AsBuiltBatch!]!
+	"""
+	A single comparison: batch metadata + per-point rows + summary stats.
+	"""
+	comparison(batchId: UUID!): Comparison!
+	"""
 	The caller org's plan, subscription status, usage, and limits.
 	"""
 	billing: BillingInfo!
@@ -908,6 +1041,16 @@ type SurveyPoint {
 	categoryId: UUID
 	tags: [String!]!
 	importBatchId: UUID
+}
+
+"""
+Optional per-import tolerance override (canonical meters).
+"""
+input ToleranceInput {
+	hWarn: Float!
+	hFail: Float!
+	vWarn: Float!
+	vFail: Float!
 }
 
 """

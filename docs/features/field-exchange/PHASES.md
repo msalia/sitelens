@@ -85,17 +85,20 @@ The core QC logic.
 
 ### Deliverables
 
-- [ ] `api/src/field/compare.rs` — match by number, projected-ground primary + grid secondary deltas, tolerance status, no-vertical handling, snapshot of design coords + tolerance spec.
-- [ ] `detectFieldFormat` + `importAsBuilt` mutation (decode → compare → snapshot → persist).
-- [ ] `repairComparison` (manual pairing, recompute against snapshot).
-- [ ] `asBuiltBatches` + `comparison` queries (rows + summary stats).
-- [ ] `deleteAsBuiltBatch`.
+- [x] `api/src/field/compare.rs` — pure engine: match by number, projected-ground primary + building-grid secondary deltas, tolerance status (worse-of h/v, `no_vertical` when a Z is missing), snapshot of design coords. 8 unit tests.
+- [x] `detectFieldFormat` + `importAsBuilt` mutation (decode → convert `space`/`unit` → compare → snapshot batch + rows → persist). `to_projected_grid` inverts `space_ne`.
+- [x] `repairComparison` (manual pairing → recompute against snapshotted as-built coords + batch tolerance → `match_method='manual'`).
+- [x] `asBuiltBatches` + `comparison` queries (batch + rows + summary: counts + max/RMS miss).
+- [x] `deleteAsBuiltBatch` (cascade removes comparison rows).
 
-### Tests
+**Design note:** as-builts live only in `as_built_comparisons` (snapshotted), not duplicated into `survey_points` — the comparison row is self-contained (0014's schema already stores `as_built_n/e/z` inline + only `design_point_id` FK). The P3 `point_type='design'` audit stays as defensive hardening.
 
-- [ ] Number-match, unmatched persistence, manual re-pair, baseline scoping (all/category/group).
-- [ ] Delta correctness in both frames; tolerance pass/warn/fail boundaries; no-vertical case.
-- [ ] **Snapshot immutability:** mutate a design point / re-solve transform → existing comparison numbers unchanged.
+### Tests (integration, real PostGIS)
+
+- [x] Number-match + unmatched persistence + manual re-pair + baseline **category** scoping.
+- [x] Delta correctness (ground/csf + grid frames) + tolerance pass/warn/fail boundaries + no-vertical (unit tests).
+- [x] **Snapshot immutability:** move a design point after import → comparison `designN`/deltas unchanged.
+- [x] `deleteAsBuiltBatch` removes it; all mutations Crew-gated.
 
 ### Validates
 

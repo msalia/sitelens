@@ -13,6 +13,7 @@ use async_graphql::Enum;
 use crate::export::ExportPoint;
 use crate::import::{ImportError, ParsedPoint};
 
+pub mod compare;
 pub mod csv_preset;
 pub mod jobxml;
 pub mod landxml;
@@ -69,6 +70,26 @@ pub fn codec<'a>(
         FieldFormat::LandXml => Box::new(landxml::LandXmlCodec),
         FieldFormat::JobXml => Box::new(jobxml::JobXmlCodec),
     })
+}
+
+impl FieldFormat {
+    /// Wire/DB string used in `as_built_batches.format` (CHECK: jobxml|landxml|csv).
+    pub fn as_db_str(self) -> &'static str {
+        match self {
+            FieldFormat::Csv => "csv",
+            FieldFormat::LandXml => "landxml",
+            FieldFormat::JobXml => "jobxml",
+        }
+    }
+
+    pub fn from_db_str(s: &str) -> Option<FieldFormat> {
+        match s {
+            "csv" => Some(FieldFormat::Csv),
+            "landxml" => Some(FieldFormat::LandXml),
+            "jobxml" => Some(FieldFormat::JobXml),
+            _ => None,
+        }
+    }
 }
 
 /// The file extension (no dot) for a format.
