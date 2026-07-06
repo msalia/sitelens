@@ -82,7 +82,7 @@ test.describe('Solo (free) tier', () => {
     // The tab is shown on the free tier; clicking it opens the upgrade prompt.
     await page.getByRole('button', { exact: true, name: 'Overlays' }).click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog.getByText('DXF overlays are a Crew feature')).toBeVisible();
+    await expect(dialog.getByText('DXF overlays is a Crew feature')).toBeVisible();
     await expect(dialog.getByRole('link', { name: 'See plans' })).toBeVisible();
   });
 });
