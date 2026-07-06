@@ -74,6 +74,14 @@ export const docsOrder: DocMeta[] = [
   },
   {
     description:
+      'Export to Trimble/Carlson/Topcon, import as-builts, and run a stakeout QC comparison.',
+    group: 'Working with Data',
+    href: '/docs/field-exchange',
+    slug: 'field-exchange',
+    title: 'Field Exchange',
+  },
+  {
+    description:
       'The 3D scene, terrain, projecting onto terrain, camera views, and display toggles.',
     group: 'Visualization',
     href: '/docs/visualization',

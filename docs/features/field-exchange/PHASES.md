@@ -156,15 +156,15 @@ Self-serve docs and the validation that makes "supported" real.
 
 ### Deliverables
 
-- [ ] In-app docs page: add `field-exchange` to `web/src/lib/docs.ts` `docsOrder` (group "Working with Data"); create `web/src/content/docs/field-exchange.md`; create `web/src/app/docs/field-exchange/page.tsx` per the `[slug]` pattern.
-- [ ] Docs content: supported apps/formats, export-per-collector how-to, getting files onto the device, import + baseline + tolerances, reading results, downloading reports, projected-ground/feet default, per-app notes.
-- [ ] **Real-device acceptance checklist:** load each emitted file into Trimble Access (JobXML + CSV) / Carlson (PNEZD CSV + LandXML) / Topcon Magnet (CSV); import a real file back from each; lock verified files as golden fixtures in `api/tests/fixtures/field/`.
-- [ ] Mark each format's "supported" status only after its device pass.
+- [x] In-app docs page: added `field-exchange` to `web/src/lib/docs.ts` `docsOrder` (group "Working with Data"); created `web/src/content/docs/field-exchange.md` + `web/src/app/docs/field-exchange/page.tsx` per the `[slug]` pattern.
+- [x] Docs content: supported apps/formats table, export-per-collector how-to, getting files onto the device, import + baseline + tolerances, reading results (+ 3D overlay), downloading reports, projected-ground/feet default, per-app notes.
+- [x] **Real-device acceptance checklist** authored (`docs/features/field-exchange/ACCEPTANCE.md`): per-app export→load→export→import→lock-fixture steps + a status table. ⏳ **The device pass itself is manual** (needs physical Trimble/Carlson/Topcon collectors) — run by the user; formats stay "pending device verification" until then.
+- [x] "Supported" status tracked in ACCEPTANCE.md (all Pending until the device pass).
 
 ### Tests
 
-- [ ] Docs page renders in the nav + route resolves.
-- [ ] Golden-fixture decode tests added from the real-device files.
+- [x] Docs page builds + route `/docs/field-exchange` resolves (static); nav is data-driven from `docsOrder`.
+- [ ] Golden-fixture decode tests — added during the manual device pass (real files not yet available).
 
 ### Validates
 
