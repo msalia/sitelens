@@ -457,6 +457,7 @@ mod scene;
 mod subscription;
 mod system;
 mod terrain;
+mod utilities;
 
 pub use subscription::SubscriptionRoot;
 
@@ -473,6 +474,7 @@ pub struct QueryRoot(
     coords::CoordsQuery,
     scene::SceneQuery,
     field::FieldQuery,
+    utilities::UtilitiesQuery,
     billing::BillingQuery,
     billing::PlanCatalogQuery,
 );
@@ -487,6 +489,7 @@ pub struct MutationRoot(
     overlays::OverlayMutation,
     terrain::TerrainMutation,
     field::FieldMutation,
+    utilities::UtilitiesMutation,
     billing::BillingMutation,
 );
 

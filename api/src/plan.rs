@@ -84,8 +84,10 @@ pub enum Feature {
     DxfOverlays,
     /// Field-survey-app interop (per-app formats) + as-built QC comparison.
     FieldExchange,
+    /// As-built utility records (runs + structures, 3D, archive).
+    Utilities,
     // Planned site-analysis suite (add here when built):
-    //   TurningRadius, Parking, Hydrology, Traffic, Utilities, Surfaces
+    //   TurningRadius, Parking, Hydrology, Traffic, Surfaces
 }
 
 /// Display + gating metadata for a [`Feature`].
@@ -123,6 +125,12 @@ impl Feature {
                 blurb: "Native field-app formats & as-built QC.",
                 min_plan: Plan::Crew,
             },
+            Feature::Utilities => FeatureMeta {
+                key: "utilities",
+                label: "Utility Records",
+                blurb: "As-built utilities in 3D + a durable archive.",
+                min_plan: Plan::Crew,
+            },
         }
     }
 
@@ -132,6 +140,7 @@ impl Feature {
             Feature::Export,
             Feature::DxfOverlays,
             Feature::FieldExchange,
+            Feature::Utilities,
         ]
     }
 }

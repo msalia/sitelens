@@ -615,6 +615,34 @@ type MutationRoot {
 	"""
 	deleteAsBuiltBatch(batchId: UUID!): Boolean!
 	"""
+	Creates a run with snapshotted vertices; logs a `create` audit entry.
+	"""
+	createUtilityRun(projectId: UUID!, input: UtilityRunInput!, vertices: [UtilityVertexInput!]!): UtilityRun!
+	"""
+	Updates a run's attributes (omitted fields keep their value); audited.
+	"""
+	updateUtilityRun(id: UUID!, input: UtilityRunInput!): UtilityRun!
+	"""
+	Replaces a run's geometry (re-snapshots vertices); audited.
+	"""
+	updateUtilityRunGeometry(id: UUID!, vertices: [UtilityVertexInput!]!): UtilityRun!
+	"""
+	Creates a structure; audited.
+	"""
+	createUtilityStructure(projectId: UUID!, input: UtilityStructureInput!): UtilityStructure!
+	"""
+	Updates a structure (omitted fields keep their value); audited.
+	"""
+	updateUtilityStructure(id: UUID!, input: UtilityStructureInput!): UtilityStructure!
+	"""
+	Soft-deletes a run (audited).
+	"""
+	deleteUtilityRun(id: UUID!): Boolean!
+	"""
+	Soft-deletes a structure (audited).
+	"""
+	deleteUtilityStructure(id: UUID!): Boolean!
+	"""
 	Starts a hosted Stripe Checkout for the Crew plan; returns the redirect URL
 	the client sends the browser to. Admin-only.
 	"""
@@ -625,6 +653,17 @@ type MutationRoot {
 	"""
 	createBillingPortalSession: String!
 }
+
+"""
+ISO 8601 calendar date without timezone.
+Format: %Y-%m-%d
+
+# Examples
+
+* `1994-11-13`
+* `2000-02-24`
+"""
+scalar NaiveDate
 
 """
 An organization as exposed over GraphQL.
@@ -953,6 +992,26 @@ type QueryRoot {
 	"""
 	comparisonReportPdf(batchId: UUID!): FileBlob!
 	"""
+	The curated (APWA) utility type catalog.
+	"""
+	utilityTypes: [UtilityType!]!
+	"""
+	The project's utility inventory (runs + structures), filtered.
+	"""
+	utilities(projectId: UUID!, typeKey: String, level: String, search: String): UtilityInventory!
+	"""
+	A single run (with vertices + derived length/slope).
+	"""
+	utility(id: UUID!): UtilityRun!
+	"""
+	A single structure.
+	"""
+	utilityStructure(id: UUID!): UtilityStructure!
+	"""
+	The change history for a project (optionally a single entity), newest first.
+	"""
+	utilityAudit(projectId: UUID!, entityId: UUID): [UtilityAuditEntry!]!
+	"""
 	The caller org's plan, subscription status, usage, and limits.
 	"""
 	billing: BillingInfo!
@@ -1122,6 +1181,177 @@ type User {
 	role: Role!
 	emailVerified: Boolean!
 	createdAt: DateTime!
+}
+
+"""
+One append-only audit entry (field-level `diff` as a JSON object string).
+"""
+type UtilityAuditEntry {
+	id: UUID!
+	entityType: String!
+	entityId: UUID!
+	action: String!
+	changedBy: UUID
+	changedAt: DateTime!
+	diff: String!
+}
+
+"""
+A project's utility inventory (filtered runs + structures).
+"""
+type UtilityInventory {
+	runs: [UtilityRun!]!
+	structures: [UtilityStructure!]!
+}
+
+"""
+A linear utility run with typed attributes + snapshotted geometry.
+"""
+type UtilityRun {
+	id: UUID!
+	projectId: UUID!
+	typeKey: String!
+	label: String!
+	level: String
+	"""
+	Diameter in canonical meters (entered in inches).
+	"""
+	diameter: Float
+	material: String
+	invertUp: Float
+	invertDown: Float
+	slope: Float
+	owner: String
+	installDate: NaiveDate
+	condition: String
+	"""
+	Free-form attributes as a JSON object string.
+	"""
+	attrsExtra: String!
+	tags: [String!]!
+	source: String!
+	asBuiltDate: NaiveDate
+	locateMethod: String
+	capturedAt: DateTime!
+	createdAt: DateTime!
+	updatedAt: DateTime!
+	vertices: [UtilityVertex!]!
+	"""
+	Derived 3D length (meters) from the vertices.
+	"""
+	length: Float
+}
+
+"""
+Run attributes on create/update. All optional; on update, omitted fields keep
+their current value. `diameter_inches` is stored canonical (meters).
+"""
+input UtilityRunInput {
+	typeKey: String
+	label: String
+	level: String
+	diameterInches: Float
+	material: String
+	invertUp: Float
+	invertDown: Float
+	owner: String
+	installDate: NaiveDate
+	condition: String
+	"""
+	JSON object string.
+	"""
+	attrsExtra: String
+	tags: [String!]
+	source: String
+	asBuiltDate: NaiveDate
+	locateMethod: String
+}
+
+"""
+A node structure (manhole, valve, hydrant, …).
+"""
+type UtilityStructure {
+	id: UUID!
+	projectId: UUID!
+	typeKey: String!
+	label: String!
+	level: String
+	northing: Float!
+	easting: Float!
+	rimElev: Float
+	"""
+	Pipe inverts as a JSON array string: `[{label, elev, pipe?}]`.
+	"""
+	inverts: String!
+	material: String
+	owner: String
+	condition: String
+	attrsExtra: String!
+	tags: [String!]!
+	source: String!
+	asBuiltDate: NaiveDate
+	locateMethod: String
+	sourcePointId: UUID
+	capturedAt: DateTime!
+	createdAt: DateTime!
+	updatedAt: DateTime!
+}
+
+"""
+Structure attributes on create/update. Position is required on create.
+"""
+input UtilityStructureInput {
+	typeKey: String
+	label: String
+	level: String
+	northing: Float
+	easting: Float
+	rimElev: Float
+	"""
+	JSON array string.
+	"""
+	inverts: String
+	material: String
+	owner: String
+	condition: String
+	attrsExtra: String
+	tags: [String!]
+	source: String
+	asBuiltDate: NaiveDate
+	locateMethod: String
+	sourcePointId: UUID
+}
+
+"""
+A curated utility type (APWA-aligned). `default_geometry` ∈ line|structure|both.
+"""
+type UtilityType {
+	key: String!
+	label: String!
+	apwaColor: String!
+	defaultGeometry: String!
+}
+
+"""
+One ordered vertex of a run (canonical meters). `source_point_id` is a
+provenance-only soft link to the survey point it was snapped from.
+"""
+type UtilityVertex {
+	seq: Int!
+	northing: Float!
+	easting: Float!
+	elevation: Float
+	sourcePointId: UUID
+}
+
+"""
+One vertex on capture. `seq` is the array position; coords are canonical meters.
+"""
+input UtilityVertexInput {
+	northing: Float!
+	easting: Float!
+	elevation: Float
+	sourcePointId: UUID
 }
 
 """

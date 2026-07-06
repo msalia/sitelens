@@ -41,16 +41,16 @@ Create/edit utilities in-app from survey points.
 
 ### Deliverables
 
-- [ ] GraphQL: `utilityTypes`, `utilities`, `utility`/`utilityStructure`, `createUtilityRun`, `updateUtilityRun(+Geometry)`, `createUtilityStructure`, `updateUtilityStructure`, soft `delete*`, `utilityAudit` — all audited, tenancy + Crew-gated.
-- [ ] Geometry snapshot on capture (+ optional `source_point_id` soft link).
-- [ ] Provenance fields (captured-by/at, as-built date, source, locate method) wired.
-- [ ] Minimal digitize UI in a new **Utilities** panel: pick type → snap survey points / click scene to lay a run, place a structure, typed attribute form (+ free-form extras, level tag).
+- [x] GraphQL (`schema/utilities.rs`, new `Feature::Utilities` gate): `utilityTypes`, `utilities`, `utility`/`utilityStructure`, `createUtilityRun`, `updateUtilityRun(+Geometry)`, `createUtilityStructure`, `updateUtilityStructure`, soft `deleteUtilityRun/Structure`, `utilityAudit` — all audited, tenancy + Crew-gated. Derived `length`/`slope` computed via `geom`.
+- [x] Geometry snapshot on capture (+ optional `source_point_id` soft link).
+- [x] Provenance fields (captured-by/at, as-built date, source, locate method) wired.
+- [ ] **Minimal digitize UI** in a new Utilities panel (plan editor — snap survey points / click scene) → **remaining P2 half** (large R3F/foundation §3 piece; backend is ready for it).
 
 ### Tests
 
-- [ ] CRUD + audit-on-write; snapshot survives source point edit/delete.
-- [ ] Typed-attribute validation per type; level tag persists.
-- [ ] Playwright: digitize a run from points + attribute it.
+- [x] CRUD + audit-on-write; snapshot survives source-point delete (soft link cleared, coords intact); soft-delete hides from inventory; Crew gate (5 integration tests).
+- [x] Typed attrs (diameter inches→m, inverts, tags, free-form `attrs_extra`) + derived length/slope persist. *(Per-type field validation is minimal — attrs stored regardless of type.)*
+- [ ] Playwright: digitize a run — with the digitize UI.
 
 ### Validates
 

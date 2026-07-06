@@ -11,6 +11,7 @@ mod grid;
 mod points;
 mod project;
 mod scene;
+mod utilities;
 
 pub use assets::*;
 pub use auth::*;
@@ -21,3 +22,4 @@ pub use grid::*;
 pub use points::*;
 pub use project::*;
 pub use scene::*;
+pub use utilities::*;
