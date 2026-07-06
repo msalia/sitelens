@@ -113,8 +113,8 @@ User-facing surface for both directions.
 ### Deliverables
 
 - [x] New **Field** panel (`field-panel.tsx`, Crew-gated tab): Export-to-device (preset/space/unit/category), Import as-built (auto-detect + CSV preset, space/unit, baseline all/category), Comparisons list with delete.
-- [x] **Results table** (`field/results-table.tsx`): ΔN/ΔE/ΔH/ΔZ (report unit), status chips, unmatched rows get an inline manual-pairing picker, filter by status. *(Grid-frame secondary columns are in the data (`deltaGridN/E`) but not yet rendered → P5b.)*
-- [ ] **3D scene overlay (Three.js/R3F):** design vs as-built markers + status-colored leader lines → **deferred to P5b** (needs the `comparison` query to also return geographic coords + Field↔Scene selection wiring).
+- [x] **Results table** (`field/results-table.tsx`): ΔN/ΔE/ΔH/ΔZ + grid-frame secondary columns (Δn/Δe grid) in report unit, status chips, unmatched rows get an inline manual-pairing picker, filter by status.
+- [x] **3D scene overlay (Three.js/R3F)** (P5b): `comparison` query now returns geographic coords; `FieldPanel` lifts the selected comparison to the page → `SceneView` → `TerrainViewer` → `terrain/comparison-overlay.tsx` draws status-colored leader lines + design/as-built markers (unmatched = lone wireframe). Display toggle "As-built comparison" in the scene menu; clears on tab-leave / delete.
 - [x] Solo-plan upgrade gate on the Field tab (shared `CREW_TABS` pattern, `feature="field_exchange"`). shadcn components, sharp roundedness.
 
 ### Tests

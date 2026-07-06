@@ -6,6 +6,8 @@ import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import type { ComparisonMarker } from '@/components/projects/terrain-viewer';
+
 import { UpgradeDialog } from '@/components/billing/upgrade-dialog';
 import { CadOverlayPanel } from '@/components/projects/cad-overlay-panel';
 import { ControlPointsEditor } from '@/components/projects/control-points-editor';
@@ -141,6 +143,7 @@ export default function ProjectWorkspace() {
   const [overlays, setOverlays] = useState<CadOverlay[]>([]);
   const [pointCount, setPointCount] = useState(0);
   const [focus, setFocus] = useState<{ id: string; nonce: number } | null>(null);
+  const [comparisonOverlay, setComparisonOverlay] = useState<ComparisonMarker[] | null>(null);
   const [sceneReload, setSceneReload] = useState(0);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('setup');
@@ -339,7 +342,11 @@ export default function ProjectWorkspace() {
           )}
           {tab === 'field' && !crewGated && (
             <section id="panel-field">
-              <FieldPanel project={project} categories={categories} />
+              <FieldPanel
+                project={project}
+                categories={categories}
+                onOverlay={setComparisonOverlay}
+              />
             </section>
           )}
         </div>
@@ -357,6 +364,7 @@ export default function ProjectWorkspace() {
         <SceneView
           project={project}
           categories={categories}
+          comparison={comparisonOverlay}
           focus={focus}
           reloadNonce={sceneReload}
           stats={[

@@ -59,6 +59,11 @@ test('import as-built → results table → manual pair an unmatched point', asy
   const pair = page.getByRole('combobox', { name: 'Pair 99' });
   await expect(pair).toBeVisible();
 
+  // The comparison drives a 3D overlay — its toggle appears in the scene Display menu.
+  await page.getByRole('button', { name: 'Display' }).click();
+  await expect(page.getByRole('menuitemcheckbox', { name: 'As-built comparison' })).toBeVisible();
+  await page.keyboard.press('Escape');
+
   // Manually pair "99" to design point "2" → it leaves the unmatched state.
   await pair.click();
   await page.getByRole('option', { name: '2' }).click();

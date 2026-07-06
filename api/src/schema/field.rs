@@ -145,7 +145,12 @@ impl FieldQuery {
         require_feature(ctx, Feature::FieldExchange).await?;
         let pool = pool(ctx)?;
         let batch = load_batch_in_org(pool, batch_id, auth.org_id).await?;
-        let rows = load_comparison_rows(pool, batch_id).await?;
+        // CRS for converting the stored projected meters into geographic coords
+        // the 3D scene overlay can place.
+        let ProjectCrs {
+            epsg, rotation, ..
+        } = load_project_crs(pool, batch.project_id, auth.org_id).await?;
+        let rows = load_comparison_rows(pool, batch_id, epsg, rotation).await?;
         let summary = summarize_rows(&rows);
         Ok(Comparison {
             batch,
@@ -547,6 +552,13 @@ impl From<ComparisonRowDb> for ComparisonRow {
             delta_grid_n: r.delta_grid_n,
             delta_grid_e: r.delta_grid_e,
             status: ComparisonStatus::from_db_str(&r.status),
+            // Geographic coords are filled by `load_comparison_rows` (needs CRS).
+            as_built_latitude: None,
+            as_built_longitude: None,
+            as_built_height: None,
+            design_latitude: None,
+            design_longitude: None,
+            design_height: None,
         }
     }
 }
@@ -690,8 +702,14 @@ async fn load_batch_in_org(pool: &PgPool, batch_id: Uuid, org_id: Uuid) -> Resul
     found_in_org(row.map(Into::into), "comparison")
 }
 
-/// Loads all comparison rows for a batch (caller has verified batch ownership).
-async fn load_comparison_rows(pool: &PgPool, batch_id: Uuid) -> Result<Vec<ComparisonRow>> {
+/// Loads all comparison rows for a batch (caller has verified batch ownership),
+/// enriching each with geographic coords (via the project CRS) for the 3D overlay.
+async fn load_comparison_rows(
+    pool: &PgPool,
+    batch_id: Uuid,
+    epsg: i32,
+    rotation: Option<convert::SiteRotation>,
+) -> Result<Vec<ComparisonRow>> {
     let rows: Vec<ComparisonRowDb> = sqlx::query_as(&format!(
         "SELECT {AS_BUILT_COMPARISON_COLUMNS} FROM as_built_comparisons \
          WHERE batch_id = $1 ORDER BY created_at, as_built_label"
@@ -699,7 +717,35 @@ async fn load_comparison_rows(pool: &PgPool, batch_id: Uuid) -> Result<Vec<Compa
     .bind(batch_id)
     .fetch_all(pool)
     .await?;
-    Ok(rows.into_iter().map(Into::into).collect())
+    Ok(rows
+        .into_iter()
+        .map(|db| {
+            let mut r: ComparisonRow = db.into();
+            let (lat, lon) = to_geographic(r.as_built_e, r.as_built_n, epsg, rotation);
+            r.as_built_latitude = Some(lat);
+            r.as_built_longitude = Some(lon);
+            r.as_built_height = Some(r.as_built_z.unwrap_or(0.0));
+            if let (Some(dn), Some(de)) = (r.design_n, r.design_e) {
+                let (dlat, dlon) = to_geographic(de, dn, epsg, rotation);
+                r.design_latitude = Some(dlat);
+                r.design_longitude = Some(dlon);
+                r.design_height = Some(r.design_z.unwrap_or(0.0));
+            }
+            r
+        })
+        .collect())
+}
+
+/// Projected-grid meters → geographic (lat, lon) degrees, un-rotating the site
+/// rotation at the projected↔geographic boundary (mirrors the export path).
+fn to_geographic(
+    e_m: f64,
+    n_m: f64,
+    epsg: i32,
+    rotation: Option<convert::SiteRotation>,
+) -> (f64, f64) {
+    let (te, tn) = rotation.map_or((e_m, n_m), |r| r.to_true(e_m, n_m));
+    crs::projected_to_geographic(epsg, te, tn).unwrap_or((0.0, 0.0))
 }
 
 /// Status counts + horizontal miss (max/RMS) over comparison rows.

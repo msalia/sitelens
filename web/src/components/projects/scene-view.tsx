@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import type {
   BuildingFootprint,
   CameraView,
+  ComparisonMarker,
   RenderableOverlay,
   TerrainData,
 } from '@/components/projects/terrain-viewer';
@@ -44,6 +45,7 @@ const TerrainViewer = dynamic(
 
 export function SceneView({
   categories,
+  comparison,
   focus,
   project,
   reloadNonce,
@@ -51,6 +53,8 @@ export function SceneView({
 }: {
   project: Project;
   categories: PointCategory[];
+  /** As-built QC comparison markers to overlay (from the Field panel). */
+  comparison?: ComparisonMarker[] | null;
   /** Request from the table to fly to a point; `nonce` re-triggers. */
   focus?: { id: string; nonce: number } | null;
   /** Bumped by the parent to force a scene reload (e.g. after a DXF upload or
@@ -85,6 +89,7 @@ export function SceneView({
   const [showTerrain, setShowTerrain] = useState(true);
   const [showBuildings, setShowBuildings] = useState(true);
   const [showOverlays, setShowOverlays] = useState(true);
+  const [showComparison, setShowComparison] = useState(true);
   const [projectOnTerrain, setProjectOnTerrain] = useState(true);
   const [view, setView] = useState<CameraView>('iso');
   const [viewNonce, setViewNonce] = useState(0);
@@ -393,6 +398,7 @@ export function SceneView({
             showTerrain={showTerrain}
             showOverlays={showOverlays}
             overlays={overlays}
+            comparison={showComparison ? comparison : null}
             originProjectedE={scene.originProjectedE}
             originProjectedN={scene.originProjectedN}
             shownLayers={shownLayers}
@@ -424,6 +430,9 @@ export function SceneView({
         setShowBuildings={setShowBuildings}
         showOverlays={showOverlays}
         setShowOverlays={setShowOverlays}
+        showComparison={showComparison}
+        setShowComparison={setShowComparison}
+        comparisonCount={comparison?.length ?? 0}
         projectOnTerrain={projectOnTerrain}
         setProjectOnTerrain={setProjectOnTerrain}
         buildingsCount={buildings.length}

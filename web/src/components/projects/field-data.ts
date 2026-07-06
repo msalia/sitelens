@@ -123,6 +123,12 @@ export const COMPARISON = graphql(`
         deltaGridN
         deltaGridE
         status
+        asBuiltLatitude
+        asBuiltLongitude
+        asBuiltHeight
+        designLatitude
+        designLongitude
+        designHeight
       }
     }
   }

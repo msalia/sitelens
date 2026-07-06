@@ -34,6 +34,7 @@ type SceneGroup = { id: string; name: string; memberIds: string[] };
 export function SceneToolbar({
   buildingsCount,
   categories,
+  comparisonCount,
   groupFilter,
   groups,
   hasScene,
@@ -49,12 +50,14 @@ export function SceneToolbar({
   setHidden,
   setProjectOnTerrain,
   setShowBuildings,
+  setShowComparison,
   setShowGrid,
   setShownLayers,
   setShowOverlays,
   setShowPins,
   setShowTerrain,
   showBuildings,
+  showComparison,
   showGrid,
   shownLayers,
   showOverlays,
@@ -83,6 +86,9 @@ export function SceneToolbar({
   setShowBuildings: (v: boolean) => void;
   showOverlays: boolean;
   setShowOverlays: (v: boolean) => void;
+  showComparison: boolean;
+  setShowComparison: (v: boolean) => void;
+  comparisonCount: number;
   projectOnTerrain: boolean;
   setProjectOnTerrain: (v: boolean) => void;
   buildingsCount: number;
@@ -306,6 +312,14 @@ export function SceneToolbar({
                   onCheckedChange={(v) => setShowOverlays(Boolean(v))}
                 >
                   DXF overlays
+                </DropdownMenuCheckboxItem>
+              ) : null}
+              {comparisonCount > 0 ? (
+                <DropdownMenuCheckboxItem
+                  checked={showComparison}
+                  onCheckedChange={(v) => setShowComparison(Boolean(v))}
+                >
+                  As-built comparison
                 </DropdownMenuCheckboxItem>
               ) : null}
             </DropdownMenuGroup>

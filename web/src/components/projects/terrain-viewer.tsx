@@ -10,6 +10,7 @@ import type { PointCategory, SceneData } from '@/lib/types';
 import type {
   BuildingFootprint,
   CameraView,
+  ComparisonMarker,
   FocusTarget,
   RenderableOverlay,
   TerrainData,
@@ -21,6 +22,7 @@ import { buildTerrainGeometry, type TerrainMesh } from './terrain-mesh';
 import {
   BUILDING_COLOR,
   Buildings,
+  ComparisonOverlay,
   DxfOverlays,
   Fade,
   GridLines,
@@ -36,6 +38,7 @@ export { CAMERA_VIEWS } from './terrain-shared';
 export type {
   BuildingFootprint,
   CameraView,
+  ComparisonMarker,
   RenderableOverlay,
   TerrainData,
 } from './terrain-shared';
@@ -54,6 +57,8 @@ export interface TerrainViewerProps {
   /** When set, the viewer assigns a function that downloads the canvas as a PNG. */
   captureRef?: React.MutableRefObject<(() => void) | null>;
   categories: PointCategory[];
+  /** As-built QC comparison markers + leader lines (null/empty draws nothing). */
+  comparison?: ComparisonMarker[] | null;
   /** Move the camera to a point. `nonce` re-triggers. */
   focus?: FocusTarget;
   /** Called with a survey point id when picked in 3D. */
@@ -92,6 +97,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
     buildings,
     captureRef,
     categories,
+    comparison,
     focus,
     onSelectPoint,
     originProjectedE,
@@ -259,6 +265,9 @@ export function TerrainViewer(props: TerrainViewerProps) {
         />
       ) : null}
       <Markers markers={showPins ? markers : []} onSelectPoint={onSelectPoint} />
+      {comparison?.length ? (
+        <ComparisonOverlay comparison={comparison} frame={frame} sample={sampler} />
+      ) : null}
 
       {/* No `target` prop — CameraRig owns the pivot so it always glides (never
           snaps) when the grid centre / projection changes. */}

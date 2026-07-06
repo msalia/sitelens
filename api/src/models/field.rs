@@ -140,6 +140,14 @@ pub struct ComparisonRow {
     pub delta_grid_n: Option<f64>,
     pub delta_grid_e: Option<f64>,
     pub status: ComparisonStatus,
+    // Geographic coords (degrees) for the 3D scene overlay. As-built is always
+    // present; design is set only for matched rows. Height is meters (Z or 0).
+    pub as_built_latitude: Option<f64>,
+    pub as_built_longitude: Option<f64>,
+    pub as_built_height: Option<f64>,
+    pub design_latitude: Option<f64>,
+    pub design_longitude: Option<f64>,
+    pub design_height: Option<f64>,
 }
 
 /// Rollup counts + horizontal miss stats for a comparison.

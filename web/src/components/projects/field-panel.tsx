@@ -1,8 +1,10 @@
 'use client';
 
 import { IconDownload, IconTrash, IconUpload } from '@tabler/icons-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+
+import type { ComparisonMarker } from '@/components/projects/terrain-viewer';
 
 import { ConfirmDialog } from '@/components/projects/confirm-dialog';
 import { type CompRow, ResultsTable } from '@/components/projects/field/results-table';
@@ -84,11 +86,22 @@ function downloadBase64(filename: string, mime: string, b64: string) {
 
 export function FieldPanel({
   categories,
+  onOverlay,
   project,
 }: {
   project: Project;
   categories: PointCategory[];
+  /** Publishes the selected comparison's markers to the 3D scene (null clears). */
+  onOverlay?: (markers: ComparisonMarker[] | null) => void;
 }) {
+  // Keep the latest callback in a ref so the unmount cleanup can clear the
+  // overlay without re-running when the parent passes a new function identity.
+  const onOverlayRef = useRef(onOverlay);
+  useEffect(() => {
+    onOverlayRef.current = onOverlay;
+  }, [onOverlay]);
+  // Clear the scene overlay when the panel unmounts (e.g. leaving the Field tab).
+  useEffect(() => () => onOverlayRef.current?.(null), []);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [designPoints, setDesignPoints] = useState<{ id: string; label: string }[]>([]);
@@ -225,6 +238,19 @@ export function FieldPanel({
       setRows(comparison.rows);
       setSummary(comparison.summary);
       setReportUnit(comparison.batch.reportUnit);
+      // Publish markers to the 3D scene overlay (rows carry geographic coords).
+      const markers: ComparisonMarker[] = comparison.rows
+        .filter((r) => r.asBuiltLatitude !== null && r.asBuiltLongitude !== null)
+        .map((r) => ({
+          asBuilt: [r.asBuiltLatitude!, r.asBuiltLongitude!, r.asBuiltHeight ?? 0],
+          design:
+            r.designLatitude !== null && r.designLongitude !== null
+              ? [r.designLatitude, r.designLongitude, r.designHeight ?? 0]
+              : null,
+          key: r.id,
+          status: r.status as ComparisonMarker['status'],
+        }));
+      onOverlayRef.current?.(markers);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load comparison');
     }
@@ -255,6 +281,7 @@ export function FieldPanel({
         setSelectedBatch(null);
         setRows([]);
         setSummary(null);
+        onOverlayRef.current?.(null);
       }
       await loadBatches();
     } catch (err) {

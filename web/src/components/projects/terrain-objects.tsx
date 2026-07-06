@@ -7,5 +7,6 @@ export { TerrainSurface } from './terrain/terrain-surface';
 export { GridLines } from './terrain/grid-lines';
 export { DxfOverlays } from './terrain/dxf-overlays';
 export { BUILDING_COLOR, Buildings } from './terrain/buildings';
+export { ComparisonOverlay } from './terrain/comparison-overlay';
 export { Markers, useMarkers, usePresence } from './terrain/markers';
 export { useBounds } from './terrain/use-bounds';

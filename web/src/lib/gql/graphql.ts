@@ -496,7 +496,7 @@ export type ComparisonQueryVariables = Exact<{
 }>;
 
 
-export type ComparisonQuery = { comparison: { batch: { id: string, sourceFilename: string, reportUnit: LengthUnit, createdAt: string }, summary: { pass: number, warn: number, fail: number, unmatched: number, noVertical: number, maxMiss: number | null, rmsMiss: number | null }, rows: Array<{ id: string, asBuiltLabel: string, asBuiltN: number, asBuiltE: number, asBuiltZ: number | null, designPointId: string | null, designN: number | null, designE: number | null, designZ: number | null, matchMethod: FieldMatchMethod, deltaN: number | null, deltaE: number | null, deltaZ: number | null, deltaHRadial: number | null, deltaGridN: number | null, deltaGridE: number | null, status: ComparisonStatus }> } };
+export type ComparisonQuery = { comparison: { batch: { id: string, sourceFilename: string, reportUnit: LengthUnit, createdAt: string }, summary: { pass: number, warn: number, fail: number, unmatched: number, noVertical: number, maxMiss: number | null, rmsMiss: number | null }, rows: Array<{ id: string, asBuiltLabel: string, asBuiltN: number, asBuiltE: number, asBuiltZ: number | null, designPointId: string | null, designN: number | null, designE: number | null, designZ: number | null, matchMethod: FieldMatchMethod, deltaN: number | null, deltaE: number | null, deltaZ: number | null, deltaHRadial: number | null, deltaGridN: number | null, deltaGridE: number | null, status: ComparisonStatus, asBuiltLatitude: number | null, asBuiltLongitude: number | null, asBuiltHeight: number | null, designLatitude: number | null, designLongitude: number | null, designHeight: number | null }> } };
 
 export type RepairComparisonMutationVariables = Exact<{
   batchId: string;
@@ -1324,6 +1324,12 @@ export const ComparisonDocument = new TypedDocumentString(`
       deltaGridN
       deltaGridE
       status
+      asBuiltLatitude
+      asBuiltLongitude
+      asBuiltHeight
+      designLatitude
+      designLongitude
+      designHeight
     }
   }
 }

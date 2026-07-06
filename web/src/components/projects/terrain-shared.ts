@@ -33,6 +33,19 @@ export interface BuildingFootprint {
   poly: [number, number][];
 }
 
+/** Comparison classification driving the overlay colour. */
+export type ComparisonStatus = 'PASS' | 'WARN' | 'FAIL' | 'UNMATCHED' | 'NO_VERTICAL';
+
+/** One as-built QC point for the 3D overlay: the as-built position, its matched
+ * design position (null when unmatched), and the tolerance status. Coords are
+ * `[lat, lon, height]` (degrees + meters). */
+export interface ComparisonMarker {
+  asBuilt: [number, number, number];
+  design: [number, number, number] | null;
+  key: string;
+  status: ComparisonStatus;
+}
+
 /** A parsed + georeferenced DXF overlay, ready to draw. */
 export interface RenderableOverlay {
   /** Flat placement height (meters) in the project's vertical datum. */

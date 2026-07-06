@@ -105,6 +105,8 @@ export function ResultsTable({
               <TableHead className="text-right">ΔE</TableHead>
               <TableHead className="text-right">ΔH</TableHead>
               <TableHead className="text-right">ΔZ</TableHead>
+              <TableHead className="text-muted-foreground text-right">Δn (grid)</TableHead>
+              <TableHead className="text-muted-foreground text-right">Δe (grid)</TableHead>
               <TableHead className="pr-(--card-spacing)">Status</TableHead>
             </TableRow>
           </TableHeader>
@@ -120,6 +122,12 @@ export function ResultsTable({
                   <TableCell className="text-right tabular-nums">{fmt(r.deltaE)}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(r.deltaHRadial)}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(r.deltaZ)}</TableCell>
+                  <TableCell className="text-muted-foreground text-right tabular-nums">
+                    {fmt(r.deltaGridN)}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-right tabular-nums">
+                    {fmt(r.deltaGridE)}
+                  </TableCell>
                   <TableCell className="pr-(--card-spacing)">
                     {r.status === 'UNMATCHED' ? (
                       <Select disabled={busy} onValueChange={(v) => v && onRepair(r.id, v)}>
@@ -154,7 +162,7 @@ export function ResultsTable({
             })}
             {shown.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-muted-foreground text-center text-sm">
+                <TableCell colSpan={8} className="text-muted-foreground text-center text-sm">
                   No points match this filter.
                 </TableCell>
               </TableRow>

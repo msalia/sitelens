@@ -129,6 +129,12 @@ type ComparisonRow {
 	deltaGridN: Float
 	deltaGridE: Float
 	status: ComparisonStatus!
+	asBuiltLatitude: Float
+	asBuiltLongitude: Float
+	asBuiltHeight: Float
+	designLatitude: Float
+	designLongitude: Float
+	designHeight: Float
 }
 
 """
