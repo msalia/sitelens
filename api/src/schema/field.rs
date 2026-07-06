@@ -189,20 +189,30 @@ fn space_ne(
 }
 
 /// A filesystem-safe basename for an export file, from the project's name.
+/// Matches the web's convention (lowercase, non-alphanumeric runs → single `-`),
+/// e.g. "Field Export" → "field-export".
 async fn export_basename(pool: &PgPool, project_id: Uuid) -> Result<String> {
     let row: Option<(String,)> = sqlx::query_as("SELECT name FROM projects WHERE id = $1")
         .bind(project_id)
         .fetch_optional(pool)
         .await?;
     let name = row.map(|(n,)| n).unwrap_or_default();
-    let slug: String = name
-        .chars()
-        .map(|c| if c.is_alphanumeric() { c } else { '_' })
-        .collect();
+    let mut slug = String::new();
+    let mut prev_dash = false;
+    for c in name.chars() {
+        if c.is_alphanumeric() {
+            slug.extend(c.to_lowercase());
+            prev_dash = false;
+        } else if !prev_dash {
+            slug.push('-');
+            prev_dash = true;
+        }
+    }
+    let slug = slug.trim_matches('-');
     Ok(if slug.is_empty() {
         "points".to_string()
     } else {
-        slug
+        slug.to_string()
     })
 }
 
