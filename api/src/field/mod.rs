@@ -18,6 +18,7 @@ pub mod csv_preset;
 pub mod jobxml;
 pub mod landxml;
 pub mod preset;
+pub mod report;
 
 pub use preset::{preset_by_id, presets, FieldColumn, FieldPreset};
 

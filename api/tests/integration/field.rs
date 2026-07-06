@@ -150,6 +150,32 @@ async fn set_project_tolerances_gated_to_crew(pool: PgPool) {
     );
 }
 
+#[sqlx::test(migrations = "./migrations")]
+async fn comparison_report_csv_downloads(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    set_paid(&pool, org).await;
+    let pid = project_csf1(&schema, &pool, admin, org).await;
+    insert_design(&pool, pid, "1", 100.0, 200.0, Some(5.0), None).await;
+    let csv = "Point,Northing,Easting,Elevation,Code\n1,100.0,200.0,5.0,\n";
+    let bid = import_csv(&schema, admin_ctx(admin, org), pid, csv).await;
+
+    let data = exec_ok(
+        &schema,
+        &format!(
+            r#"{{ comparisonReportCsv(batchId: "{bid}") {{ filename mimeType contentBase64 }} }}"#
+        ),
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    let blob = &data["comparisonReportCsv"];
+    assert!(blob["filename"].as_str().unwrap().ends_with("-stakeout.csv"));
+    assert_eq!(blob["mimeType"], "text/csv");
+    let body = String::from_utf8(base64_decode(blob["contentBase64"].as_str().unwrap())).unwrap();
+    assert!(body.contains("Point,Design N,Design E"));
+    assert!(body.trim_end().ends_with("Pass"), "exact match should be Pass: {body}");
+}
+
 /// Minimal standard-base64 decode for asserting field-export contents.
 fn base64_decode(s: &str) -> Vec<u8> {
     use base64::Engine as _;

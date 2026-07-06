@@ -26,6 +26,14 @@ pub struct FieldExportResult {
     pub content_base64: String,
 }
 
+/// A generated downloadable artifact (foundation §12): reports, exports, etc.
+#[derive(SimpleObject)]
+pub struct FileBlob {
+    pub filename: String,
+    pub mime_type: String,
+    pub content_base64: String,
+}
+
 /// Which point attribute becomes the exported feature code.
 #[derive(Enum, Copy, Clone, Eq, PartialEq, Debug)]
 pub enum CodeField {

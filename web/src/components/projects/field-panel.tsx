@@ -1,6 +1,12 @@
 'use client';
 
-import { IconDownload, IconTrash, IconUpload } from '@tabler/icons-react';
+import {
+  IconDownload,
+  IconFileText,
+  IconFileTypePdf,
+  IconTrash,
+  IconUpload,
+} from '@tabler/icons-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -9,7 +15,15 @@ import type { ComparisonMarker } from '@/components/projects/terrain-viewer';
 import { ConfirmDialog } from '@/components/projects/confirm-dialog';
 import { type CompRow, ResultsTable } from '@/components/projects/field/results-table';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ButtonGroup } from '@/components/ui/button-group';
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Field, FieldContent, FieldDescription, FieldLabel } from '@/components/ui/field';
 import {
   Select,
@@ -34,6 +48,8 @@ import { cn } from '@/lib/utils';
 import {
   AS_BUILT_BATCHES,
   COMPARISON,
+  COMPARISON_REPORT_CSV,
+  COMPARISON_REPORT_PDF,
   DELETE_AS_BUILT_BATCH,
   DESIGN_POINTS,
   EXPORT_FIELD,
@@ -268,6 +284,24 @@ export function FieldPanel({
       await openComparison(selectedBatch!);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Pairing failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onDownloadReport(kind: 'csv' | 'pdf') {
+    if (!selectedBatch) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const blob =
+        kind === 'csv'
+          ? (await gql(COMPARISON_REPORT_CSV, { batchId: selectedBatch })).comparisonReportCsv
+          : (await gql(COMPARISON_REPORT_PDF, { batchId: selectedBatch })).comparisonReportPdf;
+      downloadBase64(blob.filename, blob.mimeType, blob.contentBase64);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Report download failed');
     } finally {
       setBusy(false);
     }
@@ -509,6 +543,26 @@ export function FieldPanel({
               unmatched
               {summary.noVertical > 0 ? ` · ${summary.noVertical} no-Z` : ''}
             </CardDescription>
+            <CardAction>
+              <ButtonGroup>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => onDownloadReport('csv')}
+                >
+                  <IconFileText className="mr-1 size-4" /> CSV
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => onDownloadReport('pdf')}
+                >
+                  <IconFileTypePdf className="mr-1 size-4" /> PDF
+                </Button>
+              </ButtonGroup>
+            </CardAction>
           </CardHeader>
           <CardContent>
             <ResultsTable

@@ -47,6 +47,8 @@ services:
       # Set MAIL_CAPTURE=1 (e.g. for e2e) to record emails in memory instead of
       # sending — no provider quota used; readable via the `sentEmails` query.
       MAIL_CAPTURE: ${MAIL_CAPTURE:-}
+      # Shared WeasyPrint report service (foundation §8).
+      REPORT_SERVICE_URL: ${REPORT_SERVICE_URL:-http://report:8000}
     volumes:
       - uploads:${STORAGE_DIR}
     depends_on:
@@ -54,6 +56,19 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      report:
+        condition: service_healthy
+
+  # Stateless HTML->PDF renderer (WeasyPrint) shared by the feature suite.
+  report:
+    build: ./report
+    restart: unless-stopped
+    healthcheck:
+      test:
+        ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   web:
     build: ./web

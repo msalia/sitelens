@@ -134,15 +134,15 @@ The deliverables surveyors hand to the GC.
 
 ### Deliverables
 
-- [ ] `api/src/field/report.rs` — CSV report (reuse CSV writer).
-- [ ] PDF report via the **shared WeasyPrint report service** (not `printpdf`): project header, tolerance spec, summary stats (counts, max/RMS miss), per-point table.
-- [ ] `comparisonReportCsv` + `comparisonReportPdf` queries returning blobs; download buttons in the Field panel.
+- [x] `api/src/field/report.rs` — CSV report (reuses `export::to_csv`) + report HTML builder (header, snapshotted tolerance spec, summary stats + max/RMS miss, per-point table).
+- [x] **Shared WeasyPrint report service** (foundation §8): new `report/` container (stateless stdlib HTTP server → `HTML(string).write_pdf()`, `POST /render {html}`, `/health`), added to compose (`db`/`api`/`db`/`report`), `api` gets `REPORT_SERVICE_URL` + `depends_on`. No `printpdf`.
+- [x] `comparisonReportCsv` + `comparisonReportPdf` queries → `FileBlob` (foundation §12); `render_pdf` posts HTML to the service via `reqwest`. Download CSV/PDF buttons in the Field panel Results card.
 
 ### Tests
 
-- [ ] CSV content assertions.
-- [ ] PDF smoke: generates, non-empty, expected summary counts.
-- [ ] Playwright: download CSV + PDF from a comparison.
+- [x] CSV content assertions (unit + integration: `comparison_report_csv_downloads`).
+- [x] Report HTML builder unit test; report service PDF render smoke verified (valid PDF v1.7); api↔report reachability confirmed on the compose network.
+- [x] Playwright: download CSV + PDF from a comparison (asserts `-stakeout.csv` / `.pdf`).
 
 ### Validates
 

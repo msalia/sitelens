@@ -7,7 +7,7 @@ use crate::import::ParsedPoint;
 use crate::models::{
     AsBuiltBatch, BaselineScope, CodeField, Comparison, ComparisonRow, ComparisonStatus,
     ComparisonSummary, DetectedFormat, FieldExportResult, FieldMatchMethod, FieldPresetInfo,
-    ToleranceInput,
+    FileBlob, ToleranceInput,
 };
 
 #[derive(Default)]
@@ -157,6 +157,101 @@ impl FieldQuery {
             rows,
             summary,
         })
+    }
+
+    /// The stakeout comparison as a downloadable CSV (report unit).
+    async fn comparison_report_csv(&self, ctx: &Context<'_>, batch_id: Uuid) -> Result<FileBlob> {
+        let auth = require_auth(ctx)?;
+        require_feature(ctx, Feature::FieldExchange).await?;
+        let pool = pool(ctx)?;
+        let batch = load_batch_in_org(pool, batch_id, auth.org_id).await?;
+        let ProjectCrs { epsg, rotation, .. } =
+            load_project_crs(pool, batch.project_id, auth.org_id).await?;
+        let rows = load_comparison_rows(pool, batch_id, epsg, rotation).await?;
+        let csv = field::report::comparison_csv(&rows, batch.report_unit);
+        let base = export_basename(pool, batch.project_id).await?;
+        Ok(FileBlob {
+            filename: format!("{base}-stakeout.csv"),
+            mime_type: "text/csv".to_string(),
+            content_base64: base64::engine::general_purpose::STANDARD.encode(csv),
+        })
+    }
+
+    /// The stakeout comparison as a downloadable PDF (rendered by the shared
+    /// WeasyPrint report service).
+    async fn comparison_report_pdf(&self, ctx: &Context<'_>, batch_id: Uuid) -> Result<FileBlob> {
+        let auth = require_auth(ctx)?;
+        require_feature(ctx, Feature::FieldExchange).await?;
+        let pool = pool(ctx)?;
+        let batch = load_batch_in_org(pool, batch_id, auth.org_id).await?;
+        let ProjectCrs { epsg, rotation, .. } =
+            load_project_crs(pool, batch.project_id, auth.org_id).await?;
+        let rows = load_comparison_rows(pool, batch_id, epsg, rotation).await?;
+        let summary = summarize_rows(&rows);
+        let name = project_name(pool, batch.project_id).await?;
+        let html = field::report::comparison_html(
+            &name,
+            unit_label(batch.report_unit),
+            &batch,
+            &rows,
+            &summary,
+            batch.report_unit,
+        );
+        let pdf = render_pdf(&html).await?;
+        let base = export_basename(pool, batch.project_id).await?;
+        Ok(FileBlob {
+            filename: format!("{base}-stakeout.pdf"),
+            mime_type: "application/pdf".to_string(),
+            content_base64: base64::engine::general_purpose::STANDARD.encode(pdf),
+        })
+    }
+}
+
+/// Posts report HTML to the shared WeasyPrint service and returns the PDF bytes.
+async fn render_pdf(html: &str) -> Result<Vec<u8>> {
+    let base =
+        std::env::var("REPORT_SERVICE_URL").unwrap_or_else(|_| "http://localhost:8000".to_string());
+    let url = format!("{}/render", base.trim_end_matches('/'));
+    let body = serde_json::json!({ "html": html }).to_string();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+    let resp = client
+        .post(&url)
+        .header("content-type", "application/json")
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| async_graphql::Error::new(format!("report service unreachable: {e}")))?;
+    if !resp.status().is_success() {
+        return Err(async_graphql::Error::new(format!(
+            "report service error: {}",
+            resp.status()
+        )));
+    }
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+    Ok(bytes.to_vec())
+}
+
+/// The project's display name (empty string if missing).
+async fn project_name(pool: &PgPool, project_id: Uuid) -> Result<String> {
+    let row: Option<(String,)> = sqlx::query_as("SELECT name FROM projects WHERE id = $1")
+        .bind(project_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.map(|(n,)| n).unwrap_or_default())
+}
+
+/// Human-readable unit name for report headers.
+fn unit_label(u: LengthUnit) -> &'static str {
+    match u {
+        LengthUnit::UsSurveyFoot => "US survey feet",
+        LengthUnit::InternationalFoot => "international feet",
+        LengthUnit::Meter => "meters",
     }
 }
 

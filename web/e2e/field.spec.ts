@@ -68,6 +68,15 @@ test('import as-built → results table → manual pair an unmatched point', asy
   await pair.click();
   await page.getByRole('option', { name: '2' }).click();
   await expect(page.getByRole('combobox', { name: 'Pair 99' })).toHaveCount(0);
+
+  // Stakeout reports download (CSV in-process; PDF via the report service).
+  const csv = page.waitForEvent('download');
+  await page.getByRole('button', { exact: true, name: 'CSV' }).click();
+  expect((await csv).suggestedFilename()).toMatch(/-stakeout\.csv$/);
+
+  const pdf = page.waitForEvent('download');
+  await page.getByRole('button', { exact: true, name: 'PDF' }).click();
+  expect((await pdf).suggestedFilename()).toMatch(/-stakeout\.pdf$/);
 });
 
 test('Solo plan sees the Field upgrade gate', async ({ page }) => {

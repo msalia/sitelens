@@ -311,6 +311,15 @@ type FieldPresetInfo {
 }
 
 """
+A generated downloadable artifact (foundation §12): reports, exports, etc.
+"""
+type FileBlob {
+	filename: String!
+	mimeType: String!
+	contentBase64: String!
+}
+
+"""
 A single grid axis. `position` is in meters (grid space).
 """
 type GridAxis {
@@ -934,6 +943,15 @@ type QueryRoot {
 	A single comparison: batch metadata + per-point rows + summary stats.
 	"""
 	comparison(batchId: UUID!): Comparison!
+	"""
+	The stakeout comparison as a downloadable CSV (report unit).
+	"""
+	comparisonReportCsv(batchId: UUID!): FileBlob!
+	"""
+	The stakeout comparison as a downloadable PDF (rendered by the shared
+	WeasyPrint report service).
+	"""
+	comparisonReportPdf(batchId: UUID!): FileBlob!
 	"""
 	The caller org's plan, subscription status, usage, and limits.
 	"""

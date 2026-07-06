@@ -498,6 +498,20 @@ export type ComparisonQueryVariables = Exact<{
 
 export type ComparisonQuery = { comparison: { batch: { id: string, sourceFilename: string, reportUnit: LengthUnit, createdAt: string }, summary: { pass: number, warn: number, fail: number, unmatched: number, noVertical: number, maxMiss: number | null, rmsMiss: number | null }, rows: Array<{ id: string, asBuiltLabel: string, asBuiltN: number, asBuiltE: number, asBuiltZ: number | null, designPointId: string | null, designN: number | null, designE: number | null, designZ: number | null, matchMethod: FieldMatchMethod, deltaN: number | null, deltaE: number | null, deltaZ: number | null, deltaHRadial: number | null, deltaGridN: number | null, deltaGridE: number | null, status: ComparisonStatus, asBuiltLatitude: number | null, asBuiltLongitude: number | null, asBuiltHeight: number | null, designLatitude: number | null, designLongitude: number | null, designHeight: number | null }> } };
 
+export type ComparisonReportCsvQueryVariables = Exact<{
+  batchId: string;
+}>;
+
+
+export type ComparisonReportCsvQuery = { comparisonReportCsv: { filename: string, mimeType: string, contentBase64: string } };
+
+export type ComparisonReportPdfQueryVariables = Exact<{
+  batchId: string;
+}>;
+
+
+export type ComparisonReportPdfQuery = { comparisonReportPdf: { filename: string, mimeType: string, contentBase64: string } };
+
 export type RepairComparisonMutationVariables = Exact<{
   batchId: string;
   compId: string;
@@ -1334,6 +1348,24 @@ export const ComparisonDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ComparisonQuery, ComparisonQueryVariables>;
+export const ComparisonReportCsvDocument = new TypedDocumentString(`
+    query ComparisonReportCsv($batchId: UUID!) {
+  comparisonReportCsv(batchId: $batchId) {
+    filename
+    mimeType
+    contentBase64
+  }
+}
+    `) as unknown as TypedDocumentString<ComparisonReportCsvQuery, ComparisonReportCsvQueryVariables>;
+export const ComparisonReportPdfDocument = new TypedDocumentString(`
+    query ComparisonReportPdf($batchId: UUID!) {
+  comparisonReportPdf(batchId: $batchId) {
+    filename
+    mimeType
+    contentBase64
+  }
+}
+    `) as unknown as TypedDocumentString<ComparisonReportPdfQuery, ComparisonReportPdfQueryVariables>;
 export const RepairComparisonDocument = new TypedDocumentString(`
     mutation RepairComparison($batchId: UUID!, $compId: UUID!, $designPointId: UUID!) {
   repairComparison(

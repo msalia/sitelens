@@ -134,6 +134,26 @@ export const COMPARISON = graphql(`
   }
 `);
 
+export const COMPARISON_REPORT_CSV = graphql(`
+  query ComparisonReportCsv($batchId: UUID!) {
+    comparisonReportCsv(batchId: $batchId) {
+      filename
+      mimeType
+      contentBase64
+    }
+  }
+`);
+
+export const COMPARISON_REPORT_PDF = graphql(`
+  query ComparisonReportPdf($batchId: UUID!) {
+    comparisonReportPdf(batchId: $batchId) {
+      filename
+      mimeType
+      contentBase64
+    }
+  }
+`);
+
 export const REPAIR_COMPARISON = graphql(`
   mutation RepairComparison($batchId: UUID!, $compId: UUID!, $designPointId: UUID!) {
     repairComparison(batchId: $batchId, asBuiltCompId: $compId, designPointId: $designPointId) {
