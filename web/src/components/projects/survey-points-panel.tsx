@@ -1,49 +1,16 @@
 'use client';
 
-import {
-  IconArrowDown,
-  IconArrowUp,
-  IconChevronDown,
-  IconChevronRight,
-  IconCurrentLocation,
-  IconDotsVertical,
-  IconDownload,
-  IconMapPin,
-  IconMapPinPlus,
-  IconPencil,
-  IconTag,
-  IconTrash,
-  IconUpload,
-  IconUsersGroup,
-} from '@tabler/icons-react';
-import {
-  type ComponentPropsWithoutRef,
-  forwardRef,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-import { AddSurveyPointDialog } from '@/components/projects/add-survey-point-dialog';
-import { CategoryManagerDialog } from '@/components/projects/category-manager-dialog';
 import { ConfirmDialog } from '@/components/projects/confirm-dialog';
 import { CoordinateInspectorDialog } from '@/components/projects/coordinate-inspector-dialog';
 import { EditSurveyPointDialog } from '@/components/projects/edit-survey-point-dialog';
-import { ExportDialog } from '@/components/projects/export-dialog';
-import { GroupManagerDialog } from '@/components/projects/group-manager-dialog';
-import { ImportDialog } from '@/components/projects/import-dialog';
+import { BulkActionsBar } from '@/components/projects/survey-points/bulk-actions-bar';
+import { ManagePointsCard } from '@/components/projects/survey-points/manage-points-card';
+import { PointsTable, type SortField } from '@/components/projects/survey-points/points-table';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -52,18 +19,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -74,14 +29,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { gql } from '@/lib/graphql';
 import { subscribeProjectChanged } from '@/lib/scene-subscription';
 import {
@@ -91,7 +38,7 @@ import {
   type Project,
   type SurveyPoint,
 } from '@/lib/types';
-import { fromMeters, unitName } from '@/lib/units';
+import { unitName } from '@/lib/units';
 import { cn } from '@/lib/utils';
 
 import {
@@ -107,9 +54,6 @@ import {
 const ALL = 'all';
 const NONE = 'none';
 const PAGE_SIZE = 50;
-
-/** Sortable columns, mapped to the API's `sort` argument. */
-type SortField = 'label' | 'northing' | 'easting' | 'elevation';
 
 export function SurveyPointsPanel({
   categories,
@@ -396,198 +340,37 @@ export function SurveyPointsPanel({
           </div>
 
           {selected.size > 0 && (
-            <div className="flex items-center gap-3 text-sm">
-              <span className="font-medium">{selected.size} selected</span>
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button size="sm" variant="outline" disabled={busy}>
-                      Actions
-                      <IconChevronDown className="ml-1 size-4" />
-                    </Button>
-                  }
-                />
-                <DropdownMenuContent align="start" className="w-56">
-                  <DropdownMenuGroup>
-                    <DropdownMenuLabel>Assign category</DropdownMenuLabel>
-                    <DropdownMenuItem onClick={() => bulkAssign(NONE)}>
-                      — Clear category —
-                    </DropdownMenuItem>
-                    {categories.map((c) => (
-                      <DropdownMenuItem key={c.id} onClick={() => bulkAssign(c.id)}>
-                        <span
-                          className="size-2.5 rounded-full"
-                          style={{ backgroundColor: c.color }}
-                        />
-                        {c.name}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuGroup>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>Add to group</DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent>
-                      <DropdownMenuItem onClick={openSaveGroup}>New group…</DropdownMenuItem>
-                      {groups.length > 0 && <DropdownMenuSeparator />}
-                      {groups.map((g) => (
-                        <DropdownMenuItem key={g.id} onClick={() => addToGroup(g.id)}>
-                          {g.name}
-                          <span className="text-muted-foreground ml-auto text-xs">
-                            {g.memberIds.length}
-                          </span>
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                  <DropdownMenuItem onClick={() => setSelected(new Set())}>
-                    Clear selection
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem variant="destructive" onClick={() => setBulkDeleteOpen(true)}>
-                    <IconTrash className="size-4" /> Delete {selected.size} point
-                    {selected.size > 1 ? 's' : ''}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            <BulkActionsBar
+              selectedCount={selected.size}
+              busy={busy}
+              categories={categories}
+              groups={groups}
+              onAssignCategory={(id) => bulkAssign(id)}
+              onClearCategory={() => bulkAssign(NONE)}
+              onNewGroup={openSaveGroup}
+              onAddToGroup={addToGroup}
+              onClearSelection={() => setSelected(new Set())}
+              onRequestBulkDelete={() => setBulkDeleteOpen(true)}
+            />
           )}
 
-          {/* Full-bleed table with sticky selector, label, and action columns. */}
-          <div
-            className={cn(
-              '-mx-(--card-spacing) border-t [&_[data-slot=table-container]]:overscroll-x-none',
-              showPagination && 'border-b',
-            )}
-          >
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted">
-                  <TableHead className="w-12 pl-(--card-spacing)" />
-                  <TableHead className="w-10">
-                    <input
-                      type="checkbox"
-                      checked={allOnPageSelected}
-                      onChange={toggleAllOnPage}
-                      aria-label="Select all on page"
-                    />
-                  </TableHead>
-                  <SortHeader
-                    label="Label"
-                    field="label"
-                    active={sortField}
-                    desc={sortDesc}
-                    onSort={setSort}
-                  />
-                  <SortHeader
-                    label="N"
-                    field="northing"
-                    active={sortField}
-                    desc={sortDesc}
-                    onSort={setSort}
-                  />
-                  <SortHeader
-                    label="E"
-                    field="easting"
-                    active={sortField}
-                    desc={sortDesc}
-                    onSort={setSort}
-                  />
-                  <SortHeader
-                    label="Z"
-                    field="elevation"
-                    active={sortField}
-                    desc={sortDesc}
-                    onSort={setSort}
-                  />
-                  <TableHead className="pr-(--card-spacing)">Category</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {points.map((p) => {
-                  const cat = p.categoryId ? catById.get(p.categoryId) : undefined;
-                  return (
-                    <TableRow key={p.id}>
-                      <TableCell className="w-12 pl-(--card-spacing)">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger
-                            render={
-                              <Button variant="ghost" size="icon-sm" aria-label="Point actions">
-                                <IconDotsVertical className="size-4" />
-                              </Button>
-                            }
-                          />
-                          <DropdownMenuContent align="start">
-                            {onLocate && (
-                              <DropdownMenuItem onClick={() => onLocate(p)}>
-                                <IconCurrentLocation className="size-4" /> Locate in 3D
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem onClick={() => setInspecting(p)}>
-                              <IconMapPin className="size-4" /> Inspect
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setEditing(p)}>
-                              <IconPencil className="size-4" /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onClick={() => setPendingDelete(p)}
-                            >
-                              <IconTrash className="size-4" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                      <TableCell>
-                        <input
-                          type="checkbox"
-                          checked={selected.has(p.id)}
-                          onChange={() => toggle(p.id)}
-                          aria-label={`Select ${p.label}`}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium">{p.label}</div>
-                        {p.description && (
-                          <div className="text-muted-foreground max-w-48 truncate text-xs">
-                            {p.description}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {fromMeters(p.northing, project.displayUnit).toFixed(3)}
-                      </TableCell>
-                      <TableCell>{fromMeters(p.easting, project.displayUnit).toFixed(3)}</TableCell>
-                      <TableCell>
-                        {p.elevation === null
-                          ? '—'
-                          : fromMeters(p.elevation, project.displayUnit).toFixed(3)}
-                      </TableCell>
-                      <TableCell className="pr-(--card-spacing)">
-                        {cat ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs">
-                            <span
-                              className="size-2.5 rounded-full"
-                              style={{ backgroundColor: cat.color }}
-                            />
-                            {cat.name}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">—</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {points.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-muted-foreground text-center text-sm">
-                      No points. Import a CSV or LandXML file to get started.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          <PointsTable
+            points={points}
+            catById={catById}
+            project={project}
+            selected={selected}
+            allOnPageSelected={allOnPageSelected}
+            sortField={sortField}
+            sortDesc={sortDesc}
+            showPagination={showPagination}
+            onToggle={toggle}
+            onToggleAll={toggleAllOnPage}
+            onSort={setSort}
+            onLocate={onLocate}
+            onInspect={setInspecting}
+            onEdit={setEditing}
+            onDelete={setPendingDelete}
+          />
 
           {showPagination && (
             <div className="flex items-center justify-between text-sm">
@@ -696,129 +479,17 @@ export function SurveyPointsPanel({
         </Dialog>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Manage points</CardTitle>
-          <CardDescription>Import, categorize, and export survey points.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2">
-          <AddSurveyPointDialog
-            project={project}
-            categories={categories}
-            onAdded={load}
-            trigger={
-              <ActionRow
-                icon={<IconMapPinPlus className="size-5" />}
-                title="Add a point"
-                description="Enter a single survey point by hand."
-              />
-            }
-          />
-          <ImportDialog
-            project={project}
-            categories={categories}
-            onImported={load}
-            trigger={
-              <ActionRow
-                icon={<IconUpload className="size-5" />}
-                title="Import points"
-                description="From a survey-machine CSV or LandXML export."
-              />
-            }
-          />
-          <CategoryManagerDialog
-            categories={categories}
-            onChanged={onCategoriesChanged}
-            trigger={
-              <ActionRow
-                icon={<IconTag className="size-5" />}
-                title="Categories"
-                description="Manage point categories for this organization."
-              />
-            }
-          />
-          <ExportDialog
-            project={project}
-            selectedIds={[...selected]}
-            categoryFilter={categoryFilter === ALL ? null : categoryFilter}
-            trigger={
-              <ActionRow
-                icon={<IconDownload className="size-5" />}
-                title="Export points"
-                description="Download CSV or LandXML in any space and unit."
-              />
-            }
-          />
-          <GroupManagerDialog
-            project={project}
-            selectedIds={[...selected]}
-            onApply={(ids) => setSelected(new Set(ids))}
-            onChanged={loadGroups}
-            trigger={
-              <ActionRow
-                icon={<IconUsersGroup className="size-5" />}
-                title="Groups"
-                description="Create, apply, and delete saved point groups."
-              />
-            }
-          />
-        </CardContent>
-      </Card>
+      <ManagePointsCard
+        project={project}
+        categories={categories}
+        selectedIds={[...selected]}
+        categoryFilter={categoryFilter === ALL ? null : categoryFilter}
+        onAdded={load}
+        onImported={load}
+        onCategoriesChanged={onCategoriesChanged}
+        onGroupsChanged={loadGroups}
+        onApplyGroup={(ids) => setSelected(new Set(ids))}
+      />
     </div>
-  );
-}
-
-/** A row-style action button: icon, title, description, chevron. Forwards props
- *  so it can be used as a dialog trigger (base-ui injects onClick/ref). */
-const ActionRow = forwardRef<
-  HTMLButtonElement,
-  { icon: ReactNode; title: string; description: string } & ComponentPropsWithoutRef<'button'>
->(function ActionRow({ description, icon, title, ...props }, ref) {
-  return (
-    <button
-      ref={ref}
-      type="button"
-      className="bg-muted/50 hover:bg-muted flex w-full items-center gap-3 rounded-xl p-3 text-left transition-colors"
-      {...props}
-    >
-      <span className="text-muted-foreground shrink-0">{icon}</span>
-      <span className="min-w-0 flex-1">
-        <span className="block font-medium">{title}</span>
-        <span className="text-muted-foreground block text-sm">{description}</span>
-      </span>
-      <IconChevronRight className="text-muted-foreground size-4 shrink-0" />
-    </button>
-  );
-});
-
-/** A clickable, sort-indicating column header. */
-function SortHeader({
-  active,
-  className,
-  desc,
-  field,
-  label,
-  onSort,
-}: {
-  label: string;
-  field: SortField;
-  active: SortField | null;
-  desc: boolean;
-  onSort: (f: SortField) => void;
-  className?: string;
-}) {
-  const isActive = active === field;
-  return (
-    <TableHead className={className}>
-      <button
-        type="button"
-        onClick={() => onSort(field)}
-        className="inline-flex items-center gap-1 hover:underline"
-      >
-        {label}
-        {isActive &&
-          (desc ? <IconArrowDown className="size-3.5" /> : <IconArrowUp className="size-3.5" />)}
-      </button>
-    </TableHead>
   );
 }
