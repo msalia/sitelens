@@ -12,19 +12,46 @@ pub use sha2::Sha256;
 
 pub use sitelens_api::auth::{session_token_from_cookie_header, AuthConfig, AuthContext, Role};
 pub use sitelens_api::billing::{apply_event, org_billing, verify_signature};
+pub use sitelens_api::ratelimit::RateLimiter;
 pub use sitelens_api::storage::{LocalStorage, Storage};
-pub use sitelens_api::{build_schema, ApiSchema};
+pub use sitelens_api::{build_schema, build_schema_with, ApiSchema};
 
-pub(crate) fn schema(pool: PgPool) -> ApiSchema {
-    let config = AuthConfig {
+fn test_config() -> AuthConfig {
+    AuthConfig {
         jwt_secret: "test-secret".to_string(),
         cookie_secure: false,
         cesium_ion_token: String::new(),
-    };
-    let storage: Arc<dyn Storage> = Arc::new(LocalStorage::new(
+    }
+}
+
+fn test_storage() -> Arc<dyn Storage> {
+    Arc::new(LocalStorage::new(
         std::env::temp_dir().join("sitelens-test-uploads"),
-    ));
-    build_schema(pool, config, storage)
+    ))
+}
+
+/// The default test schema. Uses a deliberately huge in-memory rate limit so the
+/// ambient `AUTH_RATE_LIMIT_MAX` (dev `.env` sets it very high) can't make tests
+/// non-deterministic. Rate-limiting behavior is exercised via
+/// [`schema_with_rate_limit`].
+pub(crate) fn schema(pool: PgPool) -> ApiSchema {
+    build_schema_with(
+        pool,
+        test_config(),
+        test_storage(),
+        RateLimiter::memory(1_000_000, std::time::Duration::from_secs(60)),
+    )
+}
+
+/// A test schema with an explicit auth rate limit, so the limit is independent of
+/// the ambient environment.
+pub(crate) fn schema_with_rate_limit(pool: PgPool, max: usize) -> ApiSchema {
+    build_schema_with(
+        pool,
+        test_config(),
+        test_storage(),
+        RateLimiter::memory(max, std::time::Duration::from_secs(60)),
+    )
 }
 
 /// Executes a query, asserts there were no GraphQL errors, returns `data` as JSON.

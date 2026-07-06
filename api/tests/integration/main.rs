@@ -8,6 +8,7 @@ mod auth;
 mod billing;
 mod coords;
 mod export;
+mod field;
 mod grid_transform;
 mod overlays;
 mod points;

@@ -157,6 +157,38 @@ impl ProjectMutation {
         Ok(row.into())
     }
 
+    /// Sets the project's default stakeout tolerances (values in canonical
+    /// meters). These are copied into an as-built comparison's snapshot at run
+    /// time and are overridable per import. Editor role required.
+    async fn set_project_tolerances(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        tol_h_warn: f64,
+        tol_h_fail: f64,
+        tol_v_warn: f64,
+        tol_v_fail: f64,
+    ) -> Result<Project> {
+        let auth = require_editor_active(ctx).await?;
+        require_feature(ctx, Feature::FieldExchange).await?;
+        let pool = pool(ctx)?;
+        let row: Option<ProjectRow> = sqlx::query_as(&format!(
+            "UPDATE projects SET \
+               tol_h_warn = $2, tol_h_fail = $3, tol_v_warn = $4, tol_v_fail = $5, \
+               updated_at = now() \
+             WHERE id = $1 AND org_id = $6 RETURNING {PROJECT_COLUMNS}"
+        ))
+        .bind(project_id)
+        .bind(tol_h_warn)
+        .bind(tol_h_fail)
+        .bind(tol_v_warn)
+        .bind(tol_v_fail)
+        .bind(auth.org_id)
+        .fetch_optional(pool)
+        .await?;
+        Ok(found_in_org(row, "project")?.into())
+    }
+
     /// Permanently deletes a project: removes every uploaded file (DXF overlays,
     /// terrain, buildings) and all database rows (cascades to grid, control
     /// points, survey points, transforms, imports, groups, categories links).

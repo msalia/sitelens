@@ -29,7 +29,7 @@ impl SceneQuery {
         .fetch_all(pool);
         let sp_q = sqlx::query_as::<_, SurveyRow>(
             "SELECT id, label, easting, northing, elevation, category_id FROM survey_points \
-             WHERE project_id = $1 ORDER BY created_at",
+             WHERE project_id = $1 AND point_type = 'design' ORDER BY created_at",
         )
         .bind(project_id)
         .fetch_all(pool);

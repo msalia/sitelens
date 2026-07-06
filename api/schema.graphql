@@ -362,6 +362,12 @@ type MutationRoot {
 	"""
 	updateProject(id: UUID!, name: String, description: String, epsgCode: Int, displayUnit: LengthUnit, combinedScaleFactor: Float, siteOriginLat: Float, siteOriginLon: Float, siteOriginRotationDeg: Float): Project!
 	"""
+	Sets the project's default stakeout tolerances (values in canonical
+	meters). These are copied into an as-built comparison's snapshot at run
+	time and are overridable per import. Editor role required.
+	"""
+	setProjectTolerances(projectId: UUID!, tolHWarn: Float!, tolHFail: Float!, tolVWarn: Float!, tolVFail: Float!): Project!
+	"""
 	Permanently deletes a project: removes every uploaded file (DXF overlays,
 	terrain, buildings) and all database rows (cascades to grid, control
 	points, survey points, transforms, imports, groups, categories links).
@@ -592,6 +598,14 @@ type Project {
 	assumed-datum survey to true earth. 0 for properly-tied projects.
 	"""
 	siteOriginRotationDeg: Float!
+	"""
+	Default stakeout tolerances (meters, canonical): horizontal/vertical
+	warn + fail thresholds, copied into an as-built comparison at run time.
+	"""
+	tolHWarn: Float!
+	tolHFail: Float!
+	tolVWarn: Float!
+	tolVFail: Float!
 	createdAt: DateTime!
 	updatedAt: DateTime!
 }

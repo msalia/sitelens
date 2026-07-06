@@ -102,7 +102,8 @@ async fn resend_verification_reissues_token_and_is_always_truthy(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn login_is_rate_limited(pool: PgPool) {
-    let schema = schema(pool);
+    // Explicit limit of 10 so the test is independent of ambient AUTH_RATE_LIMIT_MAX.
+    let schema = schema_with_rate_limit(pool, 10);
     // A real account so attempts reach the credential check, not a missing user.
     let (_id, _org, token) = signup(&schema, "a@example.com", "Org").await;
     let verify_q = format!(r#"mutation {{ verifyEmail(token: "{token}") }}"#);

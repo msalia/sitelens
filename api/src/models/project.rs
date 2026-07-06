@@ -19,6 +19,12 @@ pub struct Project {
     /// Rotation (degrees, CCW) applied about the site origin to georeference an
     /// assumed-datum survey to true earth. 0 for properly-tied projects.
     pub site_origin_rotation_deg: f64,
+    /// Default stakeout tolerances (meters, canonical): horizontal/vertical
+    /// warn + fail thresholds, copied into an as-built comparison at run time.
+    pub tol_h_warn: f64,
+    pub tol_h_fail: f64,
+    pub tol_v_warn: f64,
+    pub tol_v_fail: f64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -35,6 +41,10 @@ pub struct ProjectRow {
     pub site_origin_lat: Option<f64>,
     pub site_origin_lon: Option<f64>,
     pub site_origin_rotation_deg: f64,
+    pub tol_h_warn: f64,
+    pub tol_h_fail: f64,
+    pub tol_v_warn: f64,
+    pub tol_v_fail: f64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -52,6 +62,10 @@ impl From<ProjectRow> for Project {
             site_origin_lat: r.site_origin_lat,
             site_origin_lon: r.site_origin_lon,
             site_origin_rotation_deg: r.site_origin_rotation_deg,
+            tol_h_warn: r.tol_h_warn,
+            tol_h_fail: r.tol_h_fail,
+            tol_v_warn: r.tol_v_warn,
+            tol_v_fail: r.tol_v_fail,
             created_at: r.created_at,
             updated_at: r.updated_at,
         }

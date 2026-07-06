@@ -55,6 +55,7 @@ impl PointsQuery {
         };
         let rows: Vec<SurveyPoint> = sqlx::query_as(&format!(
             "SELECT {SURVEY_POINT_COLUMNS} FROM survey_points WHERE project_id = $1 \
+             AND point_type = 'design' \
              AND ($2::text IS NULL OR label ILIKE '%'||$2||'%' OR description ILIKE '%'||$2||'%' \
                   OR array_to_string(tags, ' ') ILIKE '%'||$2||'%') \
              AND ($3::uuid IS NULL OR category_id = $3) \
@@ -90,6 +91,7 @@ impl PointsQuery {
         let search = search.filter(|s| !s.trim().is_empty());
         let (count,): (i64,) = sqlx::query_as(
             "SELECT count(*) FROM survey_points WHERE project_id = $1 \
+             AND point_type = 'design' \
              AND ($2::text IS NULL OR label ILIKE '%'||$2||'%' OR description ILIKE '%'||$2||'%' \
                   OR array_to_string(tags, ' ') ILIKE '%'||$2||'%') \
              AND ($3::uuid IS NULL OR category_id = $3) \

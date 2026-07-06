@@ -68,7 +68,7 @@ impl FieldQuery {
             "SELECT sp.label, sp.northing, sp.easting, sp.elevation, sp.description, pc.name \
              FROM survey_points sp \
              LEFT JOIN point_categories pc ON sp.category_id = pc.id \
-             WHERE sp.project_id = $1 \
+             WHERE sp.project_id = $1 AND sp.point_type = 'design' \
                AND ($2::uuid[] IS NULL OR sp.id = ANY($2)) \
                AND ($3::uuid IS NULL OR sp.category_id = $3) \
              ORDER BY sp.created_at",

@@ -292,7 +292,7 @@ fn publish_scenes(ctx: &Context<'_>, project_ids: impl IntoIterator<Item = Uuid>
 
 const PROJECT_COLUMNS: &str = "id, org_id, name, description, epsg_code, display_unit, \
     combined_scale_factor, site_origin_lat, site_origin_lon, site_origin_rotation_deg, \
-    created_at, updated_at";
+    tol_h_warn, tol_h_fail, tol_v_warn, tol_v_fail, created_at, updated_at";
 
 /// Builds the site rotation about a given projected pivot, or None when there's
 /// no rotation or no pivot. The pivot is the centroid of the project's points
@@ -320,7 +320,8 @@ async fn points_centroid(pool: &PgPool, project_id: Uuid) -> Result<Option<(f64,
         "SELECT AVG(easting), AVG(northing) FROM ( \
             SELECT easting, northing FROM control_points WHERE project_id = $1 \
             UNION ALL \
-            SELECT easting, northing FROM survey_points WHERE project_id = $1 \
+            SELECT easting, northing FROM survey_points \
+                WHERE project_id = $1 AND point_type = 'design' \
          ) pts",
     )
     .bind(project_id)

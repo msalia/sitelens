@@ -81,7 +81,7 @@ impl CoordsQuery {
         type Row = (Uuid, String, f64, f64, Option<f64>, String);
         let rows: Vec<Row> = sqlx::query_as(
             "SELECT id, label, northing, easting, elevation, description FROM survey_points \
-             WHERE project_id = $1 \
+             WHERE project_id = $1 AND point_type = 'design' \
                AND ($2::uuid[] IS NULL OR id = ANY($2)) \
                AND ($3::uuid IS NULL OR category_id = $3) \
              ORDER BY created_at",

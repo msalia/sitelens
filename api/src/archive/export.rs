@@ -108,7 +108,7 @@ pub async fn export_project(
     );
     let sp_rows: Vec<SpRow> = sqlx::query_as(
         "SELECT id, label, northing, easting, elevation, description, category_id, tags \
-         FROM survey_points WHERE project_id = $1 ORDER BY seq",
+         FROM survey_points WHERE project_id = $1 AND point_type = 'design' ORDER BY seq",
     )
     .bind(project_id)
     .fetch_all(pool)

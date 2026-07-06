@@ -63,15 +63,15 @@ Data model groundwork and the mandatory query audit — done before any as-built
 
 ### Deliverables
 
-- [ ] Migration **0006**: add `survey_points.point_type` (default `design`), create `as_built_batches`, `as_built_comparisons`, add `projects` tolerance columns (with construction defaults).
-- [ ] **Audit (hard item):** filter `point_type='design'` in every existing `survey_points` read — scene data resolver, point export, baseline "all", survey-points list/panel, point-group membership, category counts, aggregates.
-- [ ] `setProjectTolerances` mutation + project tolerance defaults plumbed.
+- [x] Migration **0014** (real number; specs said 0006): add `survey_points.point_type` (default `design`, CHECK design|as_built, `(project_id, point_type)` index), create `as_built_batches` + `as_built_comparisons`, add `projects` tolerance columns (construction defaults ≈0.05/0.10 ft).
+- [x] **Audit (hard item):** filter `point_type='design'` in every existing `survey_points` read — scene resolver, `exportPoints`, `exportField`, survey-points list + count, `points_centroid` (site-rotation pivot), archive export. (Group membership uses explicit `member_ids` + the filtered list; no separate category-count aggregate exists.)
+- [x] `setProjectTolerances` mutation (Crew-gated, canonical meters) + `Project` tolerance fields + defaults plumbed (PROJECT_COLUMNS/ProjectRow).
 
 ### Tests
 
-- [ ] Migration up/down.
-- [ ] Regression: existing scene/export/list queries return only `design` points (insert an `as_built` row, assert it never appears in design surfaces).
-- [ ] Tolerance default + update tests.
+- [x] Migration applies cleanly (via `#[sqlx::test]` against real PostGIS).
+- [x] Regression: list/count/scene/export/field-export return only `design` points (plant an `as_built` row, assert it never appears).
+- [x] Tolerance default + update + Crew-gate tests. (Also fixed a pre-existing non-hermetic rate-limit test that broke under the dev `.env`'s `AUTH_RATE_LIMIT_MAX`.)
 
 ### Validates
 
