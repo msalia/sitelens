@@ -54,6 +54,15 @@ type Documents = {
     "\n  query SearchEpsg($q: String!, $limit: Int) {\n    searchEpsg(query: $q, limit: $limit) {\n      code\n      name\n    }\n  }\n": typeof types.SearchEpsgDocument,
     "\n  query ExportPoints(\n    $id: UUID!\n    $format: ExportFormat!\n    $space: ExportSpace!\n    $unit: LengthUnit!\n    $columns: [ExportColumn!]\n    $pointIds: [UUID!]\n    $categoryId: UUID\n  ) {\n    exportPoints(\n      projectId: $id\n      format: $format\n      space: $space\n      unit: $unit\n      columns: $columns\n      pointIds: $pointIds\n      categoryId: $categoryId\n    )\n  }\n": typeof types.ExportPointsDocument,
     "\n  query ProjectExport($id: UUID!) {\n    projectExport(projectId: $id)\n  }\n": typeof types.ProjectExportDocument,
+    "\n  query FieldExportPresets {\n    fieldExportPresets {\n      id\n      app\n      format\n      defaultSpace\n      defaultUnit\n      description\n    }\n  }\n": typeof types.FieldExportPresetsDocument,
+    "\n  query ExportField(\n    $id: UUID!\n    $presetId: String!\n    $space: ExportSpace\n    $unit: LengthUnit\n    $categoryId: UUID\n    $codeField: CodeField\n  ) {\n    exportField(\n      projectId: $id\n      presetId: $presetId\n      space: $space\n      unit: $unit\n      categoryId: $categoryId\n      codeField: $codeField\n    ) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n": typeof types.ExportFieldDocument,
+    "\n  mutation DetectFieldFormat($content: String!) {\n    detectFieldFormat(contentBase64: $content) {\n      format\n      needsMapping\n    }\n  }\n": typeof types.DetectFieldFormatDocument,
+    "\n  mutation ImportAsBuilt(\n    $id: UUID!\n    $content: String!\n    $filename: String\n    $format: FieldFormat\n    $presetId: String\n    $space: ExportSpace\n    $unit: LengthUnit\n    $baselineScope: BaselineScope\n    $baselineRefId: UUID\n  ) {\n    importAsBuilt(\n      projectId: $id\n      contentBase64: $content\n      filename: $filename\n      format: $format\n      presetId: $presetId\n      space: $space\n      unit: $unit\n      baselineScope: $baselineScope\n      baselineRefId: $baselineRefId\n    ) {\n      id\n    }\n  }\n": typeof types.ImportAsBuiltDocument,
+    "\n  query AsBuiltBatches($id: UUID!) {\n    asBuiltBatches(projectId: $id) {\n      id\n      sourceFilename\n      format\n      baselineScope\n      reportUnit\n      createdAt\n    }\n  }\n": typeof types.AsBuiltBatchesDocument,
+    "\n  query Comparison($batchId: UUID!) {\n    comparison(batchId: $batchId) {\n      batch {\n        id\n        sourceFilename\n        reportUnit\n        createdAt\n      }\n      summary {\n        pass\n        warn\n        fail\n        unmatched\n        noVertical\n        maxMiss\n        rmsMiss\n      }\n      rows {\n        id\n        asBuiltLabel\n        asBuiltN\n        asBuiltE\n        asBuiltZ\n        designPointId\n        designN\n        designE\n        designZ\n        matchMethod\n        deltaN\n        deltaE\n        deltaZ\n        deltaHRadial\n        deltaGridN\n        deltaGridE\n        status\n      }\n    }\n  }\n": typeof types.ComparisonDocument,
+    "\n  mutation RepairComparison($batchId: UUID!, $compId: UUID!, $designPointId: UUID!) {\n    repairComparison(batchId: $batchId, asBuiltCompId: $compId, designPointId: $designPointId) {\n      id\n    }\n  }\n": typeof types.RepairComparisonDocument,
+    "\n  mutation DeleteAsBuiltBatch($batchId: UUID!) {\n    deleteAsBuiltBatch(batchId: $batchId)\n  }\n": typeof types.DeleteAsBuiltBatchDocument,
+    "\n  query DesignPointsForPairing($id: UUID!) {\n    surveyPoints(projectId: $id, limit: 1000) {\n      id\n      label\n    }\n  }\n": typeof types.DesignPointsForPairingDocument,
     "\n  mutation UpdateGeoreference($id: UUID!, $scale: Float, $lat: Float, $lon: Float, $rot: Float) {\n    updateProject(\n      id: $id\n      combinedScaleFactor: $scale\n      siteOriginLat: $lat\n      siteOriginLon: $lon\n      siteOriginRotationDeg: $rot\n    ) {\n      id\n    }\n  }\n": typeof types.UpdateGeoreferenceDocument,
     "\n  mutation SetGridAxes($id: UUID!, $unit: LengthUnit!, $axes: [GridAxisInput!]!) {\n    setGridAxes(projectId: $id, unit: $unit, axes: $axes) {\n      id\n    }\n  }\n": typeof types.SetGridAxesDocument,
     "\n  query GroupManagerGroups($id: UUID!) {\n    pointGroups(projectId: $id) {\n      id\n      projectId\n      name\n      memberIds\n    }\n  }\n": typeof types.GroupManagerGroupsDocument,
@@ -124,6 +133,15 @@ const documents: Documents = {
     "\n  query SearchEpsg($q: String!, $limit: Int) {\n    searchEpsg(query: $q, limit: $limit) {\n      code\n      name\n    }\n  }\n": types.SearchEpsgDocument,
     "\n  query ExportPoints(\n    $id: UUID!\n    $format: ExportFormat!\n    $space: ExportSpace!\n    $unit: LengthUnit!\n    $columns: [ExportColumn!]\n    $pointIds: [UUID!]\n    $categoryId: UUID\n  ) {\n    exportPoints(\n      projectId: $id\n      format: $format\n      space: $space\n      unit: $unit\n      columns: $columns\n      pointIds: $pointIds\n      categoryId: $categoryId\n    )\n  }\n": types.ExportPointsDocument,
     "\n  query ProjectExport($id: UUID!) {\n    projectExport(projectId: $id)\n  }\n": types.ProjectExportDocument,
+    "\n  query FieldExportPresets {\n    fieldExportPresets {\n      id\n      app\n      format\n      defaultSpace\n      defaultUnit\n      description\n    }\n  }\n": types.FieldExportPresetsDocument,
+    "\n  query ExportField(\n    $id: UUID!\n    $presetId: String!\n    $space: ExportSpace\n    $unit: LengthUnit\n    $categoryId: UUID\n    $codeField: CodeField\n  ) {\n    exportField(\n      projectId: $id\n      presetId: $presetId\n      space: $space\n      unit: $unit\n      categoryId: $categoryId\n      codeField: $codeField\n    ) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n": types.ExportFieldDocument,
+    "\n  mutation DetectFieldFormat($content: String!) {\n    detectFieldFormat(contentBase64: $content) {\n      format\n      needsMapping\n    }\n  }\n": types.DetectFieldFormatDocument,
+    "\n  mutation ImportAsBuilt(\n    $id: UUID!\n    $content: String!\n    $filename: String\n    $format: FieldFormat\n    $presetId: String\n    $space: ExportSpace\n    $unit: LengthUnit\n    $baselineScope: BaselineScope\n    $baselineRefId: UUID\n  ) {\n    importAsBuilt(\n      projectId: $id\n      contentBase64: $content\n      filename: $filename\n      format: $format\n      presetId: $presetId\n      space: $space\n      unit: $unit\n      baselineScope: $baselineScope\n      baselineRefId: $baselineRefId\n    ) {\n      id\n    }\n  }\n": types.ImportAsBuiltDocument,
+    "\n  query AsBuiltBatches($id: UUID!) {\n    asBuiltBatches(projectId: $id) {\n      id\n      sourceFilename\n      format\n      baselineScope\n      reportUnit\n      createdAt\n    }\n  }\n": types.AsBuiltBatchesDocument,
+    "\n  query Comparison($batchId: UUID!) {\n    comparison(batchId: $batchId) {\n      batch {\n        id\n        sourceFilename\n        reportUnit\n        createdAt\n      }\n      summary {\n        pass\n        warn\n        fail\n        unmatched\n        noVertical\n        maxMiss\n        rmsMiss\n      }\n      rows {\n        id\n        asBuiltLabel\n        asBuiltN\n        asBuiltE\n        asBuiltZ\n        designPointId\n        designN\n        designE\n        designZ\n        matchMethod\n        deltaN\n        deltaE\n        deltaZ\n        deltaHRadial\n        deltaGridN\n        deltaGridE\n        status\n      }\n    }\n  }\n": types.ComparisonDocument,
+    "\n  mutation RepairComparison($batchId: UUID!, $compId: UUID!, $designPointId: UUID!) {\n    repairComparison(batchId: $batchId, asBuiltCompId: $compId, designPointId: $designPointId) {\n      id\n    }\n  }\n": types.RepairComparisonDocument,
+    "\n  mutation DeleteAsBuiltBatch($batchId: UUID!) {\n    deleteAsBuiltBatch(batchId: $batchId)\n  }\n": types.DeleteAsBuiltBatchDocument,
+    "\n  query DesignPointsForPairing($id: UUID!) {\n    surveyPoints(projectId: $id, limit: 1000) {\n      id\n      label\n    }\n  }\n": types.DesignPointsForPairingDocument,
     "\n  mutation UpdateGeoreference($id: UUID!, $scale: Float, $lat: Float, $lon: Float, $rot: Float) {\n    updateProject(\n      id: $id\n      combinedScaleFactor: $scale\n      siteOriginLat: $lat\n      siteOriginLon: $lon\n      siteOriginRotationDeg: $rot\n    ) {\n      id\n    }\n  }\n": types.UpdateGeoreferenceDocument,
     "\n  mutation SetGridAxes($id: UUID!, $unit: LengthUnit!, $axes: [GridAxisInput!]!) {\n    setGridAxes(projectId: $id, unit: $unit, axes: $axes) {\n      id\n    }\n  }\n": types.SetGridAxesDocument,
     "\n  query GroupManagerGroups($id: UUID!) {\n    pointGroups(projectId: $id) {\n      id\n      projectId\n      name\n      memberIds\n    }\n  }\n": types.GroupManagerGroupsDocument,
@@ -311,6 +329,42 @@ export function graphql(source: "\n  query ExportPoints(\n    $id: UUID!\n    $f
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query ProjectExport($id: UUID!) {\n    projectExport(projectId: $id)\n  }\n"): typeof import('./graphql').ProjectExportDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query FieldExportPresets {\n    fieldExportPresets {\n      id\n      app\n      format\n      defaultSpace\n      defaultUnit\n      description\n    }\n  }\n"): typeof import('./graphql').FieldExportPresetsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query ExportField(\n    $id: UUID!\n    $presetId: String!\n    $space: ExportSpace\n    $unit: LengthUnit\n    $categoryId: UUID\n    $codeField: CodeField\n  ) {\n    exportField(\n      projectId: $id\n      presetId: $presetId\n      space: $space\n      unit: $unit\n      categoryId: $categoryId\n      codeField: $codeField\n    ) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n"): typeof import('./graphql').ExportFieldDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DetectFieldFormat($content: String!) {\n    detectFieldFormat(contentBase64: $content) {\n      format\n      needsMapping\n    }\n  }\n"): typeof import('./graphql').DetectFieldFormatDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation ImportAsBuilt(\n    $id: UUID!\n    $content: String!\n    $filename: String\n    $format: FieldFormat\n    $presetId: String\n    $space: ExportSpace\n    $unit: LengthUnit\n    $baselineScope: BaselineScope\n    $baselineRefId: UUID\n  ) {\n    importAsBuilt(\n      projectId: $id\n      contentBase64: $content\n      filename: $filename\n      format: $format\n      presetId: $presetId\n      space: $space\n      unit: $unit\n      baselineScope: $baselineScope\n      baselineRefId: $baselineRefId\n    ) {\n      id\n    }\n  }\n"): typeof import('./graphql').ImportAsBuiltDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query AsBuiltBatches($id: UUID!) {\n    asBuiltBatches(projectId: $id) {\n      id\n      sourceFilename\n      format\n      baselineScope\n      reportUnit\n      createdAt\n    }\n  }\n"): typeof import('./graphql').AsBuiltBatchesDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query Comparison($batchId: UUID!) {\n    comparison(batchId: $batchId) {\n      batch {\n        id\n        sourceFilename\n        reportUnit\n        createdAt\n      }\n      summary {\n        pass\n        warn\n        fail\n        unmatched\n        noVertical\n        maxMiss\n        rmsMiss\n      }\n      rows {\n        id\n        asBuiltLabel\n        asBuiltN\n        asBuiltE\n        asBuiltZ\n        designPointId\n        designN\n        designE\n        designZ\n        matchMethod\n        deltaN\n        deltaE\n        deltaZ\n        deltaHRadial\n        deltaGridN\n        deltaGridE\n        status\n      }\n    }\n  }\n"): typeof import('./graphql').ComparisonDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation RepairComparison($batchId: UUID!, $compId: UUID!, $designPointId: UUID!) {\n    repairComparison(batchId: $batchId, asBuiltCompId: $compId, designPointId: $designPointId) {\n      id\n    }\n  }\n"): typeof import('./graphql').RepairComparisonDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DeleteAsBuiltBatch($batchId: UUID!) {\n    deleteAsBuiltBatch(batchId: $batchId)\n  }\n"): typeof import('./graphql').DeleteAsBuiltBatchDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query DesignPointsForPairing($id: UUID!) {\n    surveyPoints(projectId: $id, limit: 1000) {\n      id\n      label\n    }\n  }\n"): typeof import('./graphql').DesignPointsForPairingDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

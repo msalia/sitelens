@@ -12,6 +12,7 @@ import { ControlPointsEditor } from '@/components/projects/control-points-editor
 import { ConverterPanel } from '@/components/projects/converter-panel';
 import { EditProjectDialog } from '@/components/projects/edit-project-dialog';
 import { ExportProjectButton } from '@/components/projects/export-project-button';
+import { FieldPanel } from '@/components/projects/field-panel';
 import { GridEditor } from '@/components/projects/grid-editor';
 import { SceneView } from '@/components/projects/scene-view';
 import { SetupChecklist } from '@/components/projects/setup-checklist';
@@ -114,7 +115,13 @@ const WORKSPACE_QUERY = graphql(`
   }
 `);
 
-type Tab = 'setup' | 'control' | 'points' | 'overlays';
+type Tab = 'setup' | 'control' | 'points' | 'overlays' | 'field';
+
+/** Crew-gated tabs → the plan `Feature` key their upsell dialog uses. */
+const CREW_TABS: Partial<Record<Tab, string>> = {
+  field: 'field_exchange',
+  overlays: 'dxf_overlays',
+};
 
 export default function ProjectWorkspace() {
   const { id } = useParams<{ id: string }>();
@@ -123,8 +130,9 @@ export default function ProjectWorkspace() {
   // but clicking it opens an upsell dialog instead of switching to the panel.
   // Default to gated (and disable the tab) until billing resolves, so a free org
   // never momentarily lands on the panel while billing is still loading.
-  const overlaysGated = !isPaid(billing);
-  const [overlayUpgradeOpen, setOverlayUpgradeOpen] = useState(false);
+  const crewGated = !isPaid(billing);
+  // Which Crew feature's upsell dialog is open (null = closed).
+  const [upgradeFeature, setUpgradeFeature] = useState<string | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [axes, setAxes] = useState<GridAxis[]>([]);
   const [points, setPoints] = useState<ControlPoint[]>([]);
@@ -253,16 +261,17 @@ export default function ProjectWorkspace() {
               ['control', 'Grid'],
               ['points', 'Points'],
               ['overlays', 'Overlays'],
+              ['field', 'Field'],
             ] as const
           ).map(([key, label]) => (
             <button
               key={key}
               type="button"
-              // Hold the Overlays tab inert until billing resolves so the click
-              // routes to the upsell (free) or the panel (Crew), never the wrong one.
-              disabled={key === 'overlays' && billingLoading}
+              // Hold Crew tabs inert until billing resolves so the click routes to
+              // the upsell (free) or the panel (Crew), never the wrong one.
+              disabled={key in CREW_TABS && billingLoading}
               onClick={() =>
-                key === 'overlays' && overlaysGated ? setOverlayUpgradeOpen(true) : setTab(key)
+                key in CREW_TABS && crewGated ? setUpgradeFeature(CREW_TABS[key]!) : setTab(key)
               }
               className={cn(
                 'flex-1 rounded-lg px-3 py-1.5 text-center text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50',
@@ -316,7 +325,7 @@ export default function ProjectWorkspace() {
               </section>
             </>
           )}
-          {tab === 'overlays' && !overlaysGated && (
+          {tab === 'overlays' && !crewGated && (
             <section id="panel-overlays">
               <CadOverlayPanel
                 project={project}
@@ -328,13 +337,18 @@ export default function ProjectWorkspace() {
               />
             </section>
           )}
+          {tab === 'field' && !crewGated && (
+            <section id="panel-field">
+              <FieldPanel project={project} categories={categories} />
+            </section>
+          )}
         </div>
       </aside>
 
       <UpgradeDialog
-        open={overlayUpgradeOpen}
-        onOpenChange={setOverlayUpgradeOpen}
-        feature="dxf_overlays"
+        open={upgradeFeature !== null}
+        onOpenChange={(o) => !o && setUpgradeFeature(null)}
+        feature={upgradeFeature ?? 'dxf_overlays'}
       />
 
       {/* Hero — persistent, full-bleed 3D scene. Stats render as an overlay

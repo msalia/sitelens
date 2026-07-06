@@ -4,10 +4,31 @@ type Exact<T extends { [key: string]: unknown }> = { [K in keyof T]: T[K] };
 /** Internal type. DO NOT USE DIRECTLY. */
 export type Incremental<T> = T | { [P in keyof T]?: P extends ' $fragmentName' | '__typename' ? T[P] : never };
 import { DocumentTypeDecoration } from '@graphql-typed-document-node/core';
+/** The design-point set an as-built import is compared against. */
+export type BaselineScope =
+  | 'ALL'
+  | 'CATEGORY'
+  | 'GROUP';
+
 /** Billing interval for a Crew subscription. */
 export type BillingInterval =
   | 'ANNUAL'
   | 'MONTHLY';
+
+/** Which point attribute becomes the exported feature code. */
+export type CodeField =
+  /** The point's category name. */
+  | 'CATEGORY'
+  /** The point's free-text description (default). */
+  | 'DESCRIPTION';
+
+/** Tolerance classification of a compared point. */
+export type ComparisonStatus =
+  | 'FAIL'
+  | 'NO_VERTICAL'
+  | 'PASS'
+  | 'UNMATCHED'
+  | 'WARN';
 
 /** The space an input coordinate is expressed in (GraphQL enum). */
 export type CoordinateSpace =
@@ -49,6 +70,18 @@ export type ExportSpace =
   | 'GRID'
   | 'PROJECTED_GRID'
   | 'PROJECTED_GROUND';
+
+/** The field file formats SiteLens can encode and decode. */
+export type FieldFormat =
+  | 'CSV'
+  | 'JOB_XML'
+  | 'LAND_XML';
+
+/** How an as-built row was paired to a design point. */
+export type FieldMatchMethod =
+  | 'MANUAL'
+  | 'NUMBER'
+  | 'UNMATCHED';
 
 /** Input for replacing the grid. `position` is expressed in `unit`. */
 export type GridAxisInput = {
@@ -411,6 +444,82 @@ export type ProjectExportQueryVariables = Exact<{
 
 
 export type ProjectExportQuery = { projectExport: string };
+
+export type FieldExportPresetsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type FieldExportPresetsQuery = { fieldExportPresets: Array<{ id: string, app: string, format: FieldFormat, defaultSpace: ExportSpace, defaultUnit: LengthUnit, description: string }> };
+
+export type ExportFieldQueryVariables = Exact<{
+  id: string;
+  presetId: string;
+  space?: ExportSpace | null | undefined;
+  unit?: LengthUnit | null | undefined;
+  categoryId?: string | null | undefined;
+  codeField?: CodeField | null | undefined;
+}>;
+
+
+export type ExportFieldQuery = { exportField: { filename: string, mimeType: string, contentBase64: string } };
+
+export type DetectFieldFormatMutationVariables = Exact<{
+  content: string;
+}>;
+
+
+export type DetectFieldFormatMutation = { detectFieldFormat: { format: FieldFormat, needsMapping: boolean } };
+
+export type ImportAsBuiltMutationVariables = Exact<{
+  id: string;
+  content: string;
+  filename?: string | null | undefined;
+  format?: FieldFormat | null | undefined;
+  presetId?: string | null | undefined;
+  space?: ExportSpace | null | undefined;
+  unit?: LengthUnit | null | undefined;
+  baselineScope?: BaselineScope | null | undefined;
+  baselineRefId?: string | null | undefined;
+}>;
+
+
+export type ImportAsBuiltMutation = { importAsBuilt: { id: string } };
+
+export type AsBuiltBatchesQueryVariables = Exact<{
+  id: string;
+}>;
+
+
+export type AsBuiltBatchesQuery = { asBuiltBatches: Array<{ id: string, sourceFilename: string, format: FieldFormat, baselineScope: BaselineScope, reportUnit: LengthUnit, createdAt: string }> };
+
+export type ComparisonQueryVariables = Exact<{
+  batchId: string;
+}>;
+
+
+export type ComparisonQuery = { comparison: { batch: { id: string, sourceFilename: string, reportUnit: LengthUnit, createdAt: string }, summary: { pass: number, warn: number, fail: number, unmatched: number, noVertical: number, maxMiss: number | null, rmsMiss: number | null }, rows: Array<{ id: string, asBuiltLabel: string, asBuiltN: number, asBuiltE: number, asBuiltZ: number | null, designPointId: string | null, designN: number | null, designE: number | null, designZ: number | null, matchMethod: FieldMatchMethod, deltaN: number | null, deltaE: number | null, deltaZ: number | null, deltaHRadial: number | null, deltaGridN: number | null, deltaGridE: number | null, status: ComparisonStatus }> } };
+
+export type RepairComparisonMutationVariables = Exact<{
+  batchId: string;
+  compId: string;
+  designPointId: string;
+}>;
+
+
+export type RepairComparisonMutation = { repairComparison: { id: string } };
+
+export type DeleteAsBuiltBatchMutationVariables = Exact<{
+  batchId: string;
+}>;
+
+
+export type DeleteAsBuiltBatchMutation = { deleteAsBuiltBatch: boolean };
+
+export type DesignPointsForPairingQueryVariables = Exact<{
+  id: string;
+}>;
+
+
+export type DesignPointsForPairingQuery = { surveyPoints: Array<{ id: string, label: string }> };
 
 export type UpdateGeoreferenceMutationVariables = Exact<{
   id: string;
@@ -1114,6 +1223,135 @@ export const ProjectExportDocument = new TypedDocumentString(`
   projectExport(projectId: $id)
 }
     `) as unknown as TypedDocumentString<ProjectExportQuery, ProjectExportQueryVariables>;
+export const FieldExportPresetsDocument = new TypedDocumentString(`
+    query FieldExportPresets {
+  fieldExportPresets {
+    id
+    app
+    format
+    defaultSpace
+    defaultUnit
+    description
+  }
+}
+    `) as unknown as TypedDocumentString<FieldExportPresetsQuery, FieldExportPresetsQueryVariables>;
+export const ExportFieldDocument = new TypedDocumentString(`
+    query ExportField($id: UUID!, $presetId: String!, $space: ExportSpace, $unit: LengthUnit, $categoryId: UUID, $codeField: CodeField) {
+  exportField(
+    projectId: $id
+    presetId: $presetId
+    space: $space
+    unit: $unit
+    categoryId: $categoryId
+    codeField: $codeField
+  ) {
+    filename
+    mimeType
+    contentBase64
+  }
+}
+    `) as unknown as TypedDocumentString<ExportFieldQuery, ExportFieldQueryVariables>;
+export const DetectFieldFormatDocument = new TypedDocumentString(`
+    mutation DetectFieldFormat($content: String!) {
+  detectFieldFormat(contentBase64: $content) {
+    format
+    needsMapping
+  }
+}
+    `) as unknown as TypedDocumentString<DetectFieldFormatMutation, DetectFieldFormatMutationVariables>;
+export const ImportAsBuiltDocument = new TypedDocumentString(`
+    mutation ImportAsBuilt($id: UUID!, $content: String!, $filename: String, $format: FieldFormat, $presetId: String, $space: ExportSpace, $unit: LengthUnit, $baselineScope: BaselineScope, $baselineRefId: UUID) {
+  importAsBuilt(
+    projectId: $id
+    contentBase64: $content
+    filename: $filename
+    format: $format
+    presetId: $presetId
+    space: $space
+    unit: $unit
+    baselineScope: $baselineScope
+    baselineRefId: $baselineRefId
+  ) {
+    id
+  }
+}
+    `) as unknown as TypedDocumentString<ImportAsBuiltMutation, ImportAsBuiltMutationVariables>;
+export const AsBuiltBatchesDocument = new TypedDocumentString(`
+    query AsBuiltBatches($id: UUID!) {
+  asBuiltBatches(projectId: $id) {
+    id
+    sourceFilename
+    format
+    baselineScope
+    reportUnit
+    createdAt
+  }
+}
+    `) as unknown as TypedDocumentString<AsBuiltBatchesQuery, AsBuiltBatchesQueryVariables>;
+export const ComparisonDocument = new TypedDocumentString(`
+    query Comparison($batchId: UUID!) {
+  comparison(batchId: $batchId) {
+    batch {
+      id
+      sourceFilename
+      reportUnit
+      createdAt
+    }
+    summary {
+      pass
+      warn
+      fail
+      unmatched
+      noVertical
+      maxMiss
+      rmsMiss
+    }
+    rows {
+      id
+      asBuiltLabel
+      asBuiltN
+      asBuiltE
+      asBuiltZ
+      designPointId
+      designN
+      designE
+      designZ
+      matchMethod
+      deltaN
+      deltaE
+      deltaZ
+      deltaHRadial
+      deltaGridN
+      deltaGridE
+      status
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<ComparisonQuery, ComparisonQueryVariables>;
+export const RepairComparisonDocument = new TypedDocumentString(`
+    mutation RepairComparison($batchId: UUID!, $compId: UUID!, $designPointId: UUID!) {
+  repairComparison(
+    batchId: $batchId
+    asBuiltCompId: $compId
+    designPointId: $designPointId
+  ) {
+    id
+  }
+}
+    `) as unknown as TypedDocumentString<RepairComparisonMutation, RepairComparisonMutationVariables>;
+export const DeleteAsBuiltBatchDocument = new TypedDocumentString(`
+    mutation DeleteAsBuiltBatch($batchId: UUID!) {
+  deleteAsBuiltBatch(batchId: $batchId)
+}
+    `) as unknown as TypedDocumentString<DeleteAsBuiltBatchMutation, DeleteAsBuiltBatchMutationVariables>;
+export const DesignPointsForPairingDocument = new TypedDocumentString(`
+    query DesignPointsForPairing($id: UUID!) {
+  surveyPoints(projectId: $id, limit: 1000) {
+    id
+    label
+  }
+}
+    `) as unknown as TypedDocumentString<DesignPointsForPairingQuery, DesignPointsForPairingQueryVariables>;
 export const UpdateGeoreferenceDocument = new TypedDocumentString(`
     mutation UpdateGeoreference($id: UUID!, $scale: Float, $lat: Float, $lon: Float, $rot: Float) {
   updateProject(

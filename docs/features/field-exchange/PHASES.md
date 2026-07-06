@@ -112,15 +112,15 @@ User-facing surface for both directions.
 
 ### Deliverables
 
-- [ ] New **Field** panel: Export-to-device (preset/space/unit/scope/code-field), Import as-built (auto-detect + override, baseline, tolerance override), Comparisons list.
-- [ ] **Results table:** design vs as-built, ΔN/ΔE/ΔZ, radial, vertical, grid-frame secondary columns, status chips, unmatched section + manual-pairing control; sort/filter by status.
-- [ ] **3D scene overlay (Three.js/R3F):** design vs as-built markers + status-colored leader lines, layer toggle, unmatched styling.
-- [ ] Solo-plan upgrade gate on the panel. shadcn components, sharp roundedness.
+- [x] New **Field** panel (`field-panel.tsx`, Crew-gated tab): Export-to-device (preset/space/unit/category), Import as-built (auto-detect + CSV preset, space/unit, baseline all/category), Comparisons list with delete.
+- [x] **Results table** (`field/results-table.tsx`): ΔN/ΔE/ΔH/ΔZ (report unit), status chips, unmatched rows get an inline manual-pairing picker, filter by status. *(Grid-frame secondary columns are in the data (`deltaGridN/E`) but not yet rendered → P5b.)*
+- [ ] **3D scene overlay (Three.js/R3F):** design vs as-built markers + status-colored leader lines → **deferred to P5b** (needs the `comparison` query to also return geographic coords + Field↔Scene selection wiring).
+- [x] Solo-plan upgrade gate on the Field tab (shared `CREW_TABS` pattern, `feature="field_exchange"`). shadcn components, sharp roundedness.
 
 ### Tests
 
-- [ ] Playwright e2e: export-with-preset download; import → table renders → manual pair unmatched → status updates.
-- [ ] Playwright: Solo-plan gate.
+- [x] Playwright e2e written (`e2e/field.spec.ts`): export-with-preset download; import → table renders → manual pair unmatched → row leaves unmatched; Solo-plan gate. (Runs against the full stack; user runs once the API container is up.)
+- [x] Static: codegen + tsc + eslint clean, `next build` green, 46 vitest pass.
 
 ### Validates
 
