@@ -16,6 +16,7 @@ pub mod ratelimit;
 pub mod schema;
 pub mod storage;
 pub mod units;
+pub mod utilities;
 
 use std::sync::Arc;
 use std::time::Duration;

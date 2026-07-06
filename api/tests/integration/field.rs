@@ -169,11 +169,17 @@ async fn comparison_report_csv_downloads(pool: PgPool) {
     )
     .await;
     let blob = &data["comparisonReportCsv"];
-    assert!(blob["filename"].as_str().unwrap().ends_with("-stakeout.csv"));
+    assert!(blob["filename"]
+        .as_str()
+        .unwrap()
+        .ends_with("-stakeout.csv"));
     assert_eq!(blob["mimeType"], "text/csv");
     let body = String::from_utf8(base64_decode(blob["contentBase64"].as_str().unwrap())).unwrap();
     assert!(body.contains("Point,Design N,Design E"));
-    assert!(body.trim_end().ends_with("Pass"), "exact match should be Pass: {body}");
+    assert!(
+        body.trim_end().ends_with("Pass"),
+        "exact match should be Pass: {body}"
+    );
 }
 
 /// Minimal standard-base64 decode for asserting field-export contents.

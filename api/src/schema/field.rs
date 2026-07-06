@@ -147,9 +147,8 @@ impl FieldQuery {
         let batch = load_batch_in_org(pool, batch_id, auth.org_id).await?;
         // CRS for converting the stored projected meters into geographic coords
         // the 3D scene overlay can place.
-        let ProjectCrs {
-            epsg, rotation, ..
-        } = load_project_crs(pool, batch.project_id, auth.org_id).await?;
+        let ProjectCrs { epsg, rotation, .. } =
+            load_project_crs(pool, batch.project_id, auth.org_id).await?;
         let rows = load_comparison_rows(pool, batch_id, epsg, rotation).await?;
         let summary = summarize_rows(&rows);
         Ok(Comparison {

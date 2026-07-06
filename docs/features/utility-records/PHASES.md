@@ -19,15 +19,15 @@ Data model and the pure math, before any capture UI.
 
 ### Deliverables
 
-- [ ] Migration **0006**: `utility_types` (seeded, APWA colors), `utility_runs`, `utility_vertices`, `utility_structures`, `utility_audit`.
-- [ ] `api/src/utilities/geom.rs` — 3D run length, slope from invert_up/down, depth-of-cover (surface Z − utility Z), grid/ground/geographic derivation via existing transform + `convert.rs`, diameter unit normalization (inches→canonical).
-- [ ] `api/src/utilities/audit.rs` — append-only change logging helper used by all mutations.
-- [ ] Canonical storage = projected meters (consistent with `survey_points`).
+- [x] Migration **0015** (real number; doc said 0006): `utility_types` (seeded 15-row APWA catalog — linear + structure types), `utility_runs` (+ typed attrs + provenance + soft-delete), `utility_vertices` (owned, snapshotted, optional `source_point_id`), `utility_structures`, `utility_audit`.
+- [x] `api/src/utilities/geom.rs` — pure: 3D + 2D run length, slope from inverts, depth-of-cover, diameter inches↔meters. (Grid/ground/geographic derivation reuses `convert.rs`, already tested there.)
+- [x] `api/src/utilities/audit.rs` — pure `diff(before, after)` field-level diff + async `log(exec, …)` append (works with pool or tx).
+- [x] Canonical storage = projected meters (consistent with `survey_points`).
 
 ### Tests
 
-- [ ] geom: length, slope, cover-vs-surface, no-elevation N/A, unit normalization, grid/ground derivation.
-- [ ] Migration up/down; audit append + field-level diff.
+- [x] geom: length (3D/2D/short), slope, cover-vs-surface, no-elevation planimetric, diameter unit roundtrip (6 unit tests).
+- [x] Migration applies + seeds APWA catalog; audit append persists a field-level diff (2 integration tests). audit `diff` unit tests (create/update/delete/identical).
 
 ### Validates
 

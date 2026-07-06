@@ -37,7 +37,10 @@ pub fn comparison_csv(rows: &[ComparisonRow], unit: LengthUnit) -> String {
     .map(|s| s.to_string())
     .collect();
 
-    let f = |m: Option<f64>| m.map(|v| format!("{:.4}", unit.from_meters(v))).unwrap_or_default();
+    let f = |m: Option<f64>| {
+        m.map(|v| format!("{:.4}", unit.from_meters(v)))
+            .unwrap_or_default()
+    };
 
     let out: Vec<Vec<String>> = rows
         .iter()
@@ -80,7 +83,10 @@ pub fn comparison_html(
     unit: LengthUnit,
 ) -> String {
     let ft = |m: f64| format!("{:.4}", unit.from_meters(m));
-    let f = |m: Option<f64>| m.map(|v| format!("{:.4}", unit.from_meters(v))).unwrap_or_else(|| "—".into());
+    let f = |m: Option<f64>| {
+        m.map(|v| format!("{:.4}", unit.from_meters(v)))
+            .unwrap_or_else(|| "—".into())
+    };
 
     let mut body = String::new();
     for r in rows {
@@ -100,7 +106,11 @@ pub fn comparison_html(
             f(r.delta_e),
             f(r.delta_z),
             f(r.delta_h_radial),
-            if r.design_point_id.is_some() { "✓" } else { "—" },
+            if r.design_point_id.is_some() {
+                "✓"
+            } else {
+                "—"
+            },
             cls,
             status_label(r.status),
         ));
@@ -240,7 +250,14 @@ mod tests {
     #[test]
     fn html_includes_summary_and_rows() {
         let rows = vec![row("PT1", ComparisonStatus::Pass, Some(0.0))];
-        let html = comparison_html("My Site", "meter", &batch(), &rows, &summary(), LengthUnit::Meter);
+        let html = comparison_html(
+            "My Site",
+            "meter",
+            &batch(),
+            &rows,
+            &summary(),
+            LengthUnit::Meter,
+        );
         assert!(html.contains("As-built stakeout report"));
         assert!(html.contains("My Site"));
         assert!(html.contains("PT1"));

@@ -15,4 +15,5 @@ mod points;
 mod projects;
 mod scene;
 mod tenancy;
+mod utilities;
 mod webhooks;
