@@ -447,6 +447,7 @@ async fn email_taken(pool: &PgPool, email: &str) -> Result<bool> {
 mod auth;
 mod billing;
 mod coords;
+mod field;
 mod grid;
 mod overlays;
 mod points;
@@ -470,6 +471,7 @@ pub struct QueryRoot(
     terrain::TerrainQuery,
     coords::CoordsQuery,
     scene::SceneQuery,
+    field::FieldQuery,
     billing::BillingQuery,
     billing::PlanCatalogQuery,
 );

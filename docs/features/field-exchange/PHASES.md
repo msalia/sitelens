@@ -19,16 +19,16 @@ Establish the format-agnostic codec layer and ship the cheap wins (presets over 
 
 ### Deliverables
 
-- [ ] `api/src/field/mod.rs` — `FieldFormat` enum, `detect(bytes)` stub, dispatch to codecs.
-- [ ] `api/src/field/preset.rs` — `FieldPreset` definitions (Trimble CSV, Carlson PNEZD CSV, Topcon/Sokkia CSV, Generic CSV, LandXML) with column order, delimiter, header, default space (projected-ground) + unit (ft).
-- [ ] `api/src/field/csv_preset.rs` — delimited reader/writer keyed by preset, converting to/from existing `ParsedPoint` / `ExportPoint`.
-- [ ] `api/src/field/landxml.rs` — reuse/extend existing CgPoint read/write under the codec trait.
-- [ ] GraphQL: `fieldExportPresets` query + `exportField` query returning encoded blob (CSV/LandXML presets only this phase).
+- [x] `api/src/field/mod.rs` — `FieldFormat` enum, `detect(bytes)`, `FieldCodec` trait + dispatch.
+- [x] `api/src/field/preset.rs` — `FieldPreset` definitions (Trimble CSV/JobXML, Carlson PNEZD CSV, Topcon/Sokkia CSV, Generic CSV, LandXML) with column order, delimiter, header, default space (projected-ground) + unit (ft).
+- [x] `api/src/field/csv_preset.rs` — delimited reader/writer keyed by preset, converting to/from existing `ParsedPoint` / `ExportPoint`.
+- [x] `api/src/field/landxml.rs` — reuse existing CgPoint read/write under the codec trait.
+- [x] GraphQL: `fieldExportPresets` query + `exportField` query returning encoded blob (`FieldExportResult` = filename/mimeType/contentBase64). Gated via `Feature::FieldExchange` (new plan-catalog entry). SDL regenerated.
 
 ### Tests
 
-- [ ] Round-trip identity (`write → read → equal`) for each CSV preset + LandXML.
-- [ ] Preset column-order/delimiter assertions against fixture files.
+- [x] Round-trip identity (`write → read → equal`) for each CSV preset + LandXML.
+- [x] Preset column-order/delimiter assertions (PNEZD vs PENZD, header) + `detect()` sniffing.
 
 ### Validates
 
@@ -42,14 +42,14 @@ The one true-native encoder/decoder in v1, the format differentiator. (Carlson/M
 
 ### Deliverables
 
-- [ ] `api/src/field/jobxml.rs` — Trimble JobXML (.jxl) encoder + decoder (ASCII).
-- [ ] Wire JobXML into `exportField` and into `detect(bytes)` (JobXML root).
+- [x] `api/src/field/jobxml.rs` — Trimble JobXML (.jxl) encoder + decoder (ASCII, `roxmltree`).
+- [x] Wire JobXML into `exportField` (via `trimble_jobxml` preset) and into `detect(bytes)` (`<JOBFile` root).
 
 ### Tests
 
-- [ ] Decode known JobXML fixtures → expected points.
-- [ ] `write → read → equal` round-trip for JobXML.
-- [ ] Malformed-input bounds tests (bad/oversized XML).
+- [x] Decode known JobXML fixture → expected points (observation-only Points w/o `<Grid>` skipped).
+- [x] `write → read → equal` round-trip for JobXML.
+- [x] Malformed-input + oversized bounds tests; Grid-missing-coords error.
 
 ### Validates
 

@@ -56,6 +56,20 @@ type CadOverlay {
 }
 
 """
+Which point attribute becomes the exported feature code.
+"""
+enum CodeField {
+	"""
+	The point's free-text description (default).
+	"""
+	DESCRIPTION
+	"""
+	The point's category name.
+	"""
+	CATEGORY
+}
+
+"""
 A city-published control point. Coordinates are meters. `grid_x`/`grid_y` are
 the point's location in building-grid space, used to solve the transform.
 """
@@ -152,6 +166,36 @@ enum ExportSpace {
 	PROJECTED_GROUND
 	GRID
 	GEOGRAPHIC
+}
+
+"""
+An encoded field file ready for download.
+"""
+type FieldExportResult {
+	filename: String!
+	mimeType: String!
+	contentBase64: String!
+}
+
+"""
+The field file formats SiteLens can encode and decode.
+"""
+enum FieldFormat {
+	CSV
+	LAND_XML
+	JOB_XML
+}
+
+"""
+A curated field-app export preset, surfaced to the client for the picker.
+"""
+type FieldPresetInfo {
+	id: String!
+	app: String!
+	format: FieldFormat!
+	defaultSpace: ExportSpace!
+	defaultUnit: LengthUnit!
+	description: String!
 }
 
 """
@@ -727,6 +771,16 @@ type QueryRoot {
 	Everything the 3D viewer needs, pre-projected to geographic coordinates.
 	"""
 	sceneData(projectId: UUID!): SceneData!
+	"""
+	The curated field-app export presets, for the export picker.
+	"""
+	fieldExportPresets: [FieldPresetInfo!]!
+	"""
+	Encodes the project's points in a field-app preset's native format,
+	returning a downloadable blob. Space and unit default to the preset's.
+	Filter by explicit `pointIds` and/or `categoryId` (all points if neither).
+	"""
+	exportField(projectId: UUID!, presetId: String!, space: ExportSpace, unit: LengthUnit, pointIds: [UUID!], categoryId: UUID, codeField: CodeField): FieldExportResult!
 	"""
 	The caller org's plan, subscription status, usage, and limits.
 	"""

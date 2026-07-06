@@ -82,9 +82,10 @@ pub enum Feature {
     Export,
     /// DXF overlays in the 3D scene.
     DxfOverlays,
+    /// Field-survey-app interop (per-app formats) + as-built QC comparison.
+    FieldExchange,
     // Planned site-analysis suite (add here when built):
-    //   TurningRadius, Parking, Hydrology, Traffic,
-    //   Utilities, Surfaces, FieldExchange
+    //   TurningRadius, Parking, Hydrology, Traffic, Utilities, Surfaces
 }
 
 /// Display + gating metadata for a [`Feature`].
@@ -116,12 +117,22 @@ impl Feature {
                 blurb: "Overlay DXF drawings in the 3D view.",
                 min_plan: Plan::Crew,
             },
+            Feature::FieldExchange => FeatureMeta {
+                key: "field_exchange",
+                label: "Field Exchange",
+                blurb: "Native field-app formats & as-built QC.",
+                min_plan: Plan::Crew,
+            },
         }
     }
 
     /// All gated features — for the `planCatalog` query.
     pub const fn all() -> &'static [Feature] {
-        &[Feature::Export, Feature::DxfOverlays]
+        &[
+            Feature::Export,
+            Feature::DxfOverlays,
+            Feature::FieldExchange,
+        ]
     }
 }
 

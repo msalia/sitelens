@@ -5,6 +5,7 @@ pub mod convert;
 pub mod crs;
 pub mod db;
 pub mod export;
+pub mod field;
 pub mod geo;
 pub mod import;
 pub mod mail;
