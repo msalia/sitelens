@@ -1,14 +1,5 @@
 'use client';
 
-import {
-  IconAdjustments,
-  IconFocusCentered,
-  IconMountain,
-  IconRefresh,
-  IconStack2,
-  IconStack3,
-  IconUsersGroup,
-} from '@tabler/icons-react';
 import dynamic from 'next/dynamic';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -22,31 +13,10 @@ import type {
 import type { InspectablePoint, PointCategory, Project, SceneData } from '@/lib/types';
 
 import { CoordinateInspectorDialog } from '@/components/projects/coordinate-inspector-dialog';
-import { CAMERA_VIEWS } from '@/components/projects/terrain-viewer';
-import { Button } from '@/components/ui/button';
+import { CameraControl } from '@/components/projects/scene-view/camera-control';
+import { SceneStats } from '@/components/projects/scene-view/scene-stats';
+import { SceneToolbar } from '@/components/projects/scene-view/scene-toolbar';
 import { Card } from '@/components/ui/card';
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { parseDxf } from '@/lib/dxf';
 import { gql } from '@/lib/graphql';
 import { subscribeProjectChanged } from '@/lib/scene-subscription';
@@ -279,18 +249,6 @@ export function SceneView({
     };
   }, [project.id, load]);
 
-  function toggleLayer(layer: string) {
-    setShownLayers((s) => {
-      const next = new Set(s);
-      if (next.has(layer)) {
-        next.delete(layer);
-      } else {
-        next.add(layer);
-      }
-      return next;
-    });
-  }
-
   // Fetch (or refresh) both the DEM and the OSM buildings server-side, in one
   // action. The Rust API owns the OpenTopography / Overpass calls and enforces a
   // 7-day per-source cooldown; here we just skip whichever source is still fresh
@@ -369,18 +327,6 @@ export function SceneView({
     [scene],
   );
 
-  function toggleCategory(id: string) {
-    setHidden((h) => {
-      const next = new Set(h);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }
-
   function setView2(v: CameraView) {
     setView(v);
     setViewNonce((n) => n + 1);
@@ -421,8 +367,6 @@ export function SceneView({
           ? 'Re-fetch terrain and buildings for this site.'
           : 'Fetch terrain and buildings for this site.';
 
-  const hiddenCount = categories.filter((c) => hidden.has(c.id)).length;
-  const hiddenLayerCount = overlayLayers.filter((l) => !shownLayers.has(l)).length;
   const noPoints = !!scene && scene.controlPoints.length === 0 && scene.surveyPoints.length === 0;
 
   return (
@@ -459,287 +403,44 @@ export function SceneView({
         </div>
       )}
 
-      {/* Top bar — categories + display toggles (left), data actions (right). The
-          container ignores pointer events so the canvas stays draggable between. */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-3">
-        <div className="pointer-events-auto flex flex-wrap items-center gap-2">
-          {scene && categories.length > 0 ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button size="sm" variant="outline">
-                    <IconStack2 className="mr-1 size-4" />
-                    Categories
-                    {hiddenCount > 0 ? (
-                      <span className="text-muted-foreground ml-1 text-xs">
-                        ({hiddenCount} hidden)
-                      </span>
-                    ) : null}
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="start" className="w-52">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>Show categories</DropdownMenuLabel>
-                  <DropdownMenuItem
-                    closeOnClick={false}
-                    onClick={() =>
-                      setHidden(
-                        hiddenCount === 0 ? new Set(categories.map((c) => c.id)) : new Set(),
-                      )
-                    }
-                  >
-                    {hiddenCount === 0 ? 'Select none' : 'Select all'}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  {categories.map((c) => (
-                    <DropdownMenuCheckboxItem
-                      key={c.id}
-                      checked={!hidden.has(c.id)}
-                      onCheckedChange={() => toggleCategory(c.id)}
-                    >
-                      <span
-                        className="mr-2 inline-block size-2.5 rounded-full"
-                        style={{ backgroundColor: c.color }}
-                      />
-                      {c.name}
-                    </DropdownMenuCheckboxItem>
-                  ))}
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : null}
-          {scene && groups.length > 0 ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button size="sm" variant="outline">
-                    <IconUsersGroup className="mr-1 size-4" />
-                    {groupFilter === 'all'
-                      ? 'All groups'
-                      : (groups.find((g) => g.id === groupFilter)?.name ?? 'Group')}
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="start" className="w-52">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>Filter by group</DropdownMenuLabel>
-                  <DropdownMenuRadioGroup value={groupFilter} onValueChange={setGroupFilter}>
-                    <DropdownMenuRadioItem value="all">All groups</DropdownMenuRadioItem>
-                    {groups.map((g) => (
-                      <DropdownMenuRadioItem key={g.id} value={g.id}>
-                        {g.name}
-                        <span className="text-muted-foreground ml-auto text-xs">
-                          {g.memberIds.length}
-                        </span>
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : null}
-          {overlayLayers.length > 0 ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button size="sm" variant="outline">
-                    <IconStack3 className="mr-1 size-4" />
-                    Layers
-                    {hiddenLayerCount > 0 ? (
-                      <span className="text-muted-foreground ml-1 text-xs">
-                        ({hiddenLayerCount} hidden)
-                      </span>
-                    ) : null}
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="start" className="max-h-80 w-56 overflow-auto">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>DXF layers</DropdownMenuLabel>
-                  <DropdownMenuItem
-                    closeOnClick={false}
-                    onClick={() =>
-                      setShownLayers(hiddenLayerCount === 0 ? new Set() : new Set(overlayLayers))
-                    }
-                  >
-                    {hiddenLayerCount === 0 ? 'Select none' : 'Select all'}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  {overlayLayers.map((l) => (
-                    <DropdownMenuCheckboxItem
-                      key={l}
-                      checked={shownLayers.has(l)}
-                      onCheckedChange={() => toggleLayer(l)}
-                    >
-                      {l}
-                    </DropdownMenuCheckboxItem>
-                  ))}
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : null}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button size="sm" variant="outline">
-                  <IconAdjustments className="mr-1 size-4" />
-                  Display
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="start" className="w-56">
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>Display</DropdownMenuLabel>
-                <DropdownMenuCheckboxItem
-                  checked={showPins}
-                  onCheckedChange={(v) => setShowPins(Boolean(v))}
-                >
-                  Point pins
-                </DropdownMenuCheckboxItem>
-                <DropdownMenuCheckboxItem
-                  checked={showGrid}
-                  onCheckedChange={(v) => setShowGrid(Boolean(v))}
-                >
-                  Grid lines
-                </DropdownMenuCheckboxItem>
-                <DropdownMenuCheckboxItem
-                  checked={showTerrain}
-                  onCheckedChange={(v) => {
-                    const on = Boolean(v);
-                    setShowTerrain(on);
-                    // Hiding terrain also stops projecting onto it (still freely
-                    // re-enableable on its own).
-                    if (!on) {
-                      setProjectOnTerrain(false);
-                    }
-                  }}
-                >
-                  Terrain
-                </DropdownMenuCheckboxItem>
-                {buildings.length > 0 ? (
-                  <DropdownMenuCheckboxItem
-                    checked={showBuildings}
-                    onCheckedChange={(v) => setShowBuildings(Boolean(v))}
-                  >
-                    Buildings
-                  </DropdownMenuCheckboxItem>
-                ) : null}
-                <DropdownMenuCheckboxItem
-                  checked={projectOnTerrain}
-                  onCheckedChange={(v) => {
-                    const on = Boolean(v);
-                    setProjectOnTerrain(on);
-                    // Projecting onto hidden terrain makes no sense — turn it on
-                    // so the surface the points drape onto is actually visible.
-                    if (on) {
-                      setShowTerrain(true);
-                    }
-                  }}
-                >
-                  Project onto terrain
-                </DropdownMenuCheckboxItem>
-                {overlays.length > 0 ? (
-                  <DropdownMenuCheckboxItem
-                    checked={showOverlays}
-                    onCheckedChange={(v) => setShowOverlays(Boolean(v))}
-                  >
-                    DXF overlays
-                  </DropdownMenuCheckboxItem>
-                ) : null}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+      <SceneToolbar
+        hasScene={!!scene}
+        categories={categories}
+        hidden={hidden}
+        setHidden={setHidden}
+        groups={groups}
+        groupFilter={groupFilter}
+        setGroupFilter={setGroupFilter}
+        overlayLayers={overlayLayers}
+        shownLayers={shownLayers}
+        setShownLayers={setShownLayers}
+        showPins={showPins}
+        setShowPins={setShowPins}
+        showGrid={showGrid}
+        setShowGrid={setShowGrid}
+        showTerrain={showTerrain}
+        setShowTerrain={setShowTerrain}
+        showBuildings={showBuildings}
+        setShowBuildings={setShowBuildings}
+        showOverlays={showOverlays}
+        setShowOverlays={setShowOverlays}
+        projectOnTerrain={projectOnTerrain}
+        setProjectOnTerrain={setProjectOnTerrain}
+        buildingsCount={buildings.length}
+        overlaysCount={overlays.length}
+        refreshing={refreshing}
+        hasSiteData={hasSiteData}
+        siteDisabled={siteDisabled}
+        siteReason={siteReason}
+        onRefreshSite={refreshSite}
+        onReload={load}
+      />
 
-        <div className="pointer-events-auto flex shrink-0 items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger render={<span className="inline-flex" />}>
-              <Button size="sm" variant="outline" disabled={siteDisabled} onClick={refreshSite}>
-                <IconMountain className="mr-1 size-4" />
-                {refreshing ? 'Fetching…' : hasSiteData ? 'Refresh site' : 'Load site data'}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{siteReason}</TooltipContent>
-          </Tooltip>
-          <Button size="sm" variant="outline" onClick={load}>
-            <IconRefresh className="mr-1 size-4" />
-            Reload
-          </Button>
-        </div>
-      </div>
-
-      {/* Bottom-left — live stats + terrain provenance, plain text. */}
       {scene ? (
-        <div className="pointer-events-none absolute bottom-3 left-3 z-10 space-y-0.5 text-xs">
-          {stats?.map((s) => (
-            <div key={s.label}>
-              <span className="text-muted-foreground">{s.label}:</span>{' '}
-              <span className="text-foreground font-medium">{s.value}</span>
-            </div>
-          ))}
-          {terrainMeta ? (
-            <div>
-              <span className="text-muted-foreground">Terrain:</span>{' '}
-              <span className="text-foreground font-medium">
-                {terrainMeta.demtype ? `${terrainMeta.demtype} · ` : ''}
-                {new Date(terrainMeta.fetchedAt).toLocaleDateString()}
-              </span>
-            </div>
-          ) : null}
-          {buildingsMeta ? (
-            <div>
-              <span className="text-muted-foreground">Buildings:</span>{' '}
-              <span className="text-foreground font-medium">
-                {buildingsMeta.count} · OSM ·{' '}
-                {new Date(buildingsMeta.fetchedAt).toLocaleDateString()}
-              </span>
-            </div>
-          ) : null}
-          {terrainMeta || buildingsMeta ? (
-            <div className="text-muted-foreground pt-1 text-[10px] whitespace-nowrap">
-              Terrain &amp; buildings are not survey-grade — for visual reference only.
-            </div>
-          ) : null}
-        </div>
+        <SceneStats stats={stats} terrainMeta={terrainMeta} buildingsMeta={buildingsMeta} />
       ) : null}
 
-      {/* Bottom-right — camera viewpoint selector + reset camera. */}
-      {scene ? (
-        <div className="pointer-events-none absolute right-3 bottom-3 z-10 flex items-center gap-2">
-          <div className="pointer-events-auto">
-            <Select value={view} onValueChange={(v) => setView2(v as CameraView)}>
-              <SelectTrigger size="sm" className="bg-background w-36">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectLabel>Camera</SelectLabel>
-                  {CAMERA_VIEWS.map((v) => (
-                    <SelectItem key={v.value} value={v.value}>
-                      {v.label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </div>
-          <Tooltip>
-            <TooltipTrigger render={<span className="inline-flex" />}>
-              <Button
-                size="icon-sm"
-                variant="outline"
-                className="bg-background pointer-events-auto"
-                aria-label="Reset camera to default view"
-                onClick={() => setView2('iso')}
-              >
-                <IconFocusCentered className="size-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Reset camera (isometric)</TooltipContent>
-          </Tooltip>
-        </div>
-      ) : null}
+      {scene ? <CameraControl view={view} onViewChange={setView2} /> : null}
 
       {/* Setup prompt when the site has no geometry yet. */}
       {noPoints ? (
