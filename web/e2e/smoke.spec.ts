@@ -17,6 +17,16 @@ test('docs are public and render content without login', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Introduction' })).toBeVisible();
 });
 
+test('utility records doc page resolves and renders', async ({ page }) => {
+  await page.goto('/docs/utilities');
+  await expect(page).toHaveURL(/\/docs\/utilities$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Utility Records' })).toBeVisible();
+  // It's listed in the docs nav under "Working with Data".
+  await expect(
+    page.getByRole('navigation').getByRole('link', { name: 'Utility Records' }),
+  ).toBeVisible();
+});
+
 test('login page renders the login-02 layout', async ({ page }) => {
   await page.goto('/login');
   await expect(page.getByRole('heading', { name: 'Login to your account' })).toBeVisible();

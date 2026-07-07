@@ -333,3 +333,118 @@ async fn preview_suggests_apwa_types(pool: PgPool) {
     assert_eq!(layer["kind"], "line");
     assert_eq!(layer["suggestedType"], "sanitary_sewer");
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn archive_round_trips_utilities(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    set_paid(&pool, org).await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+
+    // A run + a structure.
+    create_run(&schema, admin_ctx(admin, org), pid).await;
+    let sq = r#"mutation ($id: UUID!, $in: UtilityStructureInput!) {
+        createUtilityStructure(projectId: $id, input: $in) { id }
+    }"#;
+    exec_ok_vars(
+        &schema,
+        sq,
+        serde_json::json!({ "id": pid, "in": { "typeKey": "manhole", "label": "MH-1", "northing": 5.0, "easting": 5.0, "rimElev": 0.1 } }),
+        admin_ctx(admin, org),
+    )
+    .await;
+
+    // Export → import into a fresh project.
+    let exp = exec_ok_vars(
+        &schema,
+        r#"query ($id: UUID!) { projectExport(projectId: $id) }"#,
+        serde_json::json!({ "id": pid }),
+        admin_ctx(admin, org),
+    )
+    .await;
+    let slx = exp["projectExport"].as_str().unwrap().to_string();
+    let imp = exec_ok_vars(
+        &schema,
+        r#"mutation ($c: String!) { importProject(content: $c) { id } }"#,
+        serde_json::json!({ "c": slx }),
+        admin_ctx(admin, org),
+    )
+    .await;
+    let new_pid = imp["importProject"]["id"].as_str().unwrap();
+
+    // The imported project has the run (with its vertices) + the structure.
+    let inv = exec_ok_vars(
+        &schema,
+        r#"query ($id: UUID!) { utilities(projectId: $id) {
+            runs { typeKey material vertices { seq } } structures { typeKey label } } }"#,
+        serde_json::json!({ "id": new_pid }),
+        admin_ctx(admin, org),
+    )
+    .await;
+    assert_eq!(inv["utilities"]["runs"][0]["typeKey"], "water");
+    assert_eq!(inv["utilities"]["runs"][0]["material"], "PVC");
+    assert_eq!(
+        inv["utilities"]["runs"][0]["vertices"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(inv["utilities"]["structures"][0]["label"], "MH-1");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn inventory_paginates_runs_and_structures(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    set_paid(&pool, org).await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+
+    // Two runs + one structure = 3 inventory items.
+    create_run(&schema, admin_ctx(admin, org), pid).await;
+    create_run(&schema, admin_ctx(admin, org), pid).await;
+    exec_ok_vars(
+        &schema,
+        r#"mutation ($id: UUID!, $in: UtilityStructureInput!) {
+            createUtilityStructure(projectId: $id, input: $in) { id }
+        }"#,
+        serde_json::json!({ "id": pid, "in": { "typeKey": "manhole", "label": "MH-1", "northing": 1.0, "easting": 1.0 } }),
+        admin_ctx(admin, org),
+    )
+    .await;
+
+    let count = exec_ok_vars(
+        &schema,
+        r#"query ($id: UUID!) { utilityCount(projectId: $id) }"#,
+        serde_json::json!({ "id": pid }),
+        admin_ctx(admin, org),
+    )
+    .await;
+    assert_eq!(count["utilityCount"], 3);
+
+    // First page of 2 → exactly 2 items across the combined runs+structures set.
+    let page1 = exec_ok_vars(
+        &schema,
+        r#"query ($id: UUID!) { utilities(projectId: $id, limit: 2, offset: 0) {
+            runs { id } structures { id } } }"#,
+        serde_json::json!({ "id": pid }),
+        admin_ctx(admin, org),
+    )
+    .await;
+    let n1 = page1["utilities"]["runs"].as_array().unwrap().len()
+        + page1["utilities"]["structures"].as_array().unwrap().len();
+    assert_eq!(n1, 2);
+
+    // Second page holds the remaining 1.
+    let page2 = exec_ok_vars(
+        &schema,
+        r#"query ($id: UUID!) { utilities(projectId: $id, limit: 2, offset: 2) {
+            runs { id } structures { id } } }"#,
+        serde_json::json!({ "id": pid }),
+        admin_ctx(admin, org),
+    )
+    .await;
+    let n2 = page2["utilities"]["runs"].as_array().unwrap().len()
+        + page2["utilities"]["structures"].as_array().unwrap().len();
+    assert_eq!(n2, 1);
+}

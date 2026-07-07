@@ -783,10 +783,22 @@ export type UtilitiesQueryVariables = Exact<{
   typeKey?: string | null | undefined;
   level?: string | null | undefined;
   search?: string | null | undefined;
+  limit?: number | null | undefined;
+  offset?: number | null | undefined;
 }>;
 
 
 export type UtilitiesQuery = { utilities: { runs: Array<{ id: string, typeKey: string, label: string, level: string | null, diameter: number | null, material: string | null, invertUp: number | null, invertDown: number | null, slope: number | null, length: number | null, source: string, tags: Array<string>, vertices: Array<{ seq: number, northing: number, easting: number, elevation: number | null, sourcePointId: string | null }> }>, structures: Array<{ id: string, typeKey: string, label: string, level: string | null, northing: number, easting: number, rimElev: number | null, material: string | null, source: string, tags: Array<string> }> } };
+
+export type UtilityCountQueryVariables = Exact<{
+  projectId: string;
+  typeKey?: string | null | undefined;
+  level?: string | null | undefined;
+  search?: string | null | undefined;
+}>;
+
+
+export type UtilityCountQuery = { utilityCount: number };
 
 export type CreateUtilityRunMutationVariables = Exact<{
   projectId: string;
@@ -827,6 +839,16 @@ export type PreviewUtilityImportQueryVariables = Exact<{
 
 
 export type PreviewUtilityImportQuery = { previewUtilityImport: { layers: Array<{ layer: string, kind: string, count: number, suggestedType: string | null }> } };
+
+export type ExportUtilitiesQueryVariables = Exact<{
+  projectId: string;
+  format: string;
+  typeKey?: string | null | undefined;
+  search?: string | null | undefined;
+}>;
+
+
+export type ExportUtilitiesQuery = { exportUtilities: { filename: string, mimeType: string, contentBase64: string } };
 
 export type ImportUtilitiesMutationVariables = Exact<{
   projectId: string;
@@ -1820,12 +1842,14 @@ export const UtilityTypesDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<UtilityTypesQuery, UtilityTypesQueryVariables>;
 export const UtilitiesDocument = new TypedDocumentString(`
-    query Utilities($projectId: UUID!, $typeKey: String, $level: String, $search: String) {
+    query Utilities($projectId: UUID!, $typeKey: String, $level: String, $search: String, $limit: Int, $offset: Int) {
   utilities(
     projectId: $projectId
     typeKey: $typeKey
     level: $level
     search: $search
+    limit: $limit
+    offset: $offset
   ) {
     runs {
       id
@@ -1863,6 +1887,16 @@ export const UtilitiesDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<UtilitiesQuery, UtilitiesQueryVariables>;
+export const UtilityCountDocument = new TypedDocumentString(`
+    query UtilityCount($projectId: UUID!, $typeKey: String, $level: String, $search: String) {
+  utilityCount(
+    projectId: $projectId
+    typeKey: $typeKey
+    level: $level
+    search: $search
+  )
+}
+    `) as unknown as TypedDocumentString<UtilityCountQuery, UtilityCountQueryVariables>;
 export const CreateUtilityRunDocument = new TypedDocumentString(`
     mutation CreateUtilityRun($projectId: UUID!, $input: UtilityRunInput!, $vertices: [UtilityVertexInput!]!) {
   createUtilityRun(projectId: $projectId, input: $input, vertices: $vertices) {
@@ -1903,6 +1937,20 @@ export const PreviewUtilityImportDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<PreviewUtilityImportQuery, PreviewUtilityImportQueryVariables>;
+export const ExportUtilitiesDocument = new TypedDocumentString(`
+    query ExportUtilities($projectId: UUID!, $format: String!, $typeKey: String, $search: String) {
+  exportUtilities(
+    projectId: $projectId
+    format: $format
+    typeKey: $typeKey
+    search: $search
+  ) {
+    filename
+    mimeType
+    contentBase64
+  }
+}
+    `) as unknown as TypedDocumentString<ExportUtilitiesQuery, ExportUtilitiesQueryVariables>;
 export const ImportUtilitiesDocument = new TypedDocumentString(`
     mutation ImportUtilities($projectId: UUID!, $format: String!, $contentBase64: String!, $mappings: [UtilityLayerMapping!]!, $space: String!, $unit: LengthUnit!, $source: String) {
   importUtilities(

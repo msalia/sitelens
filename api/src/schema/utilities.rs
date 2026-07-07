@@ -2,18 +2,66 @@
 //! Geometry is snapshotted onto the run (immutable against survey-point edits);
 //! derived length/slope come from `utilities::geom`.
 #![allow(clippy::too_many_arguments)]
+// The export resolver's sqlx row tuples are inherently wide.
+#![allow(clippy::type_complexity)]
 use chrono::NaiveDate;
 use serde_json::{json, Value};
 
 use super::*;
 use crate::models::{
-    UtilityAuditEntry, UtilityImportLayer, UtilityImportPreview, UtilityImportResult,
+    FileBlob, UtilityAuditEntry, UtilityImportLayer, UtilityImportPreview, UtilityImportResult,
     UtilityInventory, UtilityLayerMapping, UtilityRun, UtilityRunInput, UtilityStructure,
     UtilityStructureInput, UtilityType, UtilityVertex, UtilityVertexInput,
 };
 use crate::units::LengthUnit;
 use crate::utilities::import::{self, FeatureKind};
-use crate::utilities::{audit, geom};
+use crate::utilities::{audit, export as uexport, geom};
+
+/// Posts report HTML to the shared WeasyPrint service; returns the PDF bytes.
+async fn render_pdf(html: &str) -> Result<Vec<u8>> {
+    let base =
+        std::env::var("REPORT_SERVICE_URL").unwrap_or_else(|_| "http://localhost:8000".to_string());
+    let url = format!("{}/render", base.trim_end_matches('/'));
+    let body = json!({ "html": html }).to_string();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+    let resp = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+    if !resp.status().is_success() {
+        return Err(async_graphql::Error::new(format!(
+            "report service error: {}",
+            resp.status()
+        )));
+    }
+    Ok(resp
+        .bytes()
+        .await
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?
+        .to_vec())
+}
+
+/// Filename-safe slug from a project name (collapses non-alphanumerics to `-`).
+fn slug(s: &str) -> String {
+    let mut out = String::new();
+    let mut dash = false;
+    for c in s.chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c.to_ascii_lowercase());
+            dash = false;
+        } else if !dash && !out.is_empty() {
+            out.push('-');
+            dash = true;
+        }
+    }
+    out.trim_matches('-').to_string()
+}
 
 /// Decode a base64 import payload to UTF-8 text.
 fn decode_import(content_base64: &str) -> Result<String> {
@@ -287,7 +335,9 @@ impl UtilitiesQuery {
         .collect())
     }
 
-    /// The project's utility inventory (runs + structures), filtered.
+    /// The project's utility inventory (runs + structures), filtered. When
+    /// `limit` is set, the combined run+structure list is server-paginated by
+    /// capture time (mirrors the survey-points table); pair it with `utilityCount`.
     async fn utilities(
         &self,
         ctx: &Context<'_>,
@@ -295,6 +345,8 @@ impl UtilitiesQuery {
         type_key: Option<String>,
         level: Option<String>,
         search: Option<String>,
+        limit: Option<i32>,
+        offset: Option<i32>,
     ) -> Result<UtilityInventory> {
         let auth = require_auth(ctx)?;
         require_feature(ctx, Feature::Utilities).await?;
@@ -302,18 +354,46 @@ impl UtilitiesQuery {
         ensure_project_in_org(pool, project_id, auth.org_id).await?;
         let search = search.filter(|s| !s.trim().is_empty());
 
-        let run_rows: Vec<RunRow> = sqlx::query_as(&format!(
-            "SELECT {RUN_COLS} FROM utility_runs WHERE project_id = $1 AND deleted_at IS NULL \
-               AND ($2::text IS NULL OR type_key = $2) \
+        // Page the combined inventory across both tables by capture time so a
+        // page holds exactly `limit` items total. A NULL limit returns all.
+        let page: Vec<(Uuid, String)> = sqlx::query_as(
+            "SELECT id, kind FROM ( \
+               SELECT id, 'run' AS kind, created_at, type_key, level, label, tags \
+                 FROM utility_runs WHERE project_id = $1 AND deleted_at IS NULL \
+               UNION ALL \
+               SELECT id, 'structure' AS kind, created_at, type_key, level, label, tags \
+                 FROM utility_structures WHERE project_id = $1 AND deleted_at IS NULL \
+             ) u \
+             WHERE ($2::text IS NULL OR type_key = $2) \
                AND ($3::text IS NULL OR level = $3) \
                AND ($4::text IS NULL OR label ILIKE '%'||$4||'%' \
                     OR array_to_string(tags, ' ') ILIKE '%'||$4||'%') \
-             ORDER BY created_at"
-        ))
+             ORDER BY created_at LIMIT $5 OFFSET $6",
+        )
         .bind(project_id)
         .bind(&type_key)
         .bind(&level)
         .bind(&search)
+        .bind(limit.map(|l| l as i64))
+        .bind(offset.unwrap_or(0).max(0) as i64)
+        .fetch_all(pool)
+        .await?;
+
+        let run_ids: Vec<Uuid> = page
+            .iter()
+            .filter(|(_, k)| k.as_str() == "run")
+            .map(|(id, _)| *id)
+            .collect();
+        let struct_ids: Vec<Uuid> = page
+            .iter()
+            .filter(|(_, k)| k.as_str() == "structure")
+            .map(|(id, _)| *id)
+            .collect();
+
+        let run_rows: Vec<RunRow> = sqlx::query_as(&format!(
+            "SELECT {RUN_COLS} FROM utility_runs WHERE id = ANY($1) ORDER BY created_at"
+        ))
+        .bind(&run_ids)
         .fetch_all(pool)
         .await?;
 
@@ -324,17 +404,9 @@ impl UtilitiesQuery {
         }
 
         let struct_rows: Vec<StructRow> = sqlx::query_as(&format!(
-            "SELECT {STRUCT_COLS} FROM utility_structures WHERE project_id = $1 AND deleted_at IS NULL \
-               AND ($2::text IS NULL OR type_key = $2) \
-               AND ($3::text IS NULL OR level = $3) \
-               AND ($4::text IS NULL OR label ILIKE '%'||$4||'%' \
-                    OR array_to_string(tags, ' ') ILIKE '%'||$4||'%') \
-             ORDER BY created_at"
+            "SELECT {STRUCT_COLS} FROM utility_structures WHERE id = ANY($1) ORDER BY created_at"
         ))
-        .bind(project_id)
-        .bind(&type_key)
-        .bind(&level)
-        .bind(&search)
+        .bind(&struct_ids)
         .fetch_all(pool)
         .await?;
 
@@ -342,6 +414,44 @@ impl UtilitiesQuery {
             runs,
             structures: struct_rows.into_iter().map(to_structure).collect(),
         })
+    }
+
+    /// Combined count of runs + structures matching the inventory filters (for
+    /// paging the inventory table).
+    async fn utility_count(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        type_key: Option<String>,
+        level: Option<String>,
+        search: Option<String>,
+    ) -> Result<i64> {
+        let auth = require_auth(ctx)?;
+        require_feature(ctx, Feature::Utilities).await?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        let search = search.filter(|s| !s.trim().is_empty());
+
+        let (count,): (i64,) = sqlx::query_as(
+            "SELECT count(*) FROM ( \
+               SELECT created_at, type_key, level, label, tags FROM utility_runs \
+                 WHERE project_id = $1 AND deleted_at IS NULL \
+               UNION ALL \
+               SELECT created_at, type_key, level, label, tags FROM utility_structures \
+                 WHERE project_id = $1 AND deleted_at IS NULL \
+             ) u \
+             WHERE ($2::text IS NULL OR type_key = $2) \
+               AND ($3::text IS NULL OR level = $3) \
+               AND ($4::text IS NULL OR label ILIKE '%'||$4||'%' \
+                    OR array_to_string(tags, ' ') ILIKE '%'||$4||'%')",
+        )
+        .bind(project_id)
+        .bind(&type_key)
+        .bind(&level)
+        .bind(&search)
+        .fetch_one(pool)
+        .await?;
+        Ok(count)
     }
 
     /// A single run (with vertices + derived length/slope).
@@ -446,6 +556,200 @@ impl UtilitiesQuery {
             })
             .collect();
         Ok(UtilityImportPreview { layers })
+    }
+
+    /// Export the utility archive as a portable file. `format` ∈
+    /// geojson|dxf|landxml|pdf; `type_key` optionally scopes to one type.
+    /// GeoJSON is WGS84; DXF/LandXML/PDF use projected meters. Crew-gated.
+    async fn export_utilities(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        format: String,
+        type_key: Option<String>,
+        search: Option<String>,
+    ) -> Result<FileBlob> {
+        let auth = require_auth(ctx)?;
+        require_feature(ctx, Feature::Utilities).await?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        let search = search.filter(|s| !s.trim().is_empty());
+
+        let crs = load_project_crs(pool, project_id, auth.org_id).await?;
+        let epsg = crs.epsg;
+        let rotation = crs.rotation;
+        let name: String = sqlx::query_scalar("SELECT name FROM projects WHERE id = $1")
+            .bind(project_id)
+            .fetch_one(pool)
+            .await?;
+        let to_ll = |e: f64, n: f64| -> (f64, f64) {
+            let (te, tn) = rotation.map_or((e, n), |r| r.to_true(e, n));
+            crate::crs::projected_to_geographic(epsg, te, tn).unwrap_or((0.0, 0.0))
+        };
+
+        // Runs (+ vertices) and structures, optionally scoped to one type.
+        let run_rows: Vec<(
+            Uuid,
+            String,
+            String,
+            Option<f64>,
+            Option<String>,
+            Option<f64>,
+            Option<f64>,
+            Option<f64>,
+            Vec<String>,
+        )> = sqlx::query_as(
+            "SELECT id, type_key, label, diameter, material, invert_up, invert_down, slope, tags \
+             FROM utility_runs WHERE project_id = $1 AND deleted_at IS NULL \
+               AND ($2::text IS NULL OR type_key = $2) \
+               AND ($3::text IS NULL OR label ILIKE '%'||$3||'%' \
+                    OR array_to_string(tags, ' ') ILIKE '%'||$3||'%') ORDER BY created_at",
+        )
+        .bind(project_id)
+        .bind(&type_key)
+        .bind(&search)
+        .fetch_all(pool)
+        .await?;
+        let mut ex_runs = Vec::with_capacity(run_rows.len());
+        for (id, tk, label, diameter, material, iu, id_, slope, tags) in run_rows {
+            let vrows: Vec<(f64, f64, Option<f64>)> = sqlx::query_as(
+                "SELECT northing, easting, elevation FROM utility_vertices \
+                 WHERE run_id = $1 ORDER BY seq",
+            )
+            .bind(id)
+            .fetch_all(pool)
+            .await?;
+            let gverts: Vec<geom::Vertex> = vrows
+                .iter()
+                .map(|&(n, e, z)| geom::Vertex {
+                    northing: n,
+                    easting: e,
+                    elevation: z,
+                })
+                .collect();
+            let length_m = (gverts.len() >= 2).then(|| geom::run_length_3d(&gverts));
+            let vertices = vrows
+                .into_iter()
+                .map(|(n, e, z)| {
+                    let (lat, lon) = to_ll(e, n);
+                    uexport::ExVertex {
+                        northing: n,
+                        easting: e,
+                        elevation: z,
+                        lat,
+                        lon,
+                    }
+                })
+                .collect();
+            ex_runs.push(uexport::ExRun {
+                type_key: tk,
+                label,
+                material,
+                diameter_m: diameter,
+                invert_up: iu,
+                invert_down: id_,
+                slope,
+                length_m,
+                tags,
+                vertices,
+            });
+        }
+
+        let struct_rows: Vec<(
+            String,
+            String,
+            Option<String>,
+            Option<f64>,
+            f64,
+            f64,
+            Vec<String>,
+        )> = sqlx::query_as(
+            "SELECT type_key, label, material, rim_elev, northing, easting, tags \
+                 FROM utility_structures WHERE project_id = $1 AND deleted_at IS NULL \
+                   AND ($2::text IS NULL OR type_key = $2) \
+                   AND ($3::text IS NULL OR label ILIKE '%'||$3||'%' \
+                        OR array_to_string(tags, ' ') ILIKE '%'||$3||'%') ORDER BY created_at",
+        )
+        .bind(project_id)
+        .bind(&type_key)
+        .bind(&search)
+        .fetch_all(pool)
+        .await?;
+        let ex_structs: Vec<uexport::ExStruct> = struct_rows
+            .into_iter()
+            .map(|(tk, label, material, rim, n, e, tags)| {
+                let (lat, lon) = to_ll(e, n);
+                uexport::ExStruct {
+                    type_key: tk,
+                    label,
+                    material,
+                    rim_elev: rim,
+                    northing: n,
+                    easting: e,
+                    lat,
+                    lon,
+                    tags,
+                }
+            })
+            .collect();
+
+        let base = {
+            let s = slug(&name);
+            if s.is_empty() {
+                "utilities".to_string()
+            } else {
+                format!("{s}-utilities")
+            }
+        };
+        use base64::Engine;
+        let b64 = |bytes: Vec<u8>| base64::engine::general_purpose::STANDARD.encode(bytes);
+
+        let (filename, mime, content) = match format.as_str() {
+            "geojson" => (
+                format!("{base}.geojson"),
+                "application/geo+json".to_string(),
+                b64(uexport::to_geojson(&ex_runs, &ex_structs).into_bytes()),
+            ),
+            "dxf" => (
+                format!("{base}.dxf"),
+                "application/dxf".to_string(),
+                b64(uexport::to_dxf(&ex_runs, &ex_structs)
+                    .map_err(async_graphql::Error::new)?
+                    .into_bytes()),
+            ),
+            "landxml" => (
+                format!("{base}.xml"),
+                "application/xml".to_string(),
+                b64(uexport::to_landxml(&ex_runs, &ex_structs).into_bytes()),
+            ),
+            "pdf" => {
+                let now = chrono::Utc::now();
+                let doc = uexport::schedule_document(
+                    &name,
+                    "meters",
+                    &ex_runs,
+                    &ex_structs,
+                    &now.format("%Y-%m-%d").to_string(),
+                    &now.format("%Y").to_string(),
+                );
+                let pdf = render_pdf(&crate::report::render(&doc)).await?;
+                (
+                    format!("{base}-schedule.pdf"),
+                    "application/pdf".to_string(),
+                    b64(pdf),
+                )
+            }
+            other => {
+                return Err(async_graphql::Error::new(format!(
+                    "unsupported export format: {other}"
+                )))
+            }
+        };
+        Ok(FileBlob {
+            filename,
+            mime_type: mime,
+            content_base64: content,
+        })
     }
 }
 

@@ -6,5 +6,6 @@
 //! mutation. Grid/ground/geographic derivation reuses [`crate::convert`].
 
 pub mod audit;
+pub mod export;
 pub mod geom;
 pub mod import;

@@ -82,6 +82,14 @@ export const docsOrder: DocMeta[] = [
   },
   {
     description:
+      'Capture buried and interior utilities as an attributed 3D as-built record, then export to CAD/GIS.',
+    group: 'Working with Data',
+    href: '/docs/utilities',
+    slug: 'utilities',
+    title: 'Utility Records',
+  },
+  {
+    description:
       'The 3D scene, terrain, projecting onto terrain, camera views, and display toggles.',
     group: 'Visualization',
     href: '/docs/visualization',

@@ -12,10 +12,26 @@ export const UTILITY_TYPES = graphql(`
   }
 `);
 
-/** The project's utility inventory — runs (with vertices) + structures. */
+/** The project's utility inventory — runs (with vertices) + structures.
+ *  Server-paginated (combined runs+structures) via `limit`/`offset`; pair with
+ *  `utilityCount` for the total. */
 export const UTILITIES = graphql(`
-  query Utilities($projectId: UUID!, $typeKey: String, $level: String, $search: String) {
-    utilities(projectId: $projectId, typeKey: $typeKey, level: $level, search: $search) {
+  query Utilities(
+    $projectId: UUID!
+    $typeKey: String
+    $level: String
+    $search: String
+    $limit: Int
+    $offset: Int
+  ) {
+    utilities(
+      projectId: $projectId
+      typeKey: $typeKey
+      level: $level
+      search: $search
+      limit: $limit
+      offset: $offset
+    ) {
       runs {
         id
         typeKey
@@ -50,6 +66,13 @@ export const UTILITIES = graphql(`
         tags
       }
     }
+  }
+`);
+
+/** Combined count of runs + structures matching the inventory filters. */
+export const UTILITY_COUNT = graphql(`
+  query UtilityCount($projectId: UUID!, $typeKey: String, $level: String, $search: String) {
+    utilityCount(projectId: $projectId, typeKey: $typeKey, level: $level, search: $search)
   }
 `);
 
@@ -97,6 +120,17 @@ export const PREVIEW_UTILITY_IMPORT = graphql(`
         count
         suggestedType
       }
+    }
+  }
+`);
+
+/** Export the utility archive in a portable format (optionally scoped by type). */
+export const EXPORT_UTILITIES = graphql(`
+  query ExportUtilities($projectId: UUID!, $format: String!, $typeKey: String, $search: String) {
+    exportUtilities(projectId: $projectId, format: $format, typeKey: $typeKey, search: $search) {
+      filename
+      mimeType
+      contentBase64
     }
   }
 `);

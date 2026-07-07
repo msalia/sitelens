@@ -1032,9 +1032,16 @@ type QueryRoot {
 	"""
 	utilityTypes: [UtilityType!]!
 	"""
-	The project's utility inventory (runs + structures), filtered.
+	The project's utility inventory (runs + structures), filtered. When
+	`limit` is set, the combined run+structure list is server-paginated by
+	capture time (mirrors the survey-points table); pair it with `utilityCount`.
 	"""
-	utilities(projectId: UUID!, typeKey: String, level: String, search: String): UtilityInventory!
+	utilities(projectId: UUID!, typeKey: String, level: String, search: String, limit: Int, offset: Int): UtilityInventory!
+	"""
+	Combined count of runs + structures matching the inventory filters (for
+	paging the inventory table).
+	"""
+	utilityCount(projectId: UUID!, typeKey: String, level: String, search: String): Int!
 	"""
 	A single run (with vertices + derived length/slope).
 	"""
@@ -1052,6 +1059,12 @@ type QueryRoot {
 	auto-suggested APWA types, for the mapping UI. Read-only; nothing is saved.
 	"""
 	previewUtilityImport(projectId: UUID!, format: String!, contentBase64: String!): UtilityImportPreview!
+	"""
+	Export the utility archive as a portable file. `format` ∈
+	geojson|dxf|landxml|pdf; `type_key` optionally scopes to one type.
+	GeoJSON is WGS84; DXF/LandXML/PDF use projected meters. Crew-gated.
+	"""
+	exportUtilities(projectId: UUID!, format: String!, typeKey: String, search: String): FileBlob!
 	"""
 	The caller org's plan, subscription status, usage, and limits.
 	"""

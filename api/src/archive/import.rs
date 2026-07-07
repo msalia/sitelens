@@ -206,6 +206,131 @@ pub async fn import_project(
         .map_err(|e| e.to_string())?;
     }
 
+    // Utility runs (+ snapshotted vertices) and structures. `source_point_id`
+    // soft links are dropped — geometry is snapshotted, so the record stands alone.
+    for r in &archive.utility_runs {
+        let (run_id,): (Uuid,) = sqlx::query_as(
+            "INSERT INTO utility_runs \
+               (project_id, type_key, label, level, diameter, material, invert_up, invert_down, \
+                slope, owner, install_date, condition, attrs_extra, tags, source, as_built_date, \
+                locate_method) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id",
+        )
+        .bind(project_id)
+        .bind(&r.type_key)
+        .bind(&r.label)
+        .bind(&r.level)
+        .bind(r.diameter)
+        .bind(&r.material)
+        .bind(r.invert_up)
+        .bind(r.invert_down)
+        .bind(r.slope)
+        .bind(&r.owner)
+        .bind(r.install_date)
+        .bind(&r.condition)
+        .bind(sqlx::types::Json(&r.attrs_extra))
+        .bind(&r.tags)
+        .bind(&r.source)
+        .bind(r.as_built_date)
+        .bind(&r.locate_method)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+        for (seq, v) in r.vertices.iter().enumerate() {
+            sqlx::query(
+                "INSERT INTO utility_vertices (run_id, seq, northing, easting, elevation) \
+                 VALUES ($1, $2, $3, $4, $5)",
+            )
+            .bind(run_id)
+            .bind(seq as i32)
+            .bind(v.northing)
+            .bind(v.easting)
+            .bind(v.elevation)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+        }
+    }
+
+    for s in &archive.utility_structures {
+        sqlx::query(
+            "INSERT INTO utility_structures \
+               (project_id, type_key, label, level, northing, easting, rim_elev, inverts, material, \
+                owner, condition, attrs_extra, tags, source, as_built_date, locate_method) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)",
+        )
+        .bind(project_id)
+        .bind(&s.type_key)
+        .bind(&s.label)
+        .bind(&s.level)
+        .bind(s.northing)
+        .bind(s.easting)
+        .bind(s.rim_elev)
+        .bind(sqlx::types::Json(&s.inverts))
+        .bind(&s.material)
+        .bind(&s.owner)
+        .bind(&s.condition)
+        .bind(sqlx::types::Json(&s.attrs_extra))
+        .bind(&s.tags)
+        .bind(&s.source)
+        .bind(s.as_built_date)
+        .bind(&s.locate_method)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    // Field-exchange as-built comparison batches (+ snapshotted rows).
+    for b in &archive.as_built_batches {
+        let (batch_id,): (Uuid,) = sqlx::query_as(
+            "INSERT INTO as_built_batches \
+               (project_id, source_filename, format, baseline_scope, delta_space, \
+                tol_h_warn, tol_h_fail, tol_v_warn, tol_v_fail, report_unit) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id",
+        )
+        .bind(project_id)
+        .bind(&b.source_filename)
+        .bind(&b.format)
+        .bind(&b.baseline_scope)
+        .bind(&b.delta_space)
+        .bind(b.tol_h_warn)
+        .bind(b.tol_h_fail)
+        .bind(b.tol_v_warn)
+        .bind(b.tol_v_fail)
+        .bind(&b.report_unit)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+        for c in &b.comparisons {
+            sqlx::query(
+                "INSERT INTO as_built_comparisons \
+                   (batch_id, as_built_label, as_built_n, as_built_e, as_built_z, \
+                    design_n, design_e, design_z, match_method, delta_n, delta_e, delta_z, \
+                    delta_h_radial, delta_grid_n, delta_grid_e, status) \
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)",
+            )
+            .bind(batch_id)
+            .bind(&c.as_built_label)
+            .bind(c.as_built_n)
+            .bind(c.as_built_e)
+            .bind(c.as_built_z)
+            .bind(c.design_n)
+            .bind(c.design_e)
+            .bind(c.design_z)
+            .bind(&c.match_method)
+            .bind(c.delta_n)
+            .bind(c.delta_e)
+            .bind(c.delta_z)
+            .bind(c.delta_h_radial)
+            .bind(c.delta_grid_n)
+            .bind(c.delta_grid_e)
+            .bind(&c.status)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+        }
+    }
+
     tx.commit().await.map_err(|e| e.to_string())?;
     Ok(project_id)
 }

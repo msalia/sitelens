@@ -107,14 +107,16 @@ The reference + handoff surface.
 
 ### Deliverables
 
-- [ ] Inventory list (filter by type/level/tag, search) + attribute editor + per-entity audit history in the panel.
-- [ ] `api/src/utilities/export.rs`: **PDF** (shared WeasyPrint report service, not `printpdf`: utility schedule + client-rasterized plan-view PNG + provenance header), **DXF** (3D polylines on APWA layers + structure blocks), **GeoJSON** (geometry + full attrs), **LandXML** (with documented weak-support caveat).
-- [ ] `exportUtilities` query returning package blob (via Storage); export UI (format + scope picker).
+- [x] Inventory **table** (server-paginated like the survey-points table; search + filter by type; APWA color dot + label/detail subtitle rows) with per-row delete. *(Inline attribute editor + per-entity audit-history view in the panel deferred — audit is captured on every write and exposed via the `utilityAudit` query; a panel editor is a follow-up.)*
+- [x] `api/src/utilities/export.rs`: **PDF** (shared WeasyPrint report `Document`: utility schedule + provenance/summary header), **DXF** (polylines on APWA layers + structure nodes), **GeoJSON** (geometry + full attrs), **LandXML** (with documented weak-support caveat). Pure builders, unit-tested.
+- [x] `exportUtilities(projectId, format, typeKey, search)` query returning a `FileBlob` (base64); export UI = icon-only button + tooltip with a format menu, **honoring the active search + type filter**.
+- [x] **Project archive** (`projectExport`/`importProject`) now bundles utility runs (+vertices), structures, and field-exchange as-built comparisons, plus the already-inline CAD overlay DXFs — archive bumped to **v2** (latest-only; terrain/buildings stay re-fetchable, not bundled).
 
 ### Tests
 
-- [ ] PDF smoke + schedule-row correctness; DXF write→read layers/geometry; GeoJSON schema + attribute fidelity; LandXML generates.
-- [ ] Playwright: filter inventory → export package → download.
+- [x] Pure export: GeoJSON schema + attrs, DXF layers/geometry (CIRCLE tessellation), LandXML generates, schedule `Document` rows (4 unit tests in `export.rs`).
+- [x] Integration: combined runs+structures pagination + `utilityCount`; project archive round-trips utilities (run + vertices + structure) through export→import.
+- [ ] Playwright: filter inventory → export package → download. *(Export path is covered by unit + integration; the download click is a user-run e2e follow-up, consistent with the other 3D/e2e phases.)*
 
 ### Validates
 
@@ -128,14 +130,14 @@ Self-serve docs and end-to-end validation.
 
 ### Deliverables
 
-- [ ] In-app docs page: add `utilities` to `web/src/lib/docs.ts` `docsOrder` (group "Working with Data"); create `web/src/content/docs/utilities.md`; create `web/src/app/docs/utilities/page.tsx` per the `[slug]` pattern.
-- [ ] Docs content: capture (digitize vs import), utility types + APWA colors, attributes (invert/slope/diameter/material), reading depth in underground mode, interior utilities + level tags, exporting the archive.
-- [ ] End-to-end acceptance: capture → visualize → export round-trip on a real sample site (e.g. the BAPS seed site); verify DXF opens in CAD and GeoJSON validates.
+- [x] In-app docs page: added `utilities` to `web/src/lib/docs.ts` `docsOrder` (group "Working with Data"); `web/src/content/docs/utilities.md`; `web/src/app/docs/utilities/page.tsx` per the `[slug]` pattern.
+- [x] Docs content: capture (digitize vs import), utility types + APWA colors, attributes (invert/slope/diameter/material), reading depth in underground mode, interior utilities + level tags, exporting (per-format + project archive).
+- [x] End-to-end acceptance **checklist** authored (`ACCEPTANCE.md`): capture → visualize → export round-trip on the BAPS seed site, incl. DXF-opens-in-CAD / GeoJSON-validates rows. *(On-tool ticks pending a physical pass; archive round-trip row already automated.)*
 
 ### Tests
 
-- [ ] Docs page renders in nav + route resolves.
-- [ ] Acceptance checklist run; sample export files locked as fixtures.
+- [x] Docs page renders + route resolves (`e2e/smoke.spec.ts` — `/docs/utilities` renders the heading + appears in the docs nav).
+- [ ] Acceptance checklist run on real tools; sample export files locked as fixtures. *(Pending the physical acceptance pass — the checklist tracks it.)*
 
 ### Validates
 

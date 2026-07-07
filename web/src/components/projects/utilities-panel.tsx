@@ -1,6 +1,6 @@
 'use client';
 
-import { IconPlus, IconTrash, IconX } from '@tabler/icons-react';
+import { IconDownload, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -17,6 +17,12 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
@@ -36,6 +42,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { gql } from '@/lib/graphql';
 import { fromMeters, toMeters, unitName } from '@/lib/units';
 
@@ -44,9 +51,13 @@ import {
   CREATE_UTILITY_STRUCTURE,
   DELETE_UTILITY_RUN,
   DELETE_UTILITY_STRUCTURE,
+  EXPORT_UTILITIES,
   UTILITIES,
+  UTILITY_COUNT,
   UTILITY_TYPES,
 } from './utilities-data';
+
+const PAGE_SIZE = 50;
 
 /** One captured node — canonical meters. `label` is display-only provenance. */
 type Capture = {
@@ -94,6 +105,17 @@ const SOURCE_OPTIONS = [
   ['locate_company', 'Locate company'],
   ['other', 'Other'],
 ] as const;
+
+/** Trigger a browser download of base64 file content. */
+function downloadBase64(filename: string, mime: string, b64: string) {
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes as unknown as BlobPart], { type: mime }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 /** Snap a survey point straight to a canonical-meter capture (no conversion). */
 function fromScenePoint(p: ScenePoint): Capture {
@@ -151,26 +173,36 @@ export function UtilitiesPanel({
     tags: '',
   });
 
-  // Inventory search + type filter (server-side via the `utilities` query).
+  // Inventory search + type filter + paging (all server-side via `utilities`).
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [page, setPage] = useState(0);
+  const [total, setTotal] = useState(0);
 
   const byKey = useMemo(() => new Map(types.map((t) => [t.key, t])), [types]);
 
   const loadInventory = useCallback(async () => {
     try {
-      const { utilities } = await gql(UTILITIES, {
-        projectId: project.id,
-        search: debouncedSearch || null,
-        typeKey: typeFilter === 'all' ? null : typeFilter,
-      });
+      const typeKey = typeFilter === 'all' ? null : typeFilter;
+      const searchArg = debouncedSearch || null;
+      const [{ utilities }, { utilityCount }] = await Promise.all([
+        gql(UTILITIES, {
+          limit: PAGE_SIZE,
+          offset: page * PAGE_SIZE,
+          projectId: project.id,
+          search: searchArg,
+          typeKey,
+        }),
+        gql(UTILITY_COUNT, { projectId: project.id, search: searchArg, typeKey }),
+      ]);
       setRuns(utilities.runs);
       setStructures(utilities.structures);
+      setTotal(utilityCount);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load utilities');
     }
-  }, [project.id, debouncedSearch, typeFilter]);
+  }, [project.id, debouncedSearch, typeFilter, page]);
 
   // Load the type catalog once.
   useEffect(() => {
@@ -195,6 +227,15 @@ export function UtilitiesPanel({
     const t = setTimeout(() => setDebouncedSearch(search), 250);
     return () => clearTimeout(t);
   }, [search]);
+
+  // Reset to the first page whenever the filters change (render-phase compare,
+  // matching the survey-points table — avoids fetching a stale page).
+  const filterSig = `${debouncedSearch}|${typeFilter}`;
+  const [pagedFilterSig, setPagedFilterSig] = useState(filterSig);
+  if (pagedFilterSig !== filterSig) {
+    setPagedFilterSig(filterSig);
+    setPage(0);
+  }
 
   // Register the scene-marker pick sink for the active mode. Functional updates
   // keep the handler correct without re-subscribing on every capture.
@@ -359,6 +400,21 @@ export function UtilitiesPanel({
     }
   }
 
+  // Export the archive (scoped to the active type filter) in a portable format.
+  async function onExport(format: string) {
+    try {
+      const { exportUtilities } = await gql(EXPORT_UTILITIES, {
+        format,
+        projectId: project.id,
+        search: debouncedSearch || null,
+        typeKey: typeFilter === 'all' ? null : typeFilter,
+      });
+      downloadBase64(exportUtilities.filename, exportUtilities.mimeType, exportUtilities.contentBase64);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Export failed');
+    }
+  }
+
   const selectedType = typeKey ? byKey.get(typeKey) : undefined;
   const canRun = !selectedType || selectedType.defaultGeometry !== 'structure';
   const canStructure = !selectedType || selectedType.defaultGeometry !== 'line';
@@ -386,11 +442,13 @@ export function UtilitiesPanel({
                     <SelectLabel>Utility type</SelectLabel>
                     {types.map((t) => (
                       <SelectItem key={t.key} value={t.key}>
-                        <span
-                          className="mr-1 inline-block size-2.5 rounded-full align-middle"
-                          style={{ backgroundColor: t.apwaColor }}
-                        />
-                        {t.label}
+                        <span className="inline-flex items-center gap-2">
+                          <span
+                            className="size-2.5 rounded-full"
+                            style={{ backgroundColor: t.apwaColor }}
+                          />
+                          {t.label}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectGroup>
@@ -460,7 +518,7 @@ export function UtilitiesPanel({
           <CardTitle className="text-sm">
             Inventory
             <span className="text-muted-foreground ml-2 font-normal">
-              {runs.length + structures.length} item{runs.length + structures.length === 1 ? '' : 's'}
+              {total} item{total === 1 ? '' : 's'}
             </span>
           </CardTitle>
         </CardHeader>
@@ -481,16 +539,46 @@ export function UtilitiesPanel({
                   <SelectItem value="all">All types</SelectItem>
                   {types.map((t) => (
                     <SelectItem key={t.key} value={t.key}>
-                      <span
-                        className="mr-1 inline-block size-2.5 rounded-full align-middle"
-                        style={{ backgroundColor: t.apwaColor }}
-                      />
-                      {t.label}
+                      <span className="inline-flex items-center gap-2">
+                        <span
+                          className="size-2.5 rounded-full"
+                          style={{ backgroundColor: t.apwaColor }}
+                        />
+                        {t.label}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectGroup>
               </SelectContent>
             </Select>
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          aria-label="Export inventory"
+                          className="shrink-0"
+                          disabled={total === 0}
+                        >
+                          <IconDownload className="size-4" />
+                        </Button>
+                      }
+                    />
+                  }
+                />
+                <TooltipContent>Export inventory</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => onExport('geojson')}>GeoJSON</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onExport('dxf')}>DXF</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onExport('landxml')}>LandXML</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onExport('pdf')}>PDF schedule</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
           <div className="-mx-(--card-spacing) -mb-(--card-spacing) border-t">
             <Table>
@@ -588,6 +676,34 @@ export function UtilitiesPanel({
               </TableBody>
             </Table>
           </div>
+          {total > PAGE_SIZE ? (
+            <div className="flex items-center justify-between pt-1 text-sm">
+              <span className="text-muted-foreground">
+                {page * PAGE_SIZE + 1}–{Math.min(total, (page + 1) * PAGE_SIZE)} of {total}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page === 0}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                >
+                  Previous
+                </Button>
+                <span className="text-muted-foreground">
+                  Page {page + 1} / {Math.max(1, Math.ceil(total / PAGE_SIZE))}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={(page + 1) * PAGE_SIZE >= total}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </div>
