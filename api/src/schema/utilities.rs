@@ -587,7 +587,36 @@ impl UtilitiesQuery {
             crate::crs::projected_to_geographic(epsg, te, tn).unwrap_or((0.0, 0.0))
         };
 
-        // Runs (+ vertices) and structures, optionally scoped to one type.
+        // APWA color per type (for the plan-view sheet + inventory swatches).
+        let colors: std::collections::HashMap<String, String> =
+            sqlx::query_as::<_, (String, String)>("SELECT key, apwa_color FROM utility_types")
+                .fetch_all(pool)
+                .await?
+                .into_iter()
+                .collect();
+        let color_of = |tk: &str| colors.get(tk).cloned().unwrap_or_else(|| "#6b7280".into());
+        // Whether an entity matches the active type/search filter — the "in the
+        // inventory" set (colored in the plan, listed in the schedule). Mirrors the
+        // former SQL filter; the whole network is fetched so the plan can draw the
+        // rest in gray for context.
+        let in_filter = |tk: &str, label: &str, tags: &[String]| -> bool {
+            if let Some(t) = type_key.as_deref() {
+                if tk != t {
+                    return false;
+                }
+            }
+            if let Some(s) = search.as_deref() {
+                let sl = s.to_lowercase();
+                if !(label.to_lowercase().contains(&sl)
+                    || tags.iter().any(|t| t.to_lowercase().contains(&sl)))
+                {
+                    return false;
+                }
+            }
+            true
+        };
+
+        // Runs (+ vertices) and structures — the whole network.
         let run_rows: Vec<(
             Uuid,
             String,
@@ -598,20 +627,18 @@ impl UtilitiesQuery {
             Option<f64>,
             Option<f64>,
             Vec<String>,
+            Option<String>,
+            String,
         )> = sqlx::query_as(
-            "SELECT id, type_key, label, diameter, material, invert_up, invert_down, slope, tags \
-             FROM utility_runs WHERE project_id = $1 AND deleted_at IS NULL \
-               AND ($2::text IS NULL OR type_key = $2) \
-               AND ($3::text IS NULL OR label ILIKE '%'||$3||'%' \
-                    OR array_to_string(tags, ' ') ILIKE '%'||$3||'%') ORDER BY created_at",
+            "SELECT id, type_key, label, diameter, material, invert_up, invert_down, slope, tags, condition, source \
+             FROM utility_runs WHERE project_id = $1 AND deleted_at IS NULL ORDER BY created_at",
         )
         .bind(project_id)
-        .bind(&type_key)
-        .bind(&search)
         .fetch_all(pool)
         .await?;
         let mut ex_runs = Vec::with_capacity(run_rows.len());
-        for (id, tk, label, diameter, material, iu, id_, slope, tags) in run_rows {
+        for (id, tk, label, diameter, material, iu, id_, slope, tags, condition, source) in run_rows
+        {
             let vrows: Vec<(f64, f64, Option<f64>)> = sqlx::query_as(
                 "SELECT northing, easting, elevation FROM utility_vertices \
                  WHERE run_id = $1 ORDER BY seq",
@@ -641,6 +668,8 @@ impl UtilitiesQuery {
                     }
                 })
                 .collect();
+            let color = color_of(&tk);
+            let report = in_filter(&tk, &label, &tags);
             ex_runs.push(uexport::ExRun {
                 type_key: tk,
                 label,
@@ -652,6 +681,10 @@ impl UtilitiesQuery {
                 length_m,
                 tags,
                 vertices,
+                color,
+                condition,
+                source,
+                in_report: report,
             });
         }
 
@@ -663,34 +696,40 @@ impl UtilitiesQuery {
             f64,
             f64,
             Vec<String>,
+            Option<String>,
+            String,
         )> = sqlx::query_as(
-            "SELECT type_key, label, material, rim_elev, northing, easting, tags \
+            "SELECT type_key, label, material, rim_elev, northing, easting, tags, condition, source \
                  FROM utility_structures WHERE project_id = $1 AND deleted_at IS NULL \
-                   AND ($2::text IS NULL OR type_key = $2) \
-                   AND ($3::text IS NULL OR label ILIKE '%'||$3||'%' \
-                        OR array_to_string(tags, ' ') ILIKE '%'||$3||'%') ORDER BY created_at",
+                 ORDER BY created_at",
         )
         .bind(project_id)
-        .bind(&type_key)
-        .bind(&search)
         .fetch_all(pool)
         .await?;
         let ex_structs: Vec<uexport::ExStruct> = struct_rows
             .into_iter()
-            .map(|(tk, label, material, rim, n, e, tags)| {
-                let (lat, lon) = to_ll(e, n);
-                uexport::ExStruct {
-                    type_key: tk,
-                    label,
-                    material,
-                    rim_elev: rim,
-                    northing: n,
-                    easting: e,
-                    lat,
-                    lon,
-                    tags,
-                }
-            })
+            .map(
+                |(tk, label, material, rim, n, e, tags, condition, source)| {
+                    let (lat, lon) = to_ll(e, n);
+                    let color = color_of(&tk);
+                    let in_report = in_filter(&tk, &label, &tags);
+                    uexport::ExStruct {
+                        type_key: tk,
+                        label,
+                        material,
+                        rim_elev: rim,
+                        northing: n,
+                        easting: e,
+                        lat,
+                        lon,
+                        tags,
+                        color,
+                        condition,
+                        source,
+                        in_report,
+                    }
+                },
+            )
             .collect();
 
         let base = {
@@ -704,29 +743,46 @@ impl UtilitiesQuery {
         use base64::Engine;
         let b64 = |bytes: Vec<u8>| base64::engine::general_purpose::STANDARD.encode(bytes);
 
+        // GeoJSON/DXF/LandXML export the active inventory (filtered) set; the PDF
+        // plan additionally renders the rest of the network in gray for context.
+        let inv_runs: Vec<uexport::ExRun> =
+            ex_runs.iter().filter(|r| r.in_report).cloned().collect();
+        let inv_structs: Vec<uexport::ExStruct> =
+            ex_structs.iter().filter(|s| s.in_report).cloned().collect();
+
         let (filename, mime, content) = match format.as_str() {
             "geojson" => (
                 format!("{base}.geojson"),
                 "application/geo+json".to_string(),
-                b64(uexport::to_geojson(&ex_runs, &ex_structs).into_bytes()),
+                b64(uexport::to_geojson(&inv_runs, &inv_structs).into_bytes()),
             ),
             "dxf" => (
                 format!("{base}.dxf"),
                 "application/dxf".to_string(),
-                b64(uexport::to_dxf(&ex_runs, &ex_structs)
+                b64(uexport::to_dxf(&inv_runs, &inv_structs)
                     .map_err(async_graphql::Error::new)?
                     .into_bytes()),
             ),
             "landxml" => (
                 format!("{base}.xml"),
                 "application/xml".to_string(),
-                b64(uexport::to_landxml(&ex_runs, &ex_structs).into_bytes()),
+                b64(uexport::to_landxml(&inv_runs, &inv_structs).into_bytes()),
             ),
             "pdf" => {
                 let now = chrono::Utc::now();
+                // The project's building grid axes, plotted in grid space so the
+                // plan overlays them like the 3D top view.
+                let axes: Vec<(String, String, f64)> = sqlx::query_as(
+                    "SELECT family, label, position FROM grid_axes WHERE project_id = $1",
+                )
+                .bind(project_id)
+                .fetch_all(pool)
+                .await?;
                 let doc = uexport::schedule_document(
                     &name,
-                    "meters",
+                    epsg,
+                    crs.params,
+                    &axes,
                     &ex_runs,
                     &ex_structs,
                     &now.format("%Y-%m-%d").to_string(),

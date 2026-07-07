@@ -16,6 +16,8 @@
 
 use std::env;
 
+pub mod drawing;
+
 /// Company legal name for copyright/branding (env `SITELENS_ORG_NAME`).
 pub fn org_name() -> String {
     env::var("SITELENS_ORG_NAME").unwrap_or_else(|_| "KeshavTech LLC".to_string())
