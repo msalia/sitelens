@@ -1,6 +1,45 @@
 #![allow(clippy::too_many_arguments)]
 use super::*;
 
+const CONTROL_POINT_COLUMNS: &str =
+    "id, project_id, label, northing, easting, elevation, grid_x, grid_y, source";
+
+/// Row shape for reading a persisted transform.
+#[derive(sqlx::FromRow)]
+struct TransformRow {
+    translation_e: f64,
+    translation_n: f64,
+    rotation_rad: f64,
+    scale: f64,
+    rms_error: f64,
+    point_count: i32,
+    residuals: sqlx::types::Json<Vec<TransformResidual>>,
+}
+
+impl From<TransformRow> for Transform {
+    fn from(r: TransformRow) -> Self {
+        Transform {
+            translation_e: r.translation_e,
+            translation_n: r.translation_n,
+            rotation_degrees: r.rotation_rad.to_degrees(),
+            scale: r.scale,
+            rms_error: r.rms_error,
+            point_count: r.point_count,
+            residuals: r.residuals.0,
+        }
+    }
+}
+
+/// Row shape for control points used as transform correspondences.
+#[derive(sqlx::FromRow)]
+struct SolvePointRow {
+    label: String,
+    grid_x: f64,
+    grid_y: f64,
+    northing: f64,
+    easting: f64,
+}
+
 #[derive(Default)]
 pub struct GridQuery;
 

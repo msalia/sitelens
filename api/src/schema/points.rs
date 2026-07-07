@@ -1,6 +1,42 @@
 #![allow(clippy::too_many_arguments)]
 use super::*;
 
+const CATEGORY_COLUMNS: &str = "id, org_id, name, color, icon, is_default";
+const SURVEY_POINT_COLUMNS: &str = "id, project_id, label, northing, easting, elevation, \
+    description, category_id, tags, import_batch_id";
+
+/// Converts a GraphQL CSV mapping into the parser's mapping (validating indices).
+fn to_csv_mapping(m: &CsvMappingInput) -> Result<CsvMapping> {
+    let idx = |v: i32, what: &str| -> Result<usize> {
+        usize::try_from(v).map_err(|_| async_graphql::Error::new(format!("invalid {what} column")))
+    };
+    let opt = |v: Option<i32>, what: &str| -> Result<Option<usize>> {
+        v.map(|x| idx(x, what)).transpose()
+    };
+    Ok(CsvMapping {
+        has_header: m.has_header,
+        label_col: opt(m.label_col, "label")?,
+        northing_col: idx(m.northing_col, "northing")?,
+        easting_col: idx(m.easting_col, "easting")?,
+        elevation_col: opt(m.elevation_col, "elevation")?,
+        description_col: opt(m.description_col, "description")?,
+    })
+}
+
+/// Like [`publish_scene`] for a bulk op spanning possibly several projects;
+/// publishes each distinct project once.
+fn publish_scenes(ctx: &Context<'_>, project_ids: impl IntoIterator<Item = Uuid>) {
+    let Ok(hub) = ctx.data::<ScenePubSub>() else {
+        return;
+    };
+    let mut seen = std::collections::HashSet::new();
+    for pid in project_ids {
+        if seen.insert(pid) {
+            hub.publish(pid);
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct PointsQuery;
 

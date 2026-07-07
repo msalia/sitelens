@@ -1,5 +1,84 @@
 #![allow(clippy::too_many_arguments)]
 use super::*;
+// `.encode()` resolves through the base64 `Engine` trait; it must be in scope
+// (method-only import, no name bound).
+use base64::Engine as _;
+
+const TERRAIN_COLUMNS: &str = "project_id, demtype, south, north, west, east, fetched_at";
+const BUILDINGS_COLUMNS: &str = "project_id, count, fetched_at";
+
+/// Best-effort building height (meters) from OSM tags: `height`, else
+/// `building:levels` × 3 m, else a 2-storey default.
+fn building_height(tags: &serde_json::Value) -> f64 {
+    if let Some(h) = tags.get("height").and_then(|v| v.as_str()) {
+        if let Some(n) = h
+            .split_whitespace()
+            .next()
+            .and_then(|s| s.parse::<f64>().ok())
+        {
+            if n > 0.0 {
+                return n;
+            }
+        }
+    }
+    if let Some(l) = tags.get("building:levels").and_then(|v| v.as_str()) {
+        if let Ok(n) = l.trim().parse::<f64>() {
+            return (n * 3.0).max(2.0);
+        }
+    }
+    6.0
+}
+
+/// Outcome of the refresh cooldown check (see [`refresh_cooldown`]).
+enum Refresh<T> {
+    /// A cached row exists and no forced refresh was requested — return it.
+    Cached(T),
+    /// No cache (or a forced refresh past the cooldown) — go fetch.
+    Proceed,
+}
+
+/// Shared cache + 7-day cooldown gate for the terrain/buildings refresh mutations.
+/// Reads `fetched_at` from `table`; if present and not `force`, returns the cached
+/// row (`SELECT {columns}`); if present, `force`, and still within 7 days, errors
+/// with "{subject} refreshed recently…". `subject` is the full phrase up to the
+/// verb (e.g. "Terrain was", "Buildings were") so each message reads naturally.
+async fn refresh_cooldown<T>(
+    pool: &PgPool,
+    table: &str,
+    columns: &str,
+    subject: &str,
+    project_id: Uuid,
+    force: bool,
+) -> Result<Refresh<T>>
+where
+    T: for<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
+{
+    let existing: Option<(DateTime<Utc>,)> = sqlx::query_as(&format!(
+        "SELECT fetched_at FROM {table} WHERE project_id = $1"
+    ))
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await?;
+    if let Some((fetched_at,)) = existing {
+        if !force {
+            let row = sqlx::query_as(&format!(
+                "SELECT {columns} FROM {table} WHERE project_id = $1"
+            ))
+            .bind(project_id)
+            .fetch_one(pool)
+            .await?;
+            return Ok(Refresh::Cached(row));
+        }
+        let age = Utc::now() - fetched_at;
+        if age < chrono::Duration::days(7) {
+            let days = (7 - age.num_days()).max(1);
+            return Err(async_graphql::Error::new(format!(
+                "{subject} refreshed recently — try again in {days} day(s)."
+            )));
+        }
+    }
+    Ok(Refresh::Proceed)
+}
 
 #[derive(Default)]
 pub struct TerrainQuery;

@@ -1,6 +1,20 @@
 #![allow(clippy::too_many_arguments)]
 use super::*;
 
+/// CSV header label for an export column.
+fn column_header(c: &ExportColumn) -> String {
+    match c {
+        ExportColumn::Point => "Point",
+        ExportColumn::Northing => "Northing",
+        ExportColumn::Easting => "Easting",
+        ExportColumn::Elevation => "Elevation",
+        ExportColumn::Description => "Description",
+        ExportColumn::Latitude => "Latitude",
+        ExportColumn::Longitude => "Longitude",
+    }
+    .to_string()
+}
+
 #[derive(Default)]
 pub struct CoordsQuery;
 

@@ -1,6 +1,22 @@
 #![allow(clippy::too_many_arguments)]
 use super::*;
 
+const PROJECT_COLUMNS: &str = "id, org_id, name, description, epsg_code, display_unit, \
+    combined_scale_factor, site_origin_lat, site_origin_lon, site_origin_rotation_deg, \
+    tol_h_warn, tol_h_fail, tol_v_warn, tol_v_fail, created_at, updated_at";
+
+/// Blocks creating another project once a free org is at the Solo project cap.
+async fn require_project_quota(ctx: &Context<'_>) -> Result<()> {
+    let auth = require_auth(ctx)?;
+    let b = crate::billing::org_billing(pool(ctx)?, auth.org_id).await?;
+    if !b.paid() && b.projects >= Plan::Solo.limits().projects {
+        return Err(async_graphql::Error::new(
+            "The Solo plan is limited to 1 project. Upgrade to Crew for unlimited projects.",
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Default)]
 pub struct ProjectQuery;
 

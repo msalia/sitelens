@@ -1,5 +1,80 @@
 #![allow(clippy::too_many_arguments)]
 use super::*;
+use rand::{distributions::Alphanumeric, Rng};
+
+const USER_COLUMNS: &str = "id, org_id, email, role, email_verified, created_at";
+const MIN_PASSWORD_LEN: usize = 8;
+
+/// The default category set seeded for every new organization.
+const DEFAULT_CATEGORIES: &[(&str, &str, &str)] = &[
+    ("Control/Reference", "#ef4444", "target"),
+    ("Station/Setup", "#f59e0b", "station"),
+    ("Column", "#3b82f6", "column"),
+    ("Corner", "#8b5cf6", "corner"),
+    ("Spot/Elevation", "#10b981", "spot"),
+    ("Utility", "#6b7280", "utility"),
+    ("Other", "#94a3b8", "other"),
+];
+
+fn gen_token() -> String {
+    rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(32)
+        .map(char::from)
+        .collect()
+}
+
+fn normalize_email(email: &str) -> String {
+    email.trim().to_lowercase()
+}
+
+async fn email_taken(pool: &PgPool, email: &str) -> Result<bool> {
+    let existing: Option<(Uuid,)> =
+        sqlx::query_as("SELECT id FROM users WHERE lower(email) = lower($1)")
+            .bind(email)
+            .fetch_optional(pool)
+            .await?;
+    Ok(existing.is_some())
+}
+
+/// Enforces the per-IP auth rate limit for `action` (e.g. "login", "signup").
+/// A no-op if no limiter is present in context; errors when the limit is hit.
+async fn enforce_rate_limit(ctx: &Context<'_>, action: &str) -> Result<()> {
+    if let Some(limiter) = ctx.data_opt::<RateLimiter>() {
+        let ip = ctx
+            .data_opt::<ClientIp>()
+            .map(|c| c.0.as_str())
+            .unwrap_or("unknown");
+        if !limiter.check(&format!("{action}:{ip}")).await {
+            return Err(async_graphql::Error::new(
+                "too many attempts; please wait a minute and try again",
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Blocks adding a member/admin beyond the Solo caps. `new_admin` = the user being
+/// added/promoted will be an admin.
+async fn require_member_quota(ctx: &Context<'_>, new_admin: bool) -> Result<()> {
+    let auth = require_auth(ctx)?;
+    let b = crate::billing::org_billing(pool(ctx)?, auth.org_id).await?;
+    if b.paid() {
+        return Ok(());
+    }
+    let caps = Plan::Solo.limits();
+    if new_admin && b.admins >= caps.admins {
+        return Err(async_graphql::Error::new(
+            "The Solo plan allows 1 admin. Upgrade to Crew for more.",
+        ));
+    }
+    if !new_admin && b.non_admin >= caps.non_admin {
+        return Err(async_graphql::Error::new(
+            "The Solo plan allows up to 5 members. Upgrade to Crew for unlimited members.",
+        ));
+    }
+    Ok(())
+}
 
 #[derive(Default)]
 pub struct AuthQuery;

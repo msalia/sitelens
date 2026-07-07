@@ -1,6 +1,22 @@
 #![allow(clippy::too_many_arguments)]
 use super::*;
 
+const CAD_OVERLAY_COLUMNS: &str = "id, project_id, original_filename, offset_e, offset_n, \
+    rotation_deg, scale, elevation, assume_real_world, visible";
+
+/// Returns the storage key of a CAD overlay if it belongs to the org.
+async fn overlay_key_in_org(pool: &PgPool, id: Uuid, org_id: Uuid) -> Result<String> {
+    let row: Option<(String,)> = sqlx::query_as(
+        "SELECT co.storage_key FROM cad_overlays co JOIN projects p ON co.project_id = p.id \
+         WHERE co.id = $1 AND p.org_id = $2",
+    )
+    .bind(id)
+    .bind(org_id)
+    .fetch_optional(pool)
+    .await?;
+    found_in_org(row.map(|(k,)| k), "overlay")
+}
+
 /// A 2D point in DXF drawing units.
 #[derive(async_graphql::SimpleObject)]
 pub struct DxfPoint {
