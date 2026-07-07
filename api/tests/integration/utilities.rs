@@ -251,3 +251,85 @@ async fn audit_log_appends_field_level_diff(pool: PgPool) {
     assert_eq!(diff["material"]["after"], "PVC");
     assert_eq!(diff["diameter"]["after"], 8);
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn import_geojson_creates_runs_and_structures(pool: PgPool) {
+    use base64::Engine as _;
+    let schema = schema(pool.clone());
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    set_paid(&pool, org).await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+
+    // Projected-meter GeoJSON: a WATER line + a MANHOLE point.
+    let geojson = r#"{"type":"FeatureCollection","features":[
+        {"type":"Feature","properties":{"layer":"WATER","name":"W-1"},
+         "geometry":{"type":"LineString","coordinates":[[0,0],[3,4]]}},
+        {"type":"Feature","properties":{"layer":"MANHOLE"},
+         "geometry":{"type":"Point","coordinates":[5,5]}}
+    ]}"#;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(geojson);
+
+    let q = r#"mutation ($id: UUID!, $c: String!, $m: [UtilityLayerMapping!]!) {
+        importUtilities(projectId: $id, format: "geojson", contentBase64: $c, mappings: $m,
+                        space: "projected", unit: METER) {
+            runsCreated structuresCreated skipped
+        }
+    }"#;
+    let vars = serde_json::json!({
+        "id": pid, "c": b64,
+        "m": [
+            { "layer": "WATER", "kind": "line", "typeKey": "water" },
+            { "layer": "MANHOLE", "kind": "point", "typeKey": "manhole" },
+        ],
+    });
+    let data = exec_ok_vars(&schema, q, vars, admin_ctx(admin, org)).await;
+    let r = &data["importUtilities"];
+    assert_eq!(r["runsCreated"], 1);
+    assert_eq!(r["structuresCreated"], 1);
+    assert_eq!(r["skipped"], 0);
+
+    // Both land in the inventory with their mapped types (projected coords kept).
+    let inv = exec_ok_vars(
+        &schema,
+        r#"query ($id: UUID!){ utilities(projectId:$id){
+            runs{ typeKey label vertices{ seq easting northing } }
+            structures{ typeKey easting northing } } }"#,
+        serde_json::json!({ "id": pid }),
+        admin_ctx(admin, org),
+    )
+    .await;
+    let run = &inv["utilities"]["runs"][0];
+    assert_eq!(run["typeKey"], "water");
+    assert_eq!(run["label"], "W-1");
+    assert_eq!(run["vertices"].as_array().unwrap().len(), 2);
+    assert_eq!(run["vertices"][1]["easting"], 3.0);
+    assert_eq!(inv["utilities"]["structures"][0]["typeKey"], "manhole");
+    assert_eq!(inv["utilities"]["structures"][0]["easting"], 5.0);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn preview_suggests_apwa_types(pool: PgPool) {
+    use base64::Engine as _;
+    let schema = schema(pool.clone());
+    let (admin, org, _) = signup(&schema, "a@example.com", "Org").await;
+    set_paid(&pool, org).await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+
+    let geojson = r#"{"type":"FeatureCollection","features":[
+        {"type":"Feature","properties":{"layer":"SAN-SEWER"},
+         "geometry":{"type":"LineString","coordinates":[[0,0],[1,1]]}}]}"#;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(geojson);
+    let data = exec_ok_vars(
+        &schema,
+        r#"query ($id: UUID!, $c: String!){
+            previewUtilityImport(projectId:$id, format:"geojson", contentBase64:$c){
+                layers{ layer kind count suggestedType } } }"#,
+        serde_json::json!({ "id": pid, "c": b64 }),
+        admin_ctx(admin, org),
+    )
+    .await;
+    let layer = &data["previewUtilityImport"]["layers"][0];
+    assert_eq!(layer["layer"], "SAN-SEWER");
+    assert_eq!(layer["kind"], "line");
+    assert_eq!(layer["suggestedType"], "sanitary_sewer");
+}

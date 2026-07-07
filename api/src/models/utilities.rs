@@ -99,6 +99,39 @@ pub struct UtilityAuditEntry {
     pub diff: String,
 }
 
+/// One source layer/group in an import file, with an auto-suggested APWA type.
+#[derive(SimpleObject)]
+pub struct UtilityImportLayer {
+    pub layer: String,
+    /// "line" (→ run) or "point" (→ structure).
+    pub kind: String,
+    pub count: i32,
+    pub suggested_type: Option<String>,
+}
+
+/// Preview of an import file: its layers, for the mapping UI.
+#[derive(SimpleObject)]
+pub struct UtilityImportPreview {
+    pub layers: Vec<UtilityImportLayer>,
+}
+
+/// Result of committing an import.
+#[derive(SimpleObject)]
+pub struct UtilityImportResult {
+    pub runs_created: i32,
+    pub structures_created: i32,
+    pub skipped: i32,
+}
+
+/// A user-confirmed layer→type mapping. `type_key` null/empty = skip the layer.
+#[derive(InputObject)]
+pub struct UtilityLayerMapping {
+    pub layer: String,
+    /// Matches the preview `kind` ("line" | "point").
+    pub kind: String,
+    pub type_key: Option<String>,
+}
+
 /// One vertex on capture. `seq` is the array position; coords are canonical meters.
 #[derive(InputObject)]
 pub struct UtilityVertexInput {

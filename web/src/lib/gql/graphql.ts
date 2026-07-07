@@ -119,6 +119,14 @@ export type Role =
   | 'SURVEYOR'
   | 'VIEWER';
 
+/** A user-confirmed layer→type mapping. `type_key` null/empty = skip the layer. */
+export type UtilityLayerMapping = {
+  /** Matches the preview `kind` ("line" | "point"). */
+  kind: string;
+  layer: string;
+  typeKey?: string | null | undefined;
+};
+
 /**
  * Run attributes on create/update. All optional; on update, omitted fields keep
  * their current value. `diameter_inches` is stored canonical (meters).
@@ -810,6 +818,28 @@ export type DeleteUtilityStructureMutationVariables = Exact<{
 
 
 export type DeleteUtilityStructureMutation = { deleteUtilityStructure: boolean };
+
+export type PreviewUtilityImportQueryVariables = Exact<{
+  projectId: string;
+  format: string;
+  contentBase64: string;
+}>;
+
+
+export type PreviewUtilityImportQuery = { previewUtilityImport: { layers: Array<{ layer: string, kind: string, count: number, suggestedType: string | null }> } };
+
+export type ImportUtilitiesMutationVariables = Exact<{
+  projectId: string;
+  format: string;
+  contentBase64: string;
+  mappings: Array<UtilityLayerMapping> | UtilityLayerMapping;
+  space: string;
+  unit: LengthUnit;
+  source?: string | null | undefined;
+}>;
+
+
+export type ImportUtilitiesMutation = { importUtilities: { runsCreated: number, structuresCreated: number, skipped: number } };
 
 export type ResetPasswordMutationVariables = Exact<{
   t: string;
@@ -1834,6 +1864,39 @@ export const DeleteUtilityStructureDocument = new TypedDocumentString(`
   deleteUtilityStructure(id: $id)
 }
     `) as unknown as TypedDocumentString<DeleteUtilityStructureMutation, DeleteUtilityStructureMutationVariables>;
+export const PreviewUtilityImportDocument = new TypedDocumentString(`
+    query PreviewUtilityImport($projectId: UUID!, $format: String!, $contentBase64: String!) {
+  previewUtilityImport(
+    projectId: $projectId
+    format: $format
+    contentBase64: $contentBase64
+  ) {
+    layers {
+      layer
+      kind
+      count
+      suggestedType
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<PreviewUtilityImportQuery, PreviewUtilityImportQueryVariables>;
+export const ImportUtilitiesDocument = new TypedDocumentString(`
+    mutation ImportUtilities($projectId: UUID!, $format: String!, $contentBase64: String!, $mappings: [UtilityLayerMapping!]!, $space: String!, $unit: LengthUnit!, $source: String) {
+  importUtilities(
+    projectId: $projectId
+    format: $format
+    contentBase64: $contentBase64
+    mappings: $mappings
+    space: $space
+    unit: $unit
+    source: $source
+  ) {
+    runsCreated
+    structuresCreated
+    skipped
+  }
+}
+    `) as unknown as TypedDocumentString<ImportUtilitiesMutation, ImportUtilitiesMutationVariables>;
 export const ResetPasswordDocument = new TypedDocumentString(`
     mutation ResetPassword($t: String!, $p: String!) {
   resetPassword(token: $t, newPassword: $p)

@@ -64,14 +64,15 @@ Bring in pre-drawn linework.
 
 ### Deliverables
 
-- [ ] `api/src/utilities/import.rs` — DXF polylines→runs via **layer→utility-type mapping** (auto-map APWA-named layers, manual fallback), block inserts→structures; GeoJSON LineString/Point→runs/structures with property→attr mapping + reprojection (`crs.rs`).
-- [ ] `importUtilities` mutation + `needsMapping` response for unmapped layers; size caps.
-- [ ] Import UI in the Utilities panel: upload → layer/property mapping → review → commit (audited).
+- [x] `api/src/dxf.rs` — shared server-side DXF codec (ixmilia `dxf` crate); the client DXF parser was retired and the CAD overlay now renders from `cadOverlayGeometry`.
+- [x] `api/src/utilities/import.rs` — DXF polylines→runs + block inserts→structures; GeoJSON LineString/Point (+Multi\*)→runs/structures with layer/property grouping; **APWA layer→type auto-mapping** (`guess_type`, structure keywords win); pure + unit-tested.
+- [x] `importUtilities` mutation (layer→type mapping, geographic reprojection via `crs.rs` or projected-unit scaling, audited inserts) + `previewUtilityImport` query returning layers with suggested types for the mapping UI. (Unmapped layers are skipped and counted; auto-suggestions cover the `needsMapping` intent.)
+- [x] Import UI in the Utilities panel: upload → auto-mapped layer/type form (+ coordinate space/unit) → commit; `utilities/import-dialog.tsx`.
 
 ### Tests
 
-- [ ] DXF polyline→run + mapping; GeoJSON→features + reprojection + property mapping; malformed/oversized bounds.
-- [ ] Playwright: import a DXF → map layers → commit → appears in inventory.
+- [x] Pure: APWA `guess_type`, GeoJSON parse, DXF parse, layer summarize (import.rs) + DXF codec (dxf.rs). Integration (real PostGIS): GeoJSON import creates runs+structures in the inventory with mapped types + kept coords; preview suggests APWA types.
+- [x] Playwright (`e2e/utilities.spec.ts`): import a GeoJSON → map layers → commit → appears in inventory. (Runs against the full stack — user-run.)
 
 ### Validates
 

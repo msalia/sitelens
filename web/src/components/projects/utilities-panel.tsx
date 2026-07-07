@@ -8,6 +8,7 @@ import type { Project, ScenePoint } from '@/lib/types';
 
 import { ConfirmDialog } from '@/components/projects/confirm-dialog';
 import { ListRow } from '@/components/projects/list-row';
+import { ImportUtilitiesDialog } from '@/components/projects/utilities/import-dialog';
 import { Button } from '@/components/ui/button';
 import { ButtonGroup } from '@/components/ui/button-group';
 import {
@@ -386,6 +387,10 @@ export function UtilitiesPanel({
                 <IconPlus className="size-4" /> New structure
               </Button>
             </ButtonGroup>
+            <div className="text-muted-foreground flex items-center gap-2 text-xs">
+              <span>or bring in existing linework</span>
+              <ImportUtilitiesDialog project={project} types={types} onImported={loadInventory} />
+            </div>
           </CardContent>
         </Card>
       ) : null}

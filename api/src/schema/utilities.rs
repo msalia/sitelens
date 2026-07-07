@@ -7,10 +7,40 @@ use serde_json::{json, Value};
 
 use super::*;
 use crate::models::{
-    UtilityAuditEntry, UtilityInventory, UtilityRun, UtilityRunInput, UtilityStructure,
+    UtilityAuditEntry, UtilityImportLayer, UtilityImportPreview, UtilityImportResult,
+    UtilityInventory, UtilityLayerMapping, UtilityRun, UtilityRunInput, UtilityStructure,
     UtilityStructureInput, UtilityType, UtilityVertex, UtilityVertexInput,
 };
+use crate::units::LengthUnit;
+use crate::utilities::import::{self, FeatureKind};
 use crate::utilities::{audit, geom};
+
+/// Decode a base64 import payload to UTF-8 text.
+fn decode_import(content_base64: &str) -> Result<String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(content_base64.trim())
+        .map_err(|_| async_graphql::Error::new("import payload is not valid base64"))?;
+    String::from_utf8(bytes).map_err(|_| async_graphql::Error::new("import file is not UTF-8"))
+}
+
+/// Parse an import file ("dxf" | "geojson") into features.
+fn parse_import(format: &str, text: &str) -> Result<Vec<import::ImportFeature>> {
+    match format {
+        "dxf" => import::parse_dxf(text).map_err(async_graphql::Error::new),
+        "geojson" => import::parse_geojson(text, None).map_err(async_graphql::Error::new),
+        other => Err(async_graphql::Error::new(format!(
+            "unsupported import format: {other}"
+        ))),
+    }
+}
+
+fn kind_str(k: FeatureKind) -> &'static str {
+    match k {
+        FeatureKind::Line => "line",
+        FeatureKind::Point => "point",
+    }
+}
 
 const RUN_COLS: &str = "id, project_id, type_key, label, level, diameter, material, invert_up, \
     invert_down, slope, owner, install_date, condition, attrs_extra, tags, source, as_built_date, \
@@ -390,6 +420,32 @@ impl UtilitiesQuery {
                 },
             )
             .collect())
+    }
+
+    /// Parse an import file (base64 DXF / GeoJSON) and return its layers with
+    /// auto-suggested APWA types, for the mapping UI. Read-only; nothing is saved.
+    async fn preview_utility_import(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        format: String,
+        content_base64: String,
+    ) -> Result<UtilityImportPreview> {
+        let auth = require_auth(ctx)?;
+        require_feature(ctx, Feature::Utilities).await?;
+        ensure_project_in_org(pool(ctx)?, project_id, auth.org_id).await?;
+        let text = decode_import(&content_base64)?;
+        let features = parse_import(&format, &text)?;
+        let layers = import::summarize(&features)
+            .into_iter()
+            .map(|s| UtilityImportLayer {
+                layer: s.layer,
+                kind: kind_str(s.kind).to_string(),
+                count: s.count as i32,
+                suggested_type: s.suggested_type,
+            })
+            .collect();
+        Ok(UtilityImportPreview { layers })
     }
 }
 
@@ -772,6 +828,155 @@ impl UtilitiesMutation {
         .await?;
         publish_scene(ctx, project_id);
         Ok(true)
+    }
+
+    /// Imports pre-drawn linework (base64 DXF / GeoJSON) as audited runs +
+    /// structures, using a confirmed layer→type mapping. `space` is "geographic"
+    /// (lon/lat, reprojected to the project CRS) or "projected" (easting/northing
+    /// in `unit`). Unmapped layers are skipped. Crew-gated, editor role.
+    async fn import_utilities(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        format: String,
+        content_base64: String,
+        mappings: Vec<UtilityLayerMapping>,
+        space: String,
+        unit: LengthUnit,
+        source: Option<String>,
+    ) -> Result<UtilityImportResult> {
+        let auth = require_editor_active(ctx).await?;
+        require_feature(ctx, Feature::Utilities).await?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+
+        let text = decode_import(&content_base64)?;
+        let features = parse_import(&format, &text)?;
+        let epsg = load_project_crs(pool, project_id, auth.org_id).await?.epsg;
+        let geographic = space == "geographic";
+        let src = match source.as_deref() {
+            Some(s) if !s.trim().is_empty() => s.to_string(),
+            _ => format.clone(),
+        };
+
+        // (layer, kind) → type_key, from mappings with a non-empty type.
+        let map: std::collections::HashMap<(String, String), String> = mappings
+            .into_iter()
+            .filter_map(|m| {
+                m.type_key
+                    .filter(|t| !t.trim().is_empty())
+                    .map(|t| ((m.layer, m.kind), t))
+            })
+            .collect();
+
+        // Source (x, y) → canonical (northing, easting) meters, or None to skip.
+        let to_ne = |x: f64, y: f64| -> Option<(f64, f64)> {
+            if geographic {
+                // GeoJSON order is [lon, lat].
+                crate::crs::geographic_to_projected(epsg, y, x).map(|(e, n)| (n, e))
+            } else {
+                Some((unit.to_meters(y), unit.to_meters(x)))
+            }
+        };
+
+        let mut runs_created = 0i32;
+        let mut structures_created = 0i32;
+        let mut skipped = 0i32;
+        let mut tx = pool.begin().await?;
+
+        for f in features {
+            let key = (f.layer.clone(), kind_str(f.kind).to_string());
+            let Some(type_key) = map.get(&key) else {
+                skipped += 1;
+                continue;
+            };
+            let label = f.label.clone().unwrap_or_else(|| type_key.clone());
+
+            match f.kind {
+                FeatureKind::Line => {
+                    let verts: Vec<UtilityVertexInput> = f
+                        .points
+                        .iter()
+                        .filter_map(|&(x, y)| {
+                            to_ne(x, y).map(|(northing, easting)| UtilityVertexInput {
+                                northing,
+                                easting,
+                                elevation: None,
+                                source_point_id: None,
+                            })
+                        })
+                        .collect();
+                    if verts.len() < 2 {
+                        skipped += 1;
+                        continue;
+                    }
+                    let run_id: Uuid = sqlx::query_scalar(
+                        "INSERT INTO utility_runs (project_id, type_key, label, source, captured_by) \
+                         VALUES ($1, $2, $3, $4, $5) RETURNING id",
+                    )
+                    .bind(project_id)
+                    .bind(type_key)
+                    .bind(&label)
+                    .bind(&src)
+                    .bind(auth.user_id)
+                    .fetch_one(&mut *tx)
+                    .await?;
+                    insert_vertices(&mut tx, run_id, &verts).await?;
+                    audit::log(
+                        &mut *tx,
+                        project_id,
+                        "run",
+                        run_id,
+                        "create",
+                        Some(auth.user_id),
+                        &json!({ "imported": { "format": format, "layer": f.layer } }),
+                    )
+                    .await?;
+                    runs_created += 1;
+                }
+                FeatureKind::Point => {
+                    let Some((northing, easting)) =
+                        f.points.first().and_then(|&(x, y)| to_ne(x, y))
+                    else {
+                        skipped += 1;
+                        continue;
+                    };
+                    let sid: Uuid = sqlx::query_scalar(
+                        "INSERT INTO utility_structures \
+                           (project_id, type_key, label, northing, easting, source, captured_by) \
+                         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+                    )
+                    .bind(project_id)
+                    .bind(type_key)
+                    .bind(&label)
+                    .bind(northing)
+                    .bind(easting)
+                    .bind(&src)
+                    .bind(auth.user_id)
+                    .fetch_one(&mut *tx)
+                    .await?;
+                    audit::log(
+                        &mut *tx,
+                        project_id,
+                        "structure",
+                        sid,
+                        "create",
+                        Some(auth.user_id),
+                        &json!({ "imported": { "format": format, "layer": f.layer } }),
+                    )
+                    .await?;
+                    structures_created += 1;
+                }
+            }
+        }
+
+        tx.commit().await?;
+        publish_scene(ctx, project_id);
+        Ok(UtilityImportResult {
+            runs_created,
+            structures_created,
+            skipped,
+        })
     }
 }
 

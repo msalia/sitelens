@@ -667,6 +667,13 @@ type MutationRoot {
 	"""
 	deleteUtilityStructure(id: UUID!): Boolean!
 	"""
+	Imports pre-drawn linework (base64 DXF / GeoJSON) as audited runs +
+	structures, using a confirmed layer→type mapping. `space` is "geographic"
+	(lon/lat, reprojected to the project CRS) or "projected" (easting/northing
+	in `unit`). Unmapped layers are skipped. Crew-gated, editor role.
+	"""
+	importUtilities(projectId: UUID!, format: String!, contentBase64: String!, mappings: [UtilityLayerMapping!]!, space: String!, unit: LengthUnit!, source: String): UtilityImportResult!
+	"""
 	Starts a hosted Stripe Checkout for the Crew plan; returns the redirect URL
 	the client sends the browser to. Admin-only.
 	"""
@@ -1041,6 +1048,11 @@ type QueryRoot {
 	"""
 	utilityAudit(projectId: UUID!, entityId: UUID): [UtilityAuditEntry!]!
 	"""
+	Parse an import file (base64 DXF / GeoJSON) and return its layers with
+	auto-suggested APWA types, for the mapping UI. Read-only; nothing is saved.
+	"""
+	previewUtilityImport(projectId: UUID!, format: String!, contentBase64: String!): UtilityImportPreview!
+	"""
 	The caller org's plan, subscription status, usage, and limits.
 	"""
 	billing: BillingInfo!
@@ -1226,11 +1238,52 @@ type UtilityAuditEntry {
 }
 
 """
+One source layer/group in an import file, with an auto-suggested APWA type.
+"""
+type UtilityImportLayer {
+	layer: String!
+	"""
+	"line" (→ run) or "point" (→ structure).
+	"""
+	kind: String!
+	count: Int!
+	suggestedType: String
+}
+
+"""
+Preview of an import file: its layers, for the mapping UI.
+"""
+type UtilityImportPreview {
+	layers: [UtilityImportLayer!]!
+}
+
+"""
+Result of committing an import.
+"""
+type UtilityImportResult {
+	runsCreated: Int!
+	structuresCreated: Int!
+	skipped: Int!
+}
+
+"""
 A project's utility inventory (filtered runs + structures).
 """
 type UtilityInventory {
 	runs: [UtilityRun!]!
 	structures: [UtilityStructure!]!
+}
+
+"""
+A user-confirmed layer→type mapping. `type_key` null/empty = skip the layer.
+"""
+input UtilityLayerMapping {
+	layer: String!
+	"""
+	Matches the preview `kind` ("line" | "point").
+	"""
+	kind: String!
+	typeKey: String
 }
 
 """

@@ -55,6 +55,42 @@ test('digitize a run and place a structure → they appear in the inventory', as
   await expect(page.getByText('CB-1')).toHaveCount(0);
 });
 
+test('import GeoJSON → map layer → commit → appears in inventory', async ({ page }) => {
+  const email = await signUpAndLogin(page, 'util-import');
+  upgradeOrg(email);
+  await createProjectAndOpen(page, 'Utility Import');
+
+  await gotoTab(page, 'Utilities');
+  await page.getByRole('button', { exact: true, name: 'Import' }).click();
+
+  // Upload a projected-meter GeoJSON with a WATER line.
+  const geojson = JSON.stringify({
+    features: [
+      {
+        geometry: { coordinates: [[0, 0], [3, 4]], type: 'LineString' },
+        properties: { layer: 'WATER', name: 'WL-1' },
+        type: 'Feature',
+      },
+    ],
+    type: 'FeatureCollection',
+  });
+  await page.locator('#ut-import-file').setInputFiles({
+    buffer: Buffer.from(geojson),
+    mimeType: 'application/geo+json',
+    name: 'utils.geojson',
+  });
+
+  // Interpret coords as projected meters (deterministic, no reprojection).
+  await chooseSelect(page, 'ut-import-space', 'Projected easting / northing');
+  await chooseSelect(page, 'ut-import-unit', 'Meter');
+  // WATER auto-maps to Water; commit inside the dialog.
+  await expect(page.getByRole('combobox', { name: 'Map WATER' })).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { exact: true, name: 'Import' }).click();
+
+  // The imported run shows in the inventory.
+  await expect(page.getByText('WL-1')).toBeVisible();
+});
+
 test('Solo plan sees the Utilities upgrade gate', async ({ page }) => {
   await signUpAndLogin(page, 'util-gate'); // not upgraded → Solo
   await createProjectAndOpen(page, 'Utility Gate');

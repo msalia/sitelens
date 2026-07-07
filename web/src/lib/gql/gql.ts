@@ -91,6 +91,8 @@ type Documents = {
     "\n  mutation CreateUtilityStructure($projectId: UUID!, $input: UtilityStructureInput!) {\n    createUtilityStructure(projectId: $projectId, input: $input) {\n      id\n    }\n  }\n": typeof types.CreateUtilityStructureDocument,
     "\n  mutation DeleteUtilityRun($id: UUID!) {\n    deleteUtilityRun(id: $id)\n  }\n": typeof types.DeleteUtilityRunDocument,
     "\n  mutation DeleteUtilityStructure($id: UUID!) {\n    deleteUtilityStructure(id: $id)\n  }\n": typeof types.DeleteUtilityStructureDocument,
+    "\n  query PreviewUtilityImport($projectId: UUID!, $format: String!, $contentBase64: String!) {\n    previewUtilityImport(projectId: $projectId, format: $format, contentBase64: $contentBase64) {\n      layers {\n        layer\n        kind\n        count\n        suggestedType\n      }\n    }\n  }\n": typeof types.PreviewUtilityImportDocument,
+    "\n  mutation ImportUtilities(\n    $projectId: UUID!\n    $format: String!\n    $contentBase64: String!\n    $mappings: [UtilityLayerMapping!]!\n    $space: String!\n    $unit: LengthUnit!\n    $source: String\n  ) {\n    importUtilities(\n      projectId: $projectId\n      format: $format\n      contentBase64: $contentBase64\n      mappings: $mappings\n      space: $space\n      unit: $unit\n      source: $source\n    ) {\n      runsCreated\n      structuresCreated\n      skipped\n    }\n  }\n": typeof types.ImportUtilitiesDocument,
     "\n  mutation ResetPassword($t: String!, $p: String!) {\n    resetPassword(token: $t, newPassword: $p)\n  }\n": typeof types.ResetPasswordDocument,
     "\n  mutation Signup($e: String!, $p: String!, $o: String!) {\n    signup(email: $e, password: $p, orgName: $o) {\n      verificationToken\n    }\n  }\n": typeof types.SignupDocument,
     "\n  mutation VerifyEmail($t: String!) {\n    verifyEmail(token: $t)\n  }\n": typeof types.VerifyEmailDocument,
@@ -177,6 +179,8 @@ const documents: Documents = {
     "\n  mutation CreateUtilityStructure($projectId: UUID!, $input: UtilityStructureInput!) {\n    createUtilityStructure(projectId: $projectId, input: $input) {\n      id\n    }\n  }\n": types.CreateUtilityStructureDocument,
     "\n  mutation DeleteUtilityRun($id: UUID!) {\n    deleteUtilityRun(id: $id)\n  }\n": types.DeleteUtilityRunDocument,
     "\n  mutation DeleteUtilityStructure($id: UUID!) {\n    deleteUtilityStructure(id: $id)\n  }\n": types.DeleteUtilityStructureDocument,
+    "\n  query PreviewUtilityImport($projectId: UUID!, $format: String!, $contentBase64: String!) {\n    previewUtilityImport(projectId: $projectId, format: $format, contentBase64: $contentBase64) {\n      layers {\n        layer\n        kind\n        count\n        suggestedType\n      }\n    }\n  }\n": types.PreviewUtilityImportDocument,
+    "\n  mutation ImportUtilities(\n    $projectId: UUID!\n    $format: String!\n    $contentBase64: String!\n    $mappings: [UtilityLayerMapping!]!\n    $space: String!\n    $unit: LengthUnit!\n    $source: String\n  ) {\n    importUtilities(\n      projectId: $projectId\n      format: $format\n      contentBase64: $contentBase64\n      mappings: $mappings\n      space: $space\n      unit: $unit\n      source: $source\n    ) {\n      runsCreated\n      structuresCreated\n      skipped\n    }\n  }\n": types.ImportUtilitiesDocument,
     "\n  mutation ResetPassword($t: String!, $p: String!) {\n    resetPassword(token: $t, newPassword: $p)\n  }\n": types.ResetPasswordDocument,
     "\n  mutation Signup($e: String!, $p: String!, $o: String!) {\n    signup(email: $e, password: $p, orgName: $o) {\n      verificationToken\n    }\n  }\n": types.SignupDocument,
     "\n  mutation VerifyEmail($t: String!) {\n    verifyEmail(token: $t)\n  }\n": types.VerifyEmailDocument,
@@ -491,6 +495,14 @@ export function graphql(source: "\n  mutation DeleteUtilityRun($id: UUID!) {\n  
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation DeleteUtilityStructure($id: UUID!) {\n    deleteUtilityStructure(id: $id)\n  }\n"): typeof import('./graphql').DeleteUtilityStructureDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query PreviewUtilityImport($projectId: UUID!, $format: String!, $contentBase64: String!) {\n    previewUtilityImport(projectId: $projectId, format: $format, contentBase64: $contentBase64) {\n      layers {\n        layer\n        kind\n        count\n        suggestedType\n      }\n    }\n  }\n"): typeof import('./graphql').PreviewUtilityImportDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation ImportUtilities(\n    $projectId: UUID!\n    $format: String!\n    $contentBase64: String!\n    $mappings: [UtilityLayerMapping!]!\n    $space: String!\n    $unit: LengthUnit!\n    $source: String\n  ) {\n    importUtilities(\n      projectId: $projectId\n      format: $format\n      contentBase64: $contentBase64\n      mappings: $mappings\n      space: $space\n      unit: $unit\n      source: $source\n    ) {\n      runsCreated\n      structuresCreated\n      skipped\n    }\n  }\n"): typeof import('./graphql').ImportUtilitiesDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

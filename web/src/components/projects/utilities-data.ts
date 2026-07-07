@@ -86,3 +86,44 @@ export const DELETE_UTILITY_STRUCTURE = graphql(`
     deleteUtilityStructure(id: $id)
   }
 `);
+
+/** Parse an import file → its layers with suggested APWA types (mapping UI). */
+export const PREVIEW_UTILITY_IMPORT = graphql(`
+  query PreviewUtilityImport($projectId: UUID!, $format: String!, $contentBase64: String!) {
+    previewUtilityImport(projectId: $projectId, format: $format, contentBase64: $contentBase64) {
+      layers {
+        layer
+        kind
+        count
+        suggestedType
+      }
+    }
+  }
+`);
+
+/** Commit an import with a confirmed layer→type mapping. */
+export const IMPORT_UTILITIES = graphql(`
+  mutation ImportUtilities(
+    $projectId: UUID!
+    $format: String!
+    $contentBase64: String!
+    $mappings: [UtilityLayerMapping!]!
+    $space: String!
+    $unit: LengthUnit!
+    $source: String
+  ) {
+    importUtilities(
+      projectId: $projectId
+      format: $format
+      contentBase64: $contentBase64
+      mappings: $mappings
+      space: $space
+      unit: $unit
+      source: $source
+    ) {
+      runsCreated
+      structuresCreated
+      skipped
+    }
+  }
+`);
