@@ -90,6 +90,14 @@ export const docsOrder: DocMeta[] = [
   },
   {
     description:
+      'Read the utility schedule PDF: the architectural plan sheet, its color and line conventions, and the dual-unit tables.',
+    group: 'Working with Data',
+    href: '/docs/utility-schedule',
+    slug: 'utility-schedule',
+    title: 'Utility Schedule PDF',
+  },
+  {
+    description:
       'The 3D scene, terrain, projecting onto terrain, camera views, and display toggles.',
     group: 'Visualization',
     href: '/docs/visualization',

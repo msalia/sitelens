@@ -129,8 +129,9 @@ format:
 - **GeoJSON** — geometry plus the full attribute set.
 - **DXF** — 3D polylines on APWA-named layers, with structures as nodes.
 - **LandXML** — plan features and points (weak support — see caveat below).
-- **PDF** — a formatted utility schedule with the branded cover page, provenance
-  header, and per-entity rows.
+- **PDF** — a formatted utility schedule with a branded cover, an architectural
+  plan sheet of the network, and dual-unit (meters and US survey feet) tables. See
+  [Utility Schedule PDF](/docs/utility-schedule) for how to read it.
 
 **LandXML caveat:** LandXML has no first-class model for arbitrary utility runs, so
 the export maps them to plan features / points on a best-effort basis. Use GeoJSON
