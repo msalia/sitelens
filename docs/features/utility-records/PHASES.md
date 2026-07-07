@@ -148,7 +148,7 @@ Customers can self-serve via in-app docs, and the full capture→archive workflo
 ## Cross-phase conventions
 
 - Lint + format + commit + push at each phase boundary; update these checkboxes as items complete.
-- Migrations: apply pending **0005** then **0006** on the next deploy.
+- Migrations: this feature shipped as **0015** (`utility_records`); repo is at 0015. Ensure it is applied on the next deploy.
 - All shared utilities (geom derivations, import/export codecs) get unit tests (project convention).
 - Verify locally via integration tests / Playwright; if a scripted multi-mutation curl flow trips the security guardrail false positive, run via `!` or the integration suite.
 - Pairs naturally with the existing `schema.rs` split refactor TODO — new resolvers land in their own `schema/utilities.rs` module rather than the monolith.
