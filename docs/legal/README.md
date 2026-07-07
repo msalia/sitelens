@@ -13,13 +13,13 @@
 
 ## Operator details (filled in)
 
-- **Entity:** KeshavTech
+- **Entity:** KeshavTech LLC
 - **Registered address:** 510 Perrineville Road, Hightstown, NJ 08520, USA
 - **Privacy/legal contact:** privacy@msalia.org
 - **Security contact / incident lead:** Mukund Salia — security@msalia.org,
   (650) 334-5493
 - **Data Protection Officer:** Mukund Salia — privacy@msalia.org
-- **Hosting:** self-hosted on KeshavTech's own infrastructure in the **United
+- **Hosting:** self-hosted on KeshavTech LLC's own infrastructure in the **United
   States** (on-premise) — there is **no third-party hosting sub-processor**.
 
 - **Governing law (DPA):** State of New Jersey, USA. (The EU SCCs remain governed
@@ -27,7 +27,7 @@
 
 ## Remaining decisions
 
-- `[TODO: EU/UK REPRESENTATIVE]` — KeshavTech is US-based; an Art. 27 representative
+- `[TODO: EU/UK REPRESENTATIVE]` — KeshavTech LLC is US-based; an Art. 27 representative
   is required **if** the Service is offered to data subjects in the EU/UK.
 
 ## How these connect to the app

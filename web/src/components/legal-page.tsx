@@ -1,12 +1,11 @@
-import { IconCompass } from '@tabler/icons-react';
-import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-import { LegalBackLink } from '@/components/legal-back-link';
+import { PublicHeader } from '@/components/public-header';
 
 /** Public (no-auth) chrome for legal documents — Terms, Privacy — rendered from
- *  markdown with the same prose styling as the docs site. */
+ *  markdown with the same prose styling as the docs site. Shares the docs top
+ *  bar (via PublicHeader) so the public surfaces stay visually consistent. */
 export function LegalPage({
   content,
   lastUpdated,
@@ -18,15 +17,7 @@ export function LegalPage({
 }) {
   return (
     <div className="bg-background min-h-svh">
-      <header className="flex items-center justify-between border-b px-6 py-4">
-        <Link href="/" className="flex items-center gap-2 font-semibold">
-          <div className="bg-primary text-primary-foreground flex size-7 items-center justify-center rounded-lg">
-            <IconCompass className="size-4" />
-          </div>
-          <span className="tracking-tight">SiteLens</span>
-        </Link>
-        <LegalBackLink className="text-muted-foreground hover:text-foreground text-sm" />
-      </header>
+      <PublicHeader label="Legal" />
 
       <main className="mx-auto max-w-3xl px-6 py-12">
         <h1 className="text-3xl font-bold tracking-tight">{title}</h1>

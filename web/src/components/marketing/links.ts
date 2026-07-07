@@ -1,6 +1,8 @@
 /** Shared link constants for the public marketing chrome (header + footer). */
 
-export const CONTACT_HREF = 'mailto:support@msalia.org?subject=SiteLens%20enquiry';
+import { SITE_NAME, SUPPORT_EMAIL } from '@/lib/site';
+
+export const CONTACT_HREF = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(`${SITE_NAME} enquiry`)}`;
 
 export interface NavLink {
   href: string;

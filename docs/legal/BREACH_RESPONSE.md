@@ -1,15 +1,15 @@
 # Personal Data Breach Response Runbook
 
-> **TEMPLATE — REQUIRES REVIEW.** KeshavTech's internal process for handling a
+> **TEMPLATE — REQUIRES REVIEW.** KeshavTech LLC's internal process for handling a
 > personal data breach in SiteLens, per GDPR Art. 33–34. Fill every `[TODO: …]`.
 > Last updated: June 11, 2026.
 
 ## Key facts
 
 - **Owner / incident lead:** Mukund Salia — security@msalia.org, (650) 334-5493
-- **Roles:** KeshavTech is a **processor** for Customer project/account data, and a
+- **Roles:** KeshavTech LLC is a **processor** for Customer project/account data, and a
   **controller** for its own account/identity data.
-- **The 72-hour clock** starts when KeshavTech (or the controller) becomes "aware"
+- **The 72-hour clock** starts when KeshavTech LLC (or the controller) becomes "aware"
   that a breach has likely occurred — not when the investigation finishes.
 
 ## Definitions
@@ -39,8 +39,8 @@ data was encrypted/pseudonymized, and likely consequences (identity theft, loss 
 confidentiality, etc.). Classify:
 
 - **No risk** → log internally; no external notification required.
-- **Risk to individuals** → notify the supervisory authority (where KeshavTech is
-  controller) / the affected controller (where KeshavTech is processor).
+- **Risk to individuals** → notify the supervisory authority (where KeshavTech LLC is
+  controller) / the affected controller (where KeshavTech LLC is processor).
 - **High risk** → also notify affected data subjects.
 
 ## Step 4 — Notify

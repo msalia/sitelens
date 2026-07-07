@@ -44,6 +44,10 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       SITELENS_MAIL_FROM: ${SITELENS_MAIL_FROM:-SiteLens <noreply@msalia.org>}
       APP_URL: ${APP_URL:-http://localhost:3000}
+      # Branding for generated PDF reports (foundation §8) and emails. Single
+      # source, mirrored by the web NEXT_PUBLIC_* build args below.
+      SITELENS_ORG_NAME: ${SITELENS_ORG_NAME:-KeshavTech LLC}
+      SITELENS_SUPPORT_EMAIL: ${SITELENS_SUPPORT_EMAIL:-support@msalia.org}
       # Set MAIL_CAPTURE=1 (e.g. for e2e) to record emails in memory instead of
       # sending — no provider quota used; readable via the `sentEmails` query.
       MAIL_CAPTURE: ${MAIL_CAPTURE:-}
@@ -71,7 +75,15 @@ services:
       retries: 5
 
   web:
-    build: ./web
+    build:
+      context: ./web
+      # Branding, inlined at build time (NEXT_PUBLIC_*). Mirrors the api's
+      # SITELENS_ORG_NAME / SITELENS_SUPPORT_EMAIL so the two never drift.
+      args:
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-}
+        NEXT_PUBLIC_SITE_NAME: ${NEXT_PUBLIC_SITE_NAME:-}
+        NEXT_PUBLIC_ORG_NAME: ${SITELENS_ORG_NAME:-}
+        NEXT_PUBLIC_SUPPORT_EMAIL: ${SITELENS_SUPPORT_EMAIL:-}
     restart: unless-stopped
     env_file: .env
     environment:

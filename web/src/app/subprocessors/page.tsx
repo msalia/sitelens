@@ -2,12 +2,12 @@ import { LegalPage } from '@/components/legal-page';
 
 export const metadata = {
   alternates: { canonical: '/subprocessors' },
-  description: 'Third parties KeshavTech uses to operate SiteLens.',
+  description: 'Third parties KeshavTech LLC uses to operate SiteLens.',
   title: 'Sub-processors',
 };
 
 const CONTENT = `
-KeshavTech, the operator of SiteLens, uses a small number of trusted third parties
+KeshavTech LLC, the operator of SiteLens, uses a small number of trusted third parties
 ("sub-processors") to help deliver the Service. Each is bound by a data-processing
 agreement and used only to provide the Service. We give customers at least 30 days'
 notice before adding or replacing a sub-processor so they can object on reasonable
@@ -22,7 +22,7 @@ data-protection grounds.
 
 ## Hosting
 
-SiteLens is self-hosted on KeshavTech's own infrastructure in the United States.
+SiteLens is self-hosted on KeshavTech LLC's own infrastructure in the United States.
 No third-party hosting provider has access to your data.
 
 ## What is **not** shared

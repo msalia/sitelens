@@ -3,10 +3,15 @@
  *  route handlers, the OG image, and JSON-LD structured data so the canonical
  *  origin and copy stay consistent everywhere. */
 
-/** Canonical production origin — no trailing slash. */
-export const SITE_URL = 'https://sitelens.msalia.org';
+// Configurable branding. These are `NEXT_PUBLIC_*` so a single value is inlined
+// at build time into both server and client bundles — set them once (compose
+// build args / env) and every surface stays in sync. Defaults keep dev + the
+// reference deployment working with no configuration.
 
-export const SITE_NAME = 'SiteLens';
+/** Canonical production origin — no trailing slash. */
+export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://sitelens.msalia.org';
+
+export const SITE_NAME = process.env.NEXT_PUBLIC_SITE_NAME || 'SiteLens';
 
 /** Short value proposition used in titles and OG. */
 export const SITE_TAGLINE = 'Coordinate-tie & 3D visualization for surveyors';
@@ -16,10 +21,10 @@ export const SITE_DESCRIPTION =
   'SiteLens ties an architect grid to ground truth with a least-squares Helmert transform, then renders control, points, and CAD in a live 3D scene — built for construction surveyors.';
 
 /** The legal entity behind the product (used for Organization JSON-LD + author). */
-export const ORG_NAME = 'KeshavTech';
+export const ORG_NAME = process.env.NEXT_PUBLIC_ORG_NAME || 'KeshavTech LLC';
 
 /** Support contact, mirrored from the marketing chrome. */
-export const SUPPORT_EMAIL = 'support@msalia.org';
+export const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@msalia.org';
 
 /** Topical keywords for the surveying/geomatics niche. */
 export const SITE_KEYWORDS = [

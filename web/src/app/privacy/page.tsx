@@ -1,4 +1,5 @@
 import { LegalPage } from '@/components/legal-page';
+import { SUPPORT_EMAIL } from '@/lib/site';
 
 export const metadata = {
   alternates: { canonical: '/privacy' },
@@ -126,7 +127,7 @@ we will update the date above and, where appropriate, provide notice.
 
 Questions about your data or this policy, or to exercise your rights? Contact your
 organization's administrator or reach out to SiteLens support at
-[support@msalia.org](mailto:support@msalia.org).
+[${SUPPORT_EMAIL}](mailto:${SUPPORT_EMAIL}).
 `;
 
 export default function PrivacyPage() {

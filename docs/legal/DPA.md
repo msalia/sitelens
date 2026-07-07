@@ -1,18 +1,18 @@
 # Data Processing Agreement (DPA)
 
-> **TEMPLATE — REQUIRES LEGAL REVIEW.** This DPA is a working draft for KeshavTech
+> **TEMPLATE — REQUIRES LEGAL REVIEW.** This DPA is a working draft for KeshavTech LLC
 > (operator of SiteLens). Fill every `[TODO: …]` and have counsel review before
 > use. Version 1.0 (draft) · Last updated: June 11, 2026.
 
 This Data Processing Agreement ("DPA") forms part of the Terms of Service (the
 "Agreement") between:
 
-- **Processor:** KeshavTech, 510 Perrineville Road, Hightstown, NJ 08520, USA
-  ("KeshavTech", "we"), operator of the SiteLens service (the "Service"); and
+- **Processor:** KeshavTech LLC, 510 Perrineville Road, Hightstown, NJ 08520, USA
+  ("KeshavTech LLC", "we"), operator of the SiteLens service (the "Service"); and
 - **Controller:** the customer organization that uses the Service (the "Customer").
 
-Where KeshavTech processes personal data on the Customer's behalf, the Customer is
-the **controller** and KeshavTech is the **processor**. This DPA reflects Article
+Where KeshavTech LLC processes personal data on the Customer's behalf, the Customer is
+the **controller** and KeshavTech LLC is the **processor**. This DPA reflects Article
 28 of the EU GDPR and the UK GDPR.
 
 ## 1. Definitions
@@ -23,12 +23,12 @@ authority" have the meanings given in the GDPR.
 
 ## 2. Scope and roles
 
-2.1 KeshavTech processes Customer Personal Data only to provide the Service and
+2.1 KeshavTech LLC processes Customer Personal Data only to provide the Service and
 only on the Customer's documented instructions, including the instructions set out
 in the Agreement, this DPA, and the Customer's configuration and use of the
 Service.
 
-2.2 KeshavTech will inform the Customer if, in its opinion, an instruction
+2.2 KeshavTech LLC will inform the Customer if, in its opinion, an instruction
 infringes the GDPR or other data-protection law.
 
 2.3 The subject matter, duration, nature, and purpose of processing, the types of
@@ -36,7 +36,7 @@ personal data, and the categories of data subjects are described in **Annex I**.
 
 ## 3. Processor obligations (Art. 28(3))
 
-KeshavTech will:
+KeshavTech LLC will:
 
 - **(a) Instructions.** Process Customer Personal Data only on the Customer's
   documented instructions, including regarding international transfers, unless
@@ -53,7 +53,7 @@ KeshavTech will:
   Service provides self-service tooling for many of these (see Section 9).
 - **(f) Assistance.** Assist the Customer in ensuring compliance with Art. 32–36
   (security, breach notification, DPIAs, prior consultation), considering the
-  information available to KeshavTech.
+  information available to KeshavTech LLC.
 - **(g) Deletion/return.** On termination, at the Customer's choice, delete or
   return Customer Personal Data and delete existing copies, unless retention is
   required by law. Deleting a project or organization in the Service permanently
@@ -65,22 +65,22 @@ KeshavTech will:
 
 ## 4. Security (Art. 32)
 
-KeshavTech maintains the technical and organizational measures described in
+KeshavTech LLC maintains the technical and organizational measures described in
 **Annex II**, appropriate to the risk.
 
 ## 5. Sub-processors
 
-5.1 The Customer provides **general authorization** for KeshavTech to engage
+5.1 The Customer provides **general authorization** for KeshavTech LLC to engage
 sub-processors. The current list is published at **/subprocessors** (and in
 [SUBPROCESSORS.md](./SUBPROCESSORS.md)).
 
-5.2 KeshavTech will give the Customer at least **30 days' notice** of any intended
+5.2 KeshavTech LLC will give the Customer at least **30 days' notice** of any intended
 addition or replacement of a sub-processor (via the Service or email), during
 which the Customer may object on reasonable data-protection grounds. If the
 parties cannot resolve the objection, the Customer may terminate the affected part
 of the Service.
 
-5.3 KeshavTech imposes on each sub-processor data-protection obligations no less
+5.3 KeshavTech LLC imposes on each sub-processor data-protection obligations no less
 protective than those in this DPA (flow-down) and remains liable for its
 sub-processors' performance.
 
@@ -95,14 +95,14 @@ with any supplementary measures identified by a transfer impact assessment. See
 
 ## 7. Personal data breach
 
-KeshavTech will notify the Customer **without undue delay** after becoming aware of
+KeshavTech LLC will notify the Customer **without undue delay** after becoming aware of
 a personal data breach affecting Customer Personal Data, with the information the
-Customer reasonably needs to meet its own Art. 33/34 obligations. KeshavTech's
+Customer reasonably needs to meet its own Art. 33/34 obligations. KeshavTech LLC's
 internal process is documented in [BREACH_RESPONSE.md](./BREACH_RESPONSE.md).
 
 ## 8. Duration
 
-This DPA applies for as long as KeshavTech processes Customer Personal Data under
+This DPA applies for as long as KeshavTech LLC processes Customer Personal Data under
 the Agreement.
 
 ## 9. How the Service supports data-subject rights
@@ -112,7 +112,7 @@ the Agreement.
 - **Rectification** — users can edit their account details.
 - **Portability** — projects can be exported as a portable archive.
 - **Access/restriction/objection** — supported on request via the Customer's admin
-  or KeshavTech support at privacy@msalia.org.
+  or KeshavTech LLC support at privacy@msalia.org.
 
 ## 10. Liability and governing law
 
@@ -146,7 +146,7 @@ in Section 6.
   sensitive endpoints.
 - **Authorization.** Role-based access (Admin / Surveyor / Viewer) and strict
   **per-organization (tenant) isolation** enforced server-side on every query.
-- **Hosting.** Self-hosted on KeshavTech's own infrastructure in the United States
+- **Hosting.** Self-hosted on KeshavTech LLC's own infrastructure in the United States
   (on-premise); no third-party hosting provider has access to Customer data.
 - **Encryption.** TLS in transit. [TODO: confirm encryption at rest for the
   database and uploaded files on the on-premise storage.]
@@ -164,7 +164,7 @@ in Section 6.
 
 ## Annex III — Authorized sub-processors
 
-SiteLens is **self-hosted on KeshavTech's own infrastructure in the United States**,
+SiteLens is **self-hosted on KeshavTech LLC's own infrastructure in the United States**,
 so there is no third-party hosting sub-processor. The only sub-processor is:
 
 | Sub-processor | Purpose                      | Location      | Transfer mechanism                                                |
@@ -172,6 +172,6 @@ so there is no third-party hosting sub-processor. The only sub-processor is:
 | Resend        | Transactional email delivery | United States | EU SCCs (Module 3, processor→processor); UK IDTA where applicable |
 
 See [SUBPROCESSORS.md](./SUBPROCESSORS.md) / **/subprocessors** for the live list.
-Because KeshavTech processes Customer data in the United States, transfers from the
-EEA/UK to KeshavTech itself rely on the EU SCCs (Module 2, controller→processor) /
+Because KeshavTech LLC processes Customer data in the United States, transfers from the
+EEA/UK to KeshavTech LLC itself rely on the EU SCCs (Module 2, controller→processor) /
 UK IDTA under Section 6.

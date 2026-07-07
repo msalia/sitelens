@@ -1,6 +1,6 @@
 # Sub-processors
 
-> Source for the public **/subprocessors** page. KeshavTech (operator of SiteLens)
+> Source for the public **/subprocessors** page. KeshavTech LLC (operator of SiteLens)
 > uses the third parties below to process Customer Personal Data. Keep this list
 > current; give customers ≥30 days' notice before adding or replacing a
 > sub-processor so they can object (see [DPA.md](./DPA.md) §5).
@@ -13,7 +13,7 @@
 
 ## Hosting
 
-SiteLens is **self-hosted on KeshavTech's own infrastructure in the United States**
+SiteLens is **self-hosted on KeshavTech LLC's own infrastructure in the United States**
 (on-premise). There is **no third-party hosting provider** with access to Customer
 data, so hosting is not a sub-processor. Because data is processed in the US,
 transfers from the EEA/UK rely on the EU SCCs / UK IDTA (see the DPA).
@@ -26,12 +26,12 @@ transfers from the EEA/UK rely on the EU SCCs / UK IDTA (see the DPA).
 
 ## Change notification
 
-KeshavTech will notify customers of new or replaced sub-processors with at least
+KeshavTech LLC will notify customers of new or replaced sub-processors with at least
 **30 days' notice** via the Service or email to organization admins. A customer
 may object on reasonable data-protection grounds within that window.
 
 ## To do before publishing
 
 - [x] Sign and file the Resend DPA/SCCs — see `resend-dpa-signed.pdf`.
-- [TODO: complete a Transfer Impact Assessment for US processing (KeshavTech is
+- [TODO: complete a Transfer Impact Assessment for US processing (KeshavTech LLC is
   US-based) and the Resend transfer]

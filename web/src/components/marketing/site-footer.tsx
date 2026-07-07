@@ -2,6 +2,7 @@ import { IconCompass } from '@tabler/icons-react';
 import Link from 'next/link';
 
 import { CONTACT_HREF } from '@/components/marketing/links';
+import { ORG_NAME } from '@/lib/site';
 
 interface FooterColumn {
   links: { external?: boolean; href: string; label: string }[];
@@ -71,7 +72,7 @@ export function SiteFooter() {
         </div>
 
         <div className="mt-12 border-t border-white/10 pt-6">
-          <p className="text-xs text-white/45">© 2023–2026 KeshavTech. All rights reserved.</p>
+          <p className="text-xs text-white/45">© 2023–2026 {ORG_NAME}. All rights reserved.</p>
         </div>
       </div>
     </footer>

@@ -1,12 +1,12 @@
 # Records of Processing Activities (RoPA)
 
-> **TEMPLATE — REQUIRES REVIEW.** KeshavTech's processor record for SiteLens under
+> **TEMPLATE — REQUIRES REVIEW.** KeshavTech LLC's processor record for SiteLens under
 > GDPR Art. 30(2). Keep current; review whenever processing, sub-processors, or
 > security measures change. Last updated: June 11, 2026.
 
 ## 1. Processor identity
 
-- **Processor:** KeshavTech, 510 Perrineville Road, Hightstown, NJ 08520, USA
+- **Processor:** KeshavTech LLC, 510 Perrineville Road, Hightstown, NJ 08520, USA
 - **Contact:** privacy@msalia.org (privacy/legal); security@msalia.org (security)
 - **Data Protection Officer:** Mukund Salia — privacy@msalia.org, (650) 334-5493
 - **EU/UK representative (Art. 27):** [TODO: required only if the Service is offered
@@ -38,7 +38,7 @@ No special-category data is intended or requested.
 
 ## 5. Sub-processors & international transfers
 
-SiteLens is self-hosted on KeshavTech's own infrastructure in the **United States**
+SiteLens is self-hosted on KeshavTech LLC's own infrastructure in the **United States**
 (no third-party hosting sub-processor). See [SUBPROCESSORS.md](./SUBPROCESSORS.md).
 Summary:
 
@@ -46,8 +46,8 @@ Summary:
 | -------------- | ------------- | -------------------------------------------------- |
 | Resend (email) | United States | DPA + EU SCCs (Module 3); UK IDTA where applicable |
 
-Because KeshavTech itself processes data in the US, EEA/UK→US transfers to
-KeshavTech rely on the EU SCCs (Module 2) / UK IDTA.
+Because KeshavTech LLC itself processes data in the US, EEA/UK→US transfers to
+KeshavTech LLC rely on the EU SCCs (Module 2) / UK IDTA.
 
 ## 6. Retention
 

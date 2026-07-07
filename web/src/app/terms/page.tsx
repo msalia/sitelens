@@ -1,4 +1,5 @@
 import { LegalPage } from '@/components/legal-page';
+import { SUPPORT_EMAIL } from '@/lib/site';
 
 export const metadata = {
   alternates: { canonical: '/terms' },
@@ -95,7 +96,7 @@ of the Service after changes take effect constitutes acceptance.
 ## 12. Contact
 
 Questions about these Terms? Contact your organization's administrator or reach
-out to SiteLens support at [support@msalia.org](mailto:support@msalia.org).
+out to SiteLens support at [${SUPPORT_EMAIL}](mailto:${SUPPORT_EMAIL}).
 `;
 
 export default function TermsPage() {
