@@ -13,6 +13,7 @@ pub mod models;
 pub mod plan;
 pub mod pubsub;
 pub mod ratelimit;
+pub mod report;
 pub mod schema;
 pub mod storage;
 pub mod units;

@@ -188,6 +188,7 @@ impl FieldQuery {
         let rows = load_comparison_rows(pool, batch_id, epsg, rotation).await?;
         let summary = summarize_rows(&rows);
         let name = project_name(pool, batch.project_id).await?;
+        let now = chrono::Utc::now();
         let html = field::report::comparison_html(
             &name,
             unit_label(batch.report_unit),
@@ -195,6 +196,8 @@ impl FieldQuery {
             &rows,
             &summary,
             batch.report_unit,
+            &now.format("%Y-%m-%d").to_string(),
+            &now.format("%Y").to_string(),
         );
         let pdf = render_pdf(&html).await?;
         let base = export_basename(pool, batch.project_id).await?;

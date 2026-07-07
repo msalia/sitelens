@@ -3,8 +3,31 @@
 //! foundation §8). Pure builders — the resolver does the HTTP/DB I/O.
 
 use crate::export;
-use crate::models::{AsBuiltBatch, ComparisonRow, ComparisonStatus, ComparisonSummary};
+use crate::models::{
+    AsBuiltBatch, BaselineScope, ComparisonRow, ComparisonStatus, ComparisonSummary,
+};
+use crate::report::{self, Document, Fact, StatPanel};
 use crate::units::LengthUnit;
+
+/// "projected_ground" → "Projected ground".
+fn prettify(s: &str) -> String {
+    let s = s.replace('_', " ");
+    let mut c = s.chars();
+    match c.next() {
+        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+        None => s,
+    }
+}
+
+fn status_class(s: ComparisonStatus) -> &'static str {
+    match s {
+        ComparisonStatus::Pass => "pass",
+        ComparisonStatus::Warn => "warn",
+        ComparisonStatus::Fail => "fail",
+        ComparisonStatus::Unmatched => "unmatched",
+        ComparisonStatus::NoVertical => "novert",
+    }
+}
 
 fn status_label(s: ComparisonStatus) -> &'static str {
     match s {
@@ -72,8 +95,11 @@ fn esc(s: &str) -> String {
 }
 
 /// The stakeout report as a self-contained HTML document for the WeasyPrint
-/// service to render to PDF: project header, snapshotted tolerance spec, summary
-/// stats, and the per-point table. All linear values in `unit`.
+/// service to render to PDF. The report-specific body (snapshotted tolerance
+/// spec, summary stats, per-point table) is wrapped in the shared branded shell
+/// (cover + running legal footer, `crate::report`). All linear values in `unit`.
+/// `generated_on` (e.g. "2026-07-07") and `year` come from the resolver.
+#[allow(clippy::too_many_arguments)]
 pub fn comparison_html(
     project_name: &str,
     unit_label: &str,
@@ -81,6 +107,8 @@ pub fn comparison_html(
     rows: &[ComparisonRow],
     summary: &ComparisonSummary,
     unit: LengthUnit,
+    generated_on: &str,
+    year: &str,
 ) -> String {
     let ft = |m: f64| format!("{:.4}", unit.from_meters(m));
     let f = |m: Option<f64>| {
@@ -88,85 +116,174 @@ pub fn comparison_html(
             .unwrap_or_else(|| "—".into())
     };
 
-    let mut body = String::new();
-    for r in rows {
-        let cls = match r.status {
-            ComparisonStatus::Pass => "pass",
-            ComparisonStatus::Warn => "warn",
-            ComparisonStatus::Fail => "fail",
-            ComparisonStatus::Unmatched => "unmatched",
-            ComparisonStatus::NoVertical => "novert",
-        };
-        body.push_str(&format!(
-            "<tr><td>{}</td><td class=\"n\">{}</td><td class=\"n\">{}</td>\
-             <td class=\"n\">{}</td><td class=\"n\">{}</td><td class=\"n\">{}</td>\
-             <td class=\"{}\">{}</td></tr>",
-            esc(&r.as_built_label),
-            f(r.delta_n),
-            f(r.delta_e),
-            f(r.delta_z),
-            f(r.delta_h_radial),
-            if r.design_point_id.is_some() {
-                "✓"
-            } else {
-                "—"
-            },
-            cls,
-            status_label(r.status),
-        ));
-    }
+    // One result table per bucket (empty → a caller-supplied alert instead).
+    let table = |bucket: &[&ComparisonRow]| -> String {
+        let body: String = bucket
+            .iter()
+            .map(|r| {
+                format!(
+                    "<tr><td>{}</td><td class=\"n\">{}</td><td class=\"n\">{}</td>\
+                     <td class=\"n\">{}</td><td class=\"n\">{}</td><td class=\"st {}\">{}</td></tr>",
+                    esc(&r.as_built_label),
+                    f(r.delta_n),
+                    f(r.delta_e),
+                    f(r.delta_z),
+                    f(r.delta_h_radial),
+                    status_class(r.status),
+                    status_label(r.status),
+                )
+            })
+            .collect();
+        format!(
+            "<table><thead><tr><th>Point</th><th class=\"n\">ΔN</th><th class=\"n\">ΔE</th>\
+             <th class=\"n\">ΔZ</th><th class=\"n\">Radial</th><th>Status</th></tr></thead>\
+             <tbody>{body}</tbody></table>"
+        )
+    };
 
-    let max = summary.max_miss.map(ft).unwrap_or_else(|| "—".into());
-    let rms = summary.rms_miss.map(ft).unwrap_or_else(|| "—".into());
+    // Buckets: errors (couldn't evaluate) → failed/warned → passed.
+    let errors: Vec<&ComparisonRow> = rows
+        .iter()
+        .filter(|r| {
+            matches!(
+                r.status,
+                ComparisonStatus::Unmatched | ComparisonStatus::NoVertical
+            )
+        })
+        .collect();
+    let failed: Vec<&ComparisonRow> = rows
+        .iter()
+        .filter(|r| matches!(r.status, ComparisonStatus::Fail | ComparisonStatus::Warn))
+        .collect();
+    let passed: Vec<&ComparisonRow> = rows
+        .iter()
+        .filter(|r| matches!(r.status, ComparisonStatus::Pass))
+        .collect();
 
-    format!(
-        r#"<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-@page {{ size: letter; margin: 20mm; }}
-body {{ font-family: 'DejaVu Sans', sans-serif; color: #1a1a1a; font-size: 10pt; }}
-h1 {{ font-size: 16pt; margin: 0 0 2mm; }}
-.meta {{ color: #555; font-size: 9pt; margin-bottom: 4mm; }}
-.summary {{ margin: 4mm 0; }}
-.summary span {{ display: inline-block; margin-right: 6mm; }}
-table {{ width: 100%; border-collapse: collapse; margin-top: 3mm; font-size: 9pt; }}
-th, td {{ border: 1px solid #ddd; padding: 1.5mm 2mm; text-align: left; }}
-th {{ background: #f2f4f7; }}
-td.n {{ text-align: right; font-variant-numeric: tabular-nums; }}
-.pass {{ color: #067647; }} .warn {{ color: #b54708; }} .fail {{ color: #b42318; }}
-.unmatched {{ color: #667085; }} .novert {{ color: #026aa2; }}
-.appendix {{ margin-top: 6mm; color: #667085; font-size: 8pt; }}
-</style></head><body>
-<h1>As-built stakeout report</h1>
-<div class="meta">{project} · {file} · {date} · values in {unit_label}</div>
-<div class="summary">
-  <span><b>{pass}</b> pass</span><span><b>{warn}</b> warn</span>
-  <span><b>{fail}</b> fail</span><span><b>{unmatched}</b> unmatched</span>
-  <span>Max miss: <b>{max}</b></span><span>RMS miss: <b>{rms}</b></span>
-</div>
-<div class="meta">Tolerance — horizontal warn {thw} / fail {thf}; vertical warn {tvw} / fail {tvf}.</div>
-<table>
-<thead><tr><th>Point</th><th>ΔN</th><th>ΔE</th><th>ΔZ</th><th>Radial</th><th>Matched</th><th>Status</th></tr></thead>
-<tbody>{body}</tbody>
-</table>
-<div class="appendix">Deltas are as-built minus design in the projected-ground frame.
-This report reproduces a snapshot taken at comparison time and is unaffected by
-later edits to the design points.</div>
-</body></html>"#,
-        project = esc(project_name),
-        file = esc(&batch.source_filename),
-        date = batch.created_at.format("%Y-%m-%d"),
-        unit_label = esc(unit_label),
-        pass = summary.pass,
-        warn = summary.warn,
-        fail = summary.fail,
-        unmatched = summary.unmatched,
-        max = max,
-        rms = rms,
+    let errors_block = if errors.is_empty() {
+        "<div class=\"alert-ok\">✓ No errors — every point was matched and evaluated.</div>".into()
+    } else {
+        table(&errors)
+    };
+    let failed_block = if failed.is_empty() {
+        "<div class=\"alert-ok\">✓ No points failed or fell outside the warning tolerance.</div>"
+            .into()
+    } else {
+        table(&failed)
+    };
+    let passed_block = if passed.is_empty() {
+        "<div class=\"alert-none\">No passing points.</div>".into()
+    } else {
+        table(&passed)
+    };
+
+    let baseline = match batch.baseline_scope {
+        BaselineScope::All => "All design points".to_string(),
+        _ => "Category".to_string(),
+    };
+    let frame = prettify(&batch.delta_space);
+
+    let info = format!(
+        "<div><span class=\"k\">Project</span><span class=\"v\">{}</span></div>\
+         <div><span class=\"k\">Source file</span><span class=\"v\">{}</span></div>\
+         <div><span class=\"k\">Compared on</span><span class=\"v\">{}</span></div>\
+         <div><span class=\"k\">Report unit</span><span class=\"v\">{}</span></div>\
+         <div><span class=\"k\">Baseline</span><span class=\"v\">{}</span></div>\
+         <div><span class=\"k\">Delta frame</span><span class=\"v\">{}</span></div>",
+        esc(project_name),
+        esc(&batch.source_filename),
+        batch.created_at.format("%Y-%m-%d"),
+        esc(unit_label),
+        esc(&baseline),
+        esc(&frame),
+    );
+
+    let tolerance = format!(
+        "<b>Tolerance</b> — horizontal warn {thw} / fail {thf}; vertical warn {tvw} / fail {tvf} \
+         ({unit}). Deltas are as-built minus design in the {frame} frame.",
         thw = ft(batch.tol_h_warn),
         thf = ft(batch.tol_h_fail),
         tvw = ft(batch.tol_v_warn),
         tvf = ft(batch.tol_v_fail),
-        body = body,
-    )
+        unit = esc(unit_label),
+        frame = esc(&frame.to_lowercase()),
+    );
+    let fine = format!(
+        "This report reproduces a snapshot taken at comparison time and is unaffected by later \
+         edits to the design points. {}",
+        report::DISCLAIMER
+    );
+
+    let body = format!(
+        r#"<div class="cols2">
+  <div><h2 class="sec">Report information</h2><div class="info">{info}</div></div>
+  <div><h2 class="sec">Disclaimers</h2><div class="notebox"><p>{tolerance}</p><p class="fine">{fine}</p></div></div>
+</div>
+<h2 class="sec">Errors <span class="count">({ne})</span></h2>{errors_block}
+<h2 class="sec">Failed or outside warning tolerance <span class="count">({nf})</span></h2>{failed_block}
+<h2 class="sec">Passed <span class="count">({np})</span></h2>{passed_block}"#,
+        info = info,
+        tolerance = tolerance,
+        fine = fine,
+        ne = errors.len(),
+        errors_block = errors_block,
+        nf = failed.len(),
+        failed_block = failed_block,
+        np = passed.len(),
+        passed_block = passed_block,
+    );
+
+    let matched = rows.len().saturating_sub(summary.unmatched as usize);
+    let pass_pct = if rows.is_empty() {
+        0
+    } else {
+        (summary.pass as f64 / rows.len() as f64 * 100.0).round() as i64
+    };
+    let doc = Document {
+        title: "As-Built Stakeout Report".into(),
+        subtitle: Some("Design vs. as-built comparison".into()),
+        summary: format!(
+            "{total} as-built point{s} compared against the design baseline \
+             ({matched} matched): {pass} pass, {warn} warn, {fail} fail, {un} unmatched.",
+            total = rows.len(),
+            s = if rows.len() == 1 { "" } else { "s" },
+            matched = matched,
+            pass = summary.pass,
+            warn = summary.warn,
+            fail = summary.fail,
+            un = summary.unmatched,
+        ),
+        panels: vec![
+            StatPanel::new(
+                "Points compared",
+                rows.len().to_string(),
+                "As-built points checked against the design baseline.",
+                true,
+            ),
+            StatPanel::new(
+                "Within tolerance",
+                format!("{pass_pct}%"),
+                format!(
+                    "{} pass · {} warn · {} fail · {} unmatched",
+                    summary.pass, summary.warn, summary.fail, summary.unmatched
+                ),
+                false,
+            ),
+        ],
+        facts: vec![
+            Fact::new("Project", project_name),
+            Fact::new("Source file", &batch.source_filename),
+            Fact::new(
+                "Compared on",
+                batch.created_at.format("%Y-%m-%d").to_string(),
+            ),
+            Fact::new("Report unit", unit_label),
+        ],
+        body_html: body,
+        generated_on: generated_on.into(),
+        year: year.into(),
+    };
+    report::render(&doc)
 }
 
 #[cfg(test)]
@@ -257,11 +374,16 @@ mod tests {
             &rows,
             &summary(),
             LengthUnit::Meter,
+            "2026-07-07",
+            "2026",
         );
-        assert!(html.contains("As-built stakeout report"));
+        assert!(html.contains("As-Built Stakeout Report")); // shared shell title
         assert!(html.contains("My Site"));
         assert!(html.contains("PT1"));
         assert!(html.contains("pass")); // status class/label present
         assert!(html.contains("Tolerance"));
+        // Wrapped in the shared branded shell (cover + running footer).
+        assert!(html.contains("by KeshavTech LLC"));
+        assert!(html.contains("Generated by SiteLens"));
     }
 }
