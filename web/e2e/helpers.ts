@@ -116,7 +116,7 @@ export async function createProjectAndOpen(page: Page, name: string): Promise<vo
 /** Switches the workspace detail panel to a tab. */
 export async function gotoTab(
   page: Page,
-  name: 'Setup' | 'Grid' | 'Points' | 'Overlays' | 'Field',
+  name: 'Setup' | 'Grid' | 'Points' | 'Overlays' | 'Utilities' | 'Field',
 ): Promise<void> {
   await page.getByRole('button', { exact: true, name }).click();
 }

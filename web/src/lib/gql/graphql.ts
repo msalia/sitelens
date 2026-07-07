@@ -119,6 +119,58 @@ export type Role =
   | 'SURVEYOR'
   | 'VIEWER';
 
+/**
+ * Run attributes on create/update. All optional; on update, omitted fields keep
+ * their current value. `diameter_inches` is stored canonical (meters).
+ */
+export type UtilityRunInput = {
+  asBuiltDate?: unknown;
+  /** JSON object string. */
+  attrsExtra?: string | null | undefined;
+  condition?: string | null | undefined;
+  diameterInches?: number | null | undefined;
+  installDate?: unknown;
+  invertDown?: number | null | undefined;
+  invertUp?: number | null | undefined;
+  label?: string | null | undefined;
+  level?: string | null | undefined;
+  locateMethod?: string | null | undefined;
+  material?: string | null | undefined;
+  owner?: string | null | undefined;
+  source?: string | null | undefined;
+  tags?: Array<string> | null | undefined;
+  typeKey?: string | null | undefined;
+};
+
+/** Structure attributes on create/update. Position is required on create. */
+export type UtilityStructureInput = {
+  asBuiltDate?: unknown;
+  attrsExtra?: string | null | undefined;
+  condition?: string | null | undefined;
+  easting?: number | null | undefined;
+  /** JSON array string. */
+  inverts?: string | null | undefined;
+  label?: string | null | undefined;
+  level?: string | null | undefined;
+  locateMethod?: string | null | undefined;
+  material?: string | null | undefined;
+  northing?: number | null | undefined;
+  owner?: string | null | undefined;
+  rimElev?: number | null | undefined;
+  source?: string | null | undefined;
+  sourcePointId?: string | null | undefined;
+  tags?: Array<string> | null | undefined;
+  typeKey?: string | null | undefined;
+};
+
+/** One vertex on capture. `seq` is the array position; coords are canonical meters. */
+export type UtilityVertexInput = {
+  easting: number;
+  elevation?: number | null | undefined;
+  northing: number;
+  sourcePointId?: string | null | undefined;
+};
+
 export type WorkspaceQueryVariables = Exact<{
   id: string;
 }>;
@@ -217,11 +269,6 @@ export type RequestPasswordResetMutationVariables = Exact<{
 
 
 export type RequestPasswordResetMutation = { requestPasswordReset: boolean };
-
-export type LegalMeQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type LegalMeQuery = { me: { id: string } | null };
 
 export type LoginMutationVariables = Exact<{
   e: string;
@@ -718,6 +765,52 @@ export type SolveTransformMutationVariables = Exact<{
 
 export type SolveTransformMutation = { solveTransform: { translationE: number, translationN: number, rotationDegrees: number, scale: number, rmsError: number, pointCount: number, residuals: Array<{ label: string, deltaEasting: number, deltaNorthing: number, magnitude: number }> } };
 
+export type UtilityTypesQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type UtilityTypesQuery = { utilityTypes: Array<{ key: string, label: string, apwaColor: string, defaultGeometry: string }> };
+
+export type UtilitiesQueryVariables = Exact<{
+  projectId: string;
+  typeKey?: string | null | undefined;
+  level?: string | null | undefined;
+  search?: string | null | undefined;
+}>;
+
+
+export type UtilitiesQuery = { utilities: { runs: Array<{ id: string, typeKey: string, label: string, level: string | null, diameter: number | null, material: string | null, invertUp: number | null, invertDown: number | null, slope: number | null, length: number | null, source: string, tags: Array<string>, vertices: Array<{ seq: number, northing: number, easting: number, elevation: number | null, sourcePointId: string | null }> }>, structures: Array<{ id: string, typeKey: string, label: string, level: string | null, northing: number, easting: number, rimElev: number | null, material: string | null, source: string, tags: Array<string> }> } };
+
+export type CreateUtilityRunMutationVariables = Exact<{
+  projectId: string;
+  input: UtilityRunInput;
+  vertices: Array<UtilityVertexInput> | UtilityVertexInput;
+}>;
+
+
+export type CreateUtilityRunMutation = { createUtilityRun: { id: string } };
+
+export type CreateUtilityStructureMutationVariables = Exact<{
+  projectId: string;
+  input: UtilityStructureInput;
+}>;
+
+
+export type CreateUtilityStructureMutation = { createUtilityStructure: { id: string } };
+
+export type DeleteUtilityRunMutationVariables = Exact<{
+  id: string;
+}>;
+
+
+export type DeleteUtilityRunMutation = { deleteUtilityRun: boolean };
+
+export type DeleteUtilityStructureMutationVariables = Exact<{
+  id: string;
+}>;
+
+
+export type DeleteUtilityStructureMutation = { deleteUtilityStructure: boolean };
+
 export type ResetPasswordMutationVariables = Exact<{
   t: string;
   p: string;
@@ -991,13 +1084,6 @@ export const RequestPasswordResetDocument = new TypedDocumentString(`
   requestPasswordReset(email: $e)
 }
     `) as unknown as TypedDocumentString<RequestPasswordResetMutation, RequestPasswordResetMutationVariables>;
-export const LegalMeDocument = new TypedDocumentString(`
-    query LegalMe {
-  me {
-    id
-  }
-}
-    `) as unknown as TypedDocumentString<LegalMeQuery, LegalMeQueryVariables>;
 export const LoginDocument = new TypedDocumentString(`
     mutation Login($e: String!, $p: String!) {
   login(email: $e, password: $p) {
@@ -1653,6 +1739,84 @@ export const SolveTransformDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SolveTransformMutation, SolveTransformMutationVariables>;
+export const UtilityTypesDocument = new TypedDocumentString(`
+    query UtilityTypes {
+  utilityTypes {
+    key
+    label
+    apwaColor
+    defaultGeometry
+  }
+}
+    `) as unknown as TypedDocumentString<UtilityTypesQuery, UtilityTypesQueryVariables>;
+export const UtilitiesDocument = new TypedDocumentString(`
+    query Utilities($projectId: UUID!, $typeKey: String, $level: String, $search: String) {
+  utilities(
+    projectId: $projectId
+    typeKey: $typeKey
+    level: $level
+    search: $search
+  ) {
+    runs {
+      id
+      typeKey
+      label
+      level
+      diameter
+      material
+      invertUp
+      invertDown
+      slope
+      length
+      source
+      tags
+      vertices {
+        seq
+        northing
+        easting
+        elevation
+        sourcePointId
+      }
+    }
+    structures {
+      id
+      typeKey
+      label
+      level
+      northing
+      easting
+      rimElev
+      material
+      source
+      tags
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<UtilitiesQuery, UtilitiesQueryVariables>;
+export const CreateUtilityRunDocument = new TypedDocumentString(`
+    mutation CreateUtilityRun($projectId: UUID!, $input: UtilityRunInput!, $vertices: [UtilityVertexInput!]!) {
+  createUtilityRun(projectId: $projectId, input: $input, vertices: $vertices) {
+    id
+  }
+}
+    `) as unknown as TypedDocumentString<CreateUtilityRunMutation, CreateUtilityRunMutationVariables>;
+export const CreateUtilityStructureDocument = new TypedDocumentString(`
+    mutation CreateUtilityStructure($projectId: UUID!, $input: UtilityStructureInput!) {
+  createUtilityStructure(projectId: $projectId, input: $input) {
+    id
+  }
+}
+    `) as unknown as TypedDocumentString<CreateUtilityStructureMutation, CreateUtilityStructureMutationVariables>;
+export const DeleteUtilityRunDocument = new TypedDocumentString(`
+    mutation DeleteUtilityRun($id: UUID!) {
+  deleteUtilityRun(id: $id)
+}
+    `) as unknown as TypedDocumentString<DeleteUtilityRunMutation, DeleteUtilityRunMutationVariables>;
+export const DeleteUtilityStructureDocument = new TypedDocumentString(`
+    mutation DeleteUtilityStructure($id: UUID!) {
+  deleteUtilityStructure(id: $id)
+}
+    `) as unknown as TypedDocumentString<DeleteUtilityStructureMutation, DeleteUtilityStructureMutationVariables>;
 export const ResetPasswordDocument = new TypedDocumentString(`
     mutation ResetPassword($t: String!, $p: String!) {
   resetPassword(token: $t, newPassword: $p)

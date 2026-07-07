@@ -5,7 +5,9 @@ import { useMemo, useState } from 'react';
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -87,11 +89,14 @@ export function ResultsTable({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {FILTERS.map((f) => (
-              <SelectItem key={f.value} value={f.value}>
-                {f.label}
-              </SelectItem>
-            ))}
+            <SelectGroup>
+              <SelectLabel>Status</SelectLabel>
+              {FILTERS.map((f) => (
+                <SelectItem key={f.value} value={f.value}>
+                  {f.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
           </SelectContent>
         </Select>
       </div>
@@ -139,11 +144,14 @@ export function ResultsTable({
                           <SelectValue placeholder="Pair…" />
                         </SelectTrigger>
                         <SelectContent>
-                          {designPoints.map((d) => (
-                            <SelectItem key={d.id} value={d.id}>
-                              {d.label}
-                            </SelectItem>
-                          ))}
+                          <SelectGroup>
+                            <SelectLabel>Design point</SelectLabel>
+                            {designPoints.map((d) => (
+                              <SelectItem key={d.id} value={d.id}>
+                                {d.label}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
                         </SelectContent>
                       </Select>
                     ) : (

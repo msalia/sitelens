@@ -31,7 +31,6 @@ type Documents = {
     "\n  query Me {\n    me {\n      id\n      orgId\n      email\n      role\n      emailVerified\n    }\n  }\n": typeof types.MeDocument,
     "\n  mutation Logout {\n    logout\n  }\n": typeof types.LogoutDocument,
     "\n  mutation RequestPasswordReset($e: String!) {\n    requestPasswordReset(email: $e)\n  }\n": typeof types.RequestPasswordResetDocument,
-    "\n  query LegalMe {\n    me {\n      id\n    }\n  }\n": typeof types.LegalMeDocument,
     "\n  mutation Login($e: String!, $p: String!) {\n    login(email: $e, password: $p) {\n      id\n    }\n  }\n": typeof types.LoginDocument,
     "\n  mutation ResendVerification($e: String!) {\n    resendVerification(email: $e)\n  }\n": typeof types.ResendVerificationDocument,
     "\n  mutation AddSurveyPoint(\n    $projectId: UUID!\n    $label: String!\n    $space: CoordinateSpace!\n    $x: Float!\n    $y: Float!\n    $elevation: Float\n    $description: String\n    $categoryId: UUID\n    $unit: LengthUnit!\n  ) {\n    addSurveyPoint(\n      projectId: $projectId\n      label: $label\n      space: $space\n      x: $x\n      y: $y\n      elevation: $elevation\n      description: $description\n      categoryId: $categoryId\n      unit: $unit\n    ) {\n      id\n    }\n  }\n": typeof types.AddSurveyPointDocument,
@@ -86,6 +85,12 @@ type Documents = {
     "\n  query PointGroups($id: UUID!) {\n    pointGroups(projectId: $id) {\n      id\n      projectId\n      name\n      memberIds\n    }\n  }\n": typeof types.PointGroupsDocument,
     "\n  mutation AddPointsToGroup($groupId: UUID!, $ids: [UUID!]!) {\n    addPointsToGroup(groupId: $groupId, memberIds: $ids) {\n      id\n      memberIds\n    }\n  }\n": typeof types.AddPointsToGroupDocument,
     "\n  mutation SolveTransform($id: UUID!) {\n    solveTransform(projectId: $id) {\n      translationE\n      translationN\n      rotationDegrees\n      scale\n      rmsError\n      pointCount\n      residuals {\n        label\n        deltaEasting\n        deltaNorthing\n        magnitude\n      }\n    }\n  }\n": typeof types.SolveTransformDocument,
+    "\n  query UtilityTypes {\n    utilityTypes {\n      key\n      label\n      apwaColor\n      defaultGeometry\n    }\n  }\n": typeof types.UtilityTypesDocument,
+    "\n  query Utilities($projectId: UUID!, $typeKey: String, $level: String, $search: String) {\n    utilities(projectId: $projectId, typeKey: $typeKey, level: $level, search: $search) {\n      runs {\n        id\n        typeKey\n        label\n        level\n        diameter\n        material\n        invertUp\n        invertDown\n        slope\n        length\n        source\n        tags\n        vertices {\n          seq\n          northing\n          easting\n          elevation\n          sourcePointId\n        }\n      }\n      structures {\n        id\n        typeKey\n        label\n        level\n        northing\n        easting\n        rimElev\n        material\n        source\n        tags\n      }\n    }\n  }\n": typeof types.UtilitiesDocument,
+    "\n  mutation CreateUtilityRun(\n    $projectId: UUID!\n    $input: UtilityRunInput!\n    $vertices: [UtilityVertexInput!]!\n  ) {\n    createUtilityRun(projectId: $projectId, input: $input, vertices: $vertices) {\n      id\n    }\n  }\n": typeof types.CreateUtilityRunDocument,
+    "\n  mutation CreateUtilityStructure($projectId: UUID!, $input: UtilityStructureInput!) {\n    createUtilityStructure(projectId: $projectId, input: $input) {\n      id\n    }\n  }\n": typeof types.CreateUtilityStructureDocument,
+    "\n  mutation DeleteUtilityRun($id: UUID!) {\n    deleteUtilityRun(id: $id)\n  }\n": typeof types.DeleteUtilityRunDocument,
+    "\n  mutation DeleteUtilityStructure($id: UUID!) {\n    deleteUtilityStructure(id: $id)\n  }\n": typeof types.DeleteUtilityStructureDocument,
     "\n  mutation ResetPassword($t: String!, $p: String!) {\n    resetPassword(token: $t, newPassword: $p)\n  }\n": typeof types.ResetPasswordDocument,
     "\n  mutation Signup($e: String!, $p: String!, $o: String!) {\n    signup(email: $e, password: $p, orgName: $o) {\n      verificationToken\n    }\n  }\n": typeof types.SignupDocument,
     "\n  mutation VerifyEmail($t: String!) {\n    verifyEmail(token: $t)\n  }\n": typeof types.VerifyEmailDocument,
@@ -112,7 +117,6 @@ const documents: Documents = {
     "\n  query Me {\n    me {\n      id\n      orgId\n      email\n      role\n      emailVerified\n    }\n  }\n": types.MeDocument,
     "\n  mutation Logout {\n    logout\n  }\n": types.LogoutDocument,
     "\n  mutation RequestPasswordReset($e: String!) {\n    requestPasswordReset(email: $e)\n  }\n": types.RequestPasswordResetDocument,
-    "\n  query LegalMe {\n    me {\n      id\n    }\n  }\n": types.LegalMeDocument,
     "\n  mutation Login($e: String!, $p: String!) {\n    login(email: $e, password: $p) {\n      id\n    }\n  }\n": types.LoginDocument,
     "\n  mutation ResendVerification($e: String!) {\n    resendVerification(email: $e)\n  }\n": types.ResendVerificationDocument,
     "\n  mutation AddSurveyPoint(\n    $projectId: UUID!\n    $label: String!\n    $space: CoordinateSpace!\n    $x: Float!\n    $y: Float!\n    $elevation: Float\n    $description: String\n    $categoryId: UUID\n    $unit: LengthUnit!\n  ) {\n    addSurveyPoint(\n      projectId: $projectId\n      label: $label\n      space: $space\n      x: $x\n      y: $y\n      elevation: $elevation\n      description: $description\n      categoryId: $categoryId\n      unit: $unit\n    ) {\n      id\n    }\n  }\n": types.AddSurveyPointDocument,
@@ -167,6 +171,12 @@ const documents: Documents = {
     "\n  query PointGroups($id: UUID!) {\n    pointGroups(projectId: $id) {\n      id\n      projectId\n      name\n      memberIds\n    }\n  }\n": types.PointGroupsDocument,
     "\n  mutation AddPointsToGroup($groupId: UUID!, $ids: [UUID!]!) {\n    addPointsToGroup(groupId: $groupId, memberIds: $ids) {\n      id\n      memberIds\n    }\n  }\n": types.AddPointsToGroupDocument,
     "\n  mutation SolveTransform($id: UUID!) {\n    solveTransform(projectId: $id) {\n      translationE\n      translationN\n      rotationDegrees\n      scale\n      rmsError\n      pointCount\n      residuals {\n        label\n        deltaEasting\n        deltaNorthing\n        magnitude\n      }\n    }\n  }\n": types.SolveTransformDocument,
+    "\n  query UtilityTypes {\n    utilityTypes {\n      key\n      label\n      apwaColor\n      defaultGeometry\n    }\n  }\n": types.UtilityTypesDocument,
+    "\n  query Utilities($projectId: UUID!, $typeKey: String, $level: String, $search: String) {\n    utilities(projectId: $projectId, typeKey: $typeKey, level: $level, search: $search) {\n      runs {\n        id\n        typeKey\n        label\n        level\n        diameter\n        material\n        invertUp\n        invertDown\n        slope\n        length\n        source\n        tags\n        vertices {\n          seq\n          northing\n          easting\n          elevation\n          sourcePointId\n        }\n      }\n      structures {\n        id\n        typeKey\n        label\n        level\n        northing\n        easting\n        rimElev\n        material\n        source\n        tags\n      }\n    }\n  }\n": types.UtilitiesDocument,
+    "\n  mutation CreateUtilityRun(\n    $projectId: UUID!\n    $input: UtilityRunInput!\n    $vertices: [UtilityVertexInput!]!\n  ) {\n    createUtilityRun(projectId: $projectId, input: $input, vertices: $vertices) {\n      id\n    }\n  }\n": types.CreateUtilityRunDocument,
+    "\n  mutation CreateUtilityStructure($projectId: UUID!, $input: UtilityStructureInput!) {\n    createUtilityStructure(projectId: $projectId, input: $input) {\n      id\n    }\n  }\n": types.CreateUtilityStructureDocument,
+    "\n  mutation DeleteUtilityRun($id: UUID!) {\n    deleteUtilityRun(id: $id)\n  }\n": types.DeleteUtilityRunDocument,
+    "\n  mutation DeleteUtilityStructure($id: UUID!) {\n    deleteUtilityStructure(id: $id)\n  }\n": types.DeleteUtilityStructureDocument,
     "\n  mutation ResetPassword($t: String!, $p: String!) {\n    resetPassword(token: $t, newPassword: $p)\n  }\n": types.ResetPasswordDocument,
     "\n  mutation Signup($e: String!, $p: String!, $o: String!) {\n    signup(email: $e, password: $p, orgName: $o) {\n      verificationToken\n    }\n  }\n": types.SignupDocument,
     "\n  mutation VerifyEmail($t: String!) {\n    verifyEmail(token: $t)\n  }\n": types.VerifyEmailDocument,
@@ -241,10 +251,6 @@ export function graphql(source: "\n  mutation Logout {\n    logout\n  }\n"): typ
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation RequestPasswordReset($e: String!) {\n    requestPasswordReset(email: $e)\n  }\n"): typeof import('./graphql').RequestPasswordResetDocument;
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  query LegalMe {\n    me {\n      id\n    }\n  }\n"): typeof import('./graphql').LegalMeDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -461,6 +467,30 @@ export function graphql(source: "\n  mutation AddPointsToGroup($groupId: UUID!, 
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation SolveTransform($id: UUID!) {\n    solveTransform(projectId: $id) {\n      translationE\n      translationN\n      rotationDegrees\n      scale\n      rmsError\n      pointCount\n      residuals {\n        label\n        deltaEasting\n        deltaNorthing\n        magnitude\n      }\n    }\n  }\n"): typeof import('./graphql').SolveTransformDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query UtilityTypes {\n    utilityTypes {\n      key\n      label\n      apwaColor\n      defaultGeometry\n    }\n  }\n"): typeof import('./graphql').UtilityTypesDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query Utilities($projectId: UUID!, $typeKey: String, $level: String, $search: String) {\n    utilities(projectId: $projectId, typeKey: $typeKey, level: $level, search: $search) {\n      runs {\n        id\n        typeKey\n        label\n        level\n        diameter\n        material\n        invertUp\n        invertDown\n        slope\n        length\n        source\n        tags\n        vertices {\n          seq\n          northing\n          easting\n          elevation\n          sourcePointId\n        }\n      }\n      structures {\n        id\n        typeKey\n        label\n        level\n        northing\n        easting\n        rimElev\n        material\n        source\n        tags\n      }\n    }\n  }\n"): typeof import('./graphql').UtilitiesDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CreateUtilityRun(\n    $projectId: UUID!\n    $input: UtilityRunInput!\n    $vertices: [UtilityVertexInput!]!\n  ) {\n    createUtilityRun(projectId: $projectId, input: $input, vertices: $vertices) {\n      id\n    }\n  }\n"): typeof import('./graphql').CreateUtilityRunDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CreateUtilityStructure($projectId: UUID!, $input: UtilityStructureInput!) {\n    createUtilityStructure(projectId: $projectId, input: $input) {\n      id\n    }\n  }\n"): typeof import('./graphql').CreateUtilityStructureDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DeleteUtilityRun($id: UUID!) {\n    deleteUtilityRun(id: $id)\n  }\n"): typeof import('./graphql').DeleteUtilityRunDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DeleteUtilityStructure($id: UUID!) {\n    deleteUtilityStructure(id: $id)\n  }\n"): typeof import('./graphql').DeleteUtilityStructureDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

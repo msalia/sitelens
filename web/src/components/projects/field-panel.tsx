@@ -2,6 +2,7 @@
 
 import {
   IconDownload,
+  IconEye,
   IconFileText,
   IconFileTypePdf,
   IconTrash,
@@ -14,6 +15,7 @@ import type { ComparisonMarker } from '@/components/projects/terrain-viewer';
 
 import { ConfirmDialog } from '@/components/projects/confirm-dialog';
 import { type CompRow, ResultsTable } from '@/components/projects/field/results-table';
+import { ListRow } from '@/components/projects/list-row';
 import { Button } from '@/components/ui/button';
 import { ButtonGroup } from '@/components/ui/button-group';
 import {
@@ -43,7 +45,6 @@ import {
   type Project,
   UNIT_OPTIONS,
 } from '@/lib/types';
-import { cn } from '@/lib/utils';
 
 import {
   AS_BUILT_BATCHES,
@@ -272,6 +273,22 @@ export function FieldPanel({
     }
   }, []);
 
+  // Clicking a comparison toggles it: open it (and its 3D overlay) if it isn't
+  // the active one, or close it (clearing the overlay) if it already is.
+  const toggleComparison = useCallback(
+    (batchId: string) => {
+      if (selectedBatch === batchId) {
+        setSelectedBatch(null);
+        setRows([]);
+        setSummary(null);
+        onOverlayRef.current?.(null);
+      } else {
+        void openComparison(batchId);
+      }
+    },
+    [selectedBatch, openComparison],
+  );
+
   async function onRepair(compId: string, designPointId: string) {
     setBusy(true);
     try {
@@ -425,7 +442,6 @@ export function FieldPanel({
               label="CSV preset"
               value={imPreset}
               onChange={setImPreset}
-              hint="Used only when the file is CSV."
             >
               {presets
                 .filter((p) => p.format === 'CSV')
@@ -499,35 +515,34 @@ export function FieldPanel({
             <p className="text-muted-foreground text-sm">No comparisons yet.</p>
           ) : (
             batches.map((b) => (
-              <div
+              <ListRow
                 key={b.id}
-                className={cn(
-                  'flex items-center gap-2 rounded-lg border p-2 text-sm',
-                  selectedBatch === b.id && 'border-primary bg-primary/5',
-                )}
-              >
-                <button
-                  type="button"
-                  className="min-w-0 flex-1 text-left"
-                  onClick={() => openComparison(b.id)}
-                >
-                  <div className="truncate font-medium">
-                    {b.sourceFilename || 'As-built import'}
-                  </div>
-                  <div className="text-muted-foreground text-xs">
-                    {b.format} · {new Date(b.createdAt).toLocaleDateString()}
-                  </div>
-                </button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Delete comparison"
-                  disabled={busy}
-                  onClick={() => setPendingDelete(b)}
-                >
-                  <IconTrash className="size-4" />
-                </Button>
-              </div>
+                selected={selectedBatch === b.id}
+                onClick={() => toggleComparison(b.id)}
+                title={b.sourceFilename || 'As-built import'}
+                subtitle={`${b.format} · ${new Date(b.createdAt).toLocaleDateString()}`}
+                hint={
+                  <span
+                    className={`flex items-center gap-1 text-xs ${
+                      selectedBatch === b.id ? 'text-primary' : 'text-muted-foreground'
+                    }`}
+                  >
+                    <IconEye className="size-3.5" />
+                    {selectedBatch === b.id ? 'Viewing' : 'Select'}
+                  </span>
+                }
+                actions={
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Delete comparison"
+                    disabled={busy}
+                    onClick={() => setPendingDelete(b)}
+                  >
+                    <IconTrash className="size-4" />
+                  </Button>
+                }
+              />
             ))
           )}
         </CardContent>

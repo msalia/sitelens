@@ -44,13 +44,13 @@ Create/edit utilities in-app from survey points.
 - [x] GraphQL (`schema/utilities.rs`, new `Feature::Utilities` gate): `utilityTypes`, `utilities`, `utility`/`utilityStructure`, `createUtilityRun`, `updateUtilityRun(+Geometry)`, `createUtilityStructure`, `updateUtilityStructure`, soft `deleteUtilityRun/Structure`, `utilityAudit` — all audited, tenancy + Crew-gated. Derived `length`/`slope` computed via `geom`.
 - [x] Geometry snapshot on capture (+ optional `source_point_id` soft link).
 - [x] Provenance fields (captured-by/at, as-built date, source, locate method) wired.
-- [ ] **Minimal digitize UI** in a new Utilities panel (plan editor — snap survey points / click scene) → **remaining P2 half** (large R3F/foundation §3 piece; backend is ready for it).
+- [x] **Digitize UI** in a new Crew-gated Utilities panel: pick an APWA type, digitize a run by snapping survey-point markers in the 3D scene (exact projected coords + `source_point_id`) or by numeric E/N/Z entry, place a structure the same way, typed attribute form; inventory list with delete. Lean in-3D digitize (foundation §3 top-down "plan mode" deferred until SM/SA need it).
 
 ### Tests
 
 - [x] CRUD + audit-on-write; snapshot survives source-point delete (soft link cleared, coords intact); soft-delete hides from inventory; Crew gate (5 integration tests).
 - [x] Typed attrs (diameter inches→m, inverts, tags, free-form `attrs_extra`) + derived length/slope persist. *(Per-type field validation is minimal — attrs stored regardless of type.)*
-- [ ] Playwright: digitize a run — with the digitize UI.
+- [x] Playwright (`web/e2e/utilities.spec.ts`): digitize a run + place a structure via coordinate entry → appear in inventory + delete; Solo-plan upgrade gate. (Runs against the full stack — user-run.)
 
 ### Validates
 

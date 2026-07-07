@@ -11,7 +11,7 @@ import type {
   RenderableOverlay,
   TerrainData,
 } from '@/components/projects/terrain-viewer';
-import type { InspectablePoint, PointCategory, Project, SceneData } from '@/lib/types';
+import type { InspectablePoint, PointCategory, Project, SceneData, ScenePoint } from '@/lib/types';
 
 import { CoordinateInspectorDialog } from '@/components/projects/coordinate-inspector-dialog';
 import { CameraControl } from '@/components/projects/scene-view/camera-control';
@@ -46,7 +46,10 @@ const TerrainViewer = dynamic(
 export function SceneView({
   categories,
   comparison,
+  digitizing,
   focus,
+  onCancelDigitize,
+  pickRef,
   project,
   reloadNonce,
   stats,
@@ -55,8 +58,17 @@ export function SceneView({
   categories: PointCategory[];
   /** As-built QC comparison markers to overlay (from the Field panel). */
   comparison?: ComparisonMarker[] | null;
+  /** When true, the scene is in "digitize" mode: clicking a survey-point marker
+   *  feeds it to `pickRef` (snapping a utility vertex/structure) instead of
+   *  opening the coordinate inspector. Drives the on-scene hint banner. */
+  digitizing?: boolean;
   /** Request from the table to fly to a point; `nonce` re-triggers. */
   focus?: { id: string; nonce: number } | null;
+  /** Called when the user dismisses the digitize hint banner. */
+  onCancelDigitize?: () => void;
+  /** Sink for snapped survey points while digitizing (set by the Utilities
+   *  panel). A ref so toggling it never re-renders the whole scene. */
+  pickRef?: React.MutableRefObject<((point: ScenePoint) => void) | null>;
   /** Bumped by the parent to force a scene reload (e.g. after a DXF upload or
    * a georeference save). */
   reloadNonce?: number;
@@ -325,11 +337,18 @@ export function SceneView({
   const onSelectPoint = useCallback(
     (id: string) => {
       const p = scene?.surveyPoints.find((s) => s.id === id);
-      if (p) {
-        setInspecting({ easting: p.easting, label: p.label, northing: p.northing });
+      if (!p) {
+        return;
       }
+      // While digitizing, a marker click snaps a utility vertex/structure to the
+      // point's exact projected coordinates (survey-grade) instead of inspecting.
+      if (pickRef?.current) {
+        pickRef.current(p);
+        return;
+      }
+      setInspecting({ easting: p.easting, label: p.label, northing: p.northing });
     },
-    [scene],
+    [scene, pickRef],
   );
 
   function setView2(v: CameraView) {
@@ -460,6 +479,25 @@ export function SceneView({
               Add control and survey points, set the building grid, and configure the site origin to
               populate the 3D view. Use the tabs on the left to get started.
             </p>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Digitize hint — shown while the Utilities panel is collecting points. */}
+      {scene && digitizing ? (
+        <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-3">
+          <div className="bg-primary/10 text-primary ring-primary/20 pointer-events-auto flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium shadow-sm ring-1 backdrop-blur">
+            <span className="bg-primary size-1.5 animate-pulse rounded-full" />
+            Click survey points to snap them
+            {onCancelDigitize ? (
+              <button
+                type="button"
+                onClick={onCancelDigitize}
+                className="hover:bg-primary/15 -mr-1 ml-1 rounded px-1.5 py-0.5"
+              >
+                Done
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}

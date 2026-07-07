@@ -20,6 +20,7 @@ import { SceneView } from '@/components/projects/scene-view';
 import { SetupChecklist } from '@/components/projects/setup-checklist';
 import { SurveyPointsPanel } from '@/components/projects/survey-points-panel';
 import { TransformPanel } from '@/components/projects/transform-panel';
+import { UtilitiesPanel } from '@/components/projects/utilities-panel';
 import { buttonVariants } from '@/components/ui/button';
 import { ButtonGroup } from '@/components/ui/button-group';
 import {
@@ -39,6 +40,7 @@ import {
   type GridAxis,
   type PointCategory,
   type Project,
+  type ScenePoint,
   type SurveyPoint,
   type Transform,
   UNIT_LABELS,
@@ -117,12 +119,13 @@ const WORKSPACE_QUERY = graphql(`
   }
 `);
 
-type Tab = 'setup' | 'control' | 'points' | 'overlays' | 'field';
+type Tab = 'setup' | 'control' | 'points' | 'overlays' | 'field' | 'utilities';
 
 /** Crew-gated tabs → the plan `Feature` key their upsell dialog uses. */
 const CREW_TABS: Partial<Record<Tab, string>> = {
   field: 'field_exchange',
   overlays: 'dxf_overlays',
+  utilities: 'utilities',
 };
 
 export default function ProjectWorkspace() {
@@ -144,6 +147,10 @@ export default function ProjectWorkspace() {
   const [pointCount, setPointCount] = useState(0);
   const [focus, setFocus] = useState<{ id: string; nonce: number } | null>(null);
   const [comparisonOverlay, setComparisonOverlay] = useState<ComparisonMarker[] | null>(null);
+  // Digitize bridge: the Utilities panel writes a pick handler here; the scene
+  // routes marker clicks to it while `digitizing` shows the on-scene hint.
+  const pickRef = useRef<((point: ScenePoint) => void) | null>(null);
+  const [digitizing, setDigitizing] = useState(false);
   const [sceneReload, setSceneReload] = useState(0);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('setup');
@@ -207,6 +214,15 @@ export default function ProjectWorkspace() {
     [points],
   );
 
+  // The Setup guide is complete once every checklist step passes (mirrors
+  // SetupChecklist). When done we hide the Setup tab to free space for the rest.
+  const setupComplete =
+    tiedControlPoints >= 2 && axes.length > 0 && transform !== null && pointCount > 0;
+
+  // Derived (not state) so completing setup while on the Setup tab redirects to
+  // Points with no extra render / stale-tab flash — the tab itself is hidden below.
+  const activeTab: Tab = setupComplete && tab === 'setup' ? 'points' : tab;
+
   if (loading) {
     return <p className="text-muted-foreground p-6 text-sm">Loading…</p>;
   }
@@ -264,9 +280,13 @@ export default function ProjectWorkspace() {
               ['control', 'Grid'],
               ['points', 'Points'],
               ['overlays', 'Overlays'],
+              ['utilities', 'Utilities'],
               ['field', 'Field'],
             ] as const
-          ).map(([key, label]) => (
+          )
+            // Once setup is complete the guide is no longer useful — drop the tab.
+            .filter(([key]) => key !== 'setup' || !setupComplete)
+            .map(([key, label]) => (
             <button
               key={key}
               type="button"
@@ -278,7 +298,7 @@ export default function ProjectWorkspace() {
               }
               className={cn(
                 'flex-1 rounded-lg px-3 py-1.5 text-center text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50',
-                tab === key
+                activeTab === key
                   ? 'bg-primary/10 text-primary'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground',
               )}
@@ -291,7 +311,7 @@ export default function ProjectWorkspace() {
         {/* `[&>*]:shrink-0` keeps cards at natural height (flex children would
             otherwise shrink and clip their overflow-hidden content). */}
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 [&>*]:shrink-0">
-          {tab === 'setup' && (
+          {activeTab === 'setup' && (
             <SetupChecklist
               axesCount={axes.length}
               controlPointsWithGrid={tiedControlPoints}
@@ -300,7 +320,7 @@ export default function ProjectWorkspace() {
               onNavigate={navigateTo}
             />
           )}
-          {tab === 'control' && (
+          {activeTab === 'control' && (
             <>
               <section id="panel-control">
                 <ControlPointsEditor project={project} points={points} onChanged={load} />
@@ -313,7 +333,7 @@ export default function ProjectWorkspace() {
               </section>
             </>
           )}
-          {tab === 'points' && (
+          {activeTab === 'points' && (
             <>
               <section id="panel-points">
                 <SurveyPointsPanel
@@ -328,7 +348,7 @@ export default function ProjectWorkspace() {
               </section>
             </>
           )}
-          {tab === 'overlays' && !crewGated && (
+          {activeTab === 'overlays' && !crewGated && (
             <section id="panel-overlays">
               <CadOverlayPanel
                 project={project}
@@ -340,7 +360,16 @@ export default function ProjectWorkspace() {
               />
             </section>
           )}
-          {tab === 'field' && !crewGated && (
+          {activeTab === 'utilities' && !crewGated && (
+            <section id="panel-utilities">
+              <UtilitiesPanel
+                project={project}
+                pickRef={pickRef}
+                onDigitizingChange={setDigitizing}
+              />
+            </section>
+          )}
+          {activeTab === 'field' && !crewGated && (
             <section id="panel-field">
               <FieldPanel
                 project={project}
@@ -365,6 +394,8 @@ export default function ProjectWorkspace() {
           project={project}
           categories={categories}
           comparison={comparisonOverlay}
+          digitizing={digitizing}
+          pickRef={pickRef}
           focus={focus}
           reloadNonce={sceneReload}
           stats={[
