@@ -31,7 +31,10 @@ import {
   useBounds,
   useMarkers,
 } from './terrain-objects';
+import { Utilities, type UtilityPick } from './terrain/utilities';
 import { silenceThreeClockWarning } from './three-clock-warning';
+
+export type { UtilityPick } from './terrain/utilities';
 
 // Re-export the public surface so consumers keep importing from 'terrain-viewer'.
 export { CAMERA_VIEWS } from './terrain-shared';
@@ -63,6 +66,8 @@ export interface TerrainViewerProps {
   focus?: FocusTarget;
   /** Called with a survey point id when picked in 3D. */
   onSelectPoint?: (id: string) => void;
+  /** Called with a run/structure when picked in 3D. */
+  onSelectUtility?: (pick: UtilityPick) => void;
   originProjectedE?: number | null;
   originProjectedN?: number | null;
   /** Georeferenced DXF overlays to draw, with the project's projected origin. */
@@ -82,7 +87,11 @@ export interface TerrainViewerProps {
   showPins?: boolean;
   /** Whether to render the terrain mesh. */
   showTerrain?: boolean;
+  /** Whether to draw the buried utility runs + structures. */
+  showUtilities?: boolean;
   terrain?: TerrainData | null;
+  /** Underground mode: fade the terrain so buried utilities show through. */
+  underground?: boolean;
   /** Active camera preset; `viewNonce` re-applies it even if unchanged. */
   view?: CameraView;
   viewNonce?: number;
@@ -90,6 +99,8 @@ export interface TerrainViewerProps {
   visibleCategoryIds: Set<string> | null;
   /** Survey-point ids to show (group filter); null shows all. */
   visibleIds?: Set<string> | null;
+  /** Utility type keys to show; null shows all. */
+  visibleUtilityTypes?: Set<string> | null;
 }
 
 export function TerrainViewer(props: TerrainViewerProps) {
@@ -100,6 +111,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
     comparison,
     focus,
     onSelectPoint,
+    onSelectUtility,
     originProjectedE,
     originProjectedN,
     overlays,
@@ -111,11 +123,14 @@ export function TerrainViewer(props: TerrainViewerProps) {
     showOverlays = true,
     showPins = true,
     showTerrain = true,
+    showUtilities = true,
     terrain,
+    underground = false,
     view = 'iso',
     viewNonce = 0,
     visibleCategoryIds,
     visibleIds,
+    visibleUtilityTypes = null,
   } = props;
   // Keep `frame` referentially stable while the geographic origin is unchanged,
   // so a live scene refetch (same project) doesn't churn frame-derived work — in
@@ -229,6 +244,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
             geometry={terrainMesh.geometry}
             color={palette.clay}
             relief={showTerrain}
+            opacity={underground ? 0.18 : 1}
           />
         </Fade>
       ) : null}
@@ -267,6 +283,17 @@ export function TerrainViewer(props: TerrainViewerProps) {
       <Markers markers={showPins ? markers : []} onSelectPoint={onSelectPoint} />
       {comparison?.length ? (
         <ComparisonOverlay comparison={comparison} frame={frame} sample={sampler} />
+      ) : null}
+      {scene.utilityRuns.length || scene.utilityStructures.length ? (
+        <Fade visible={showUtilities}>
+          <Utilities
+            runs={scene.utilityRuns}
+            structures={scene.utilityStructures}
+            frame={frame}
+            visibleTypes={visibleUtilityTypes}
+            onSelect={onSelectUtility}
+          />
+        </Fade>
       ) : null}
 
       {/* No `target` prop — CameraRig owns the pivot so it always glides (never

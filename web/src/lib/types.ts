@@ -105,6 +105,27 @@ export interface SceneLine {
   label: string;
 }
 
+export interface SceneUtilityRun {
+  apwaColor: string;
+  diameter: number | null;
+  id: string;
+  label: string;
+  typeKey: string;
+  vertices: LatLng[];
+}
+
+export interface SceneUtilityStructure {
+  apwaColor: string;
+  easting: number;
+  id: string;
+  label: string;
+  latitude: number;
+  longitude: number;
+  northing: number;
+  rimElev: number | null;
+  typeKey: string;
+}
+
 export interface SceneData {
   controlPoints: ScenePoint[];
   gridLines: SceneLine[];
@@ -112,6 +133,8 @@ export interface SceneData {
   originProjectedE: number | null;
   originProjectedN: number | null;
   surveyPoints: ScenePoint[];
+  utilityRuns: SceneUtilityRun[];
+  utilityStructures: SceneUtilityStructure[];
 }
 
 export interface EpsgEntry {

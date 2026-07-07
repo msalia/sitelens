@@ -1,5 +1,6 @@
 'use client';
 
+import { IconX } from '@tabler/icons-react';
 import dynamic from 'next/dynamic';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -10,6 +11,7 @@ import type {
   ComparisonMarker,
   RenderableOverlay,
   TerrainData,
+  UtilityPick,
 } from '@/components/projects/terrain-viewer';
 import type { InspectablePoint, PointCategory, Project, SceneData, ScenePoint } from '@/lib/types';
 
@@ -101,6 +103,9 @@ export function SceneView({
   const [showBuildings, setShowBuildings] = useState(true);
   const [showOverlays, setShowOverlays] = useState(true);
   const [showComparison, setShowComparison] = useState(true);
+  const [showUtilities, setShowUtilities] = useState(true);
+  const [underground, setUnderground] = useState(false);
+  const [selectedUtility, setSelectedUtility] = useState<UtilityPick | null>(null);
   const [projectOnTerrain, setProjectOnTerrain] = useState(true);
   const [view, setView] = useState<CameraView>('iso');
   const [viewNonce, setViewNonce] = useState(0);
@@ -420,6 +425,9 @@ export function SceneView({
             originProjectedN={scene.originProjectedN}
             shownLayers={shownLayers}
             projectOnTerrain={projectOnTerrain}
+            showUtilities={showUtilities}
+            underground={underground}
+            onSelectUtility={setSelectedUtility}
             view={view}
             viewNonce={viewNonce}
           />
@@ -450,6 +458,11 @@ export function SceneView({
         showComparison={showComparison}
         setShowComparison={setShowComparison}
         comparisonCount={comparison?.length ?? 0}
+        showUtilities={showUtilities}
+        setShowUtilities={setShowUtilities}
+        underground={underground}
+        setUnderground={setUnderground}
+        utilitiesCount={scene ? scene.utilityRuns.length + scene.utilityStructures.length : 0}
         projectOnTerrain={projectOnTerrain}
         setProjectOnTerrain={setProjectOnTerrain}
         buildingsCount={buildings.length}
@@ -496,6 +509,30 @@ export function SceneView({
                 Done
               </button>
             ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Picked utility — a small attribute card (bottom-right). */}
+      {selectedUtility ? (
+        <div className="absolute right-3 bottom-3 z-20 max-w-xs">
+          <div className="bg-background/95 rounded-lg border p-3 text-sm shadow-lg backdrop-blur">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate font-medium">{selectedUtility.label}</div>
+                <div className="text-muted-foreground text-xs capitalize">
+                  {selectedUtility.kind} · {selectedUtility.typeKey.replace(/_/g, ' ')}
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label="Close"
+                className="text-muted-foreground hover:text-foreground"
+                onClick={() => setSelectedUtility(null)}
+              >
+                <IconX className="size-4" />
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

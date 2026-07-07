@@ -46,6 +46,29 @@ export const SCENE_QUERY = graphql(`
           height
         }
       }
+      utilityRuns {
+        id
+        typeKey
+        label
+        apwaColor
+        diameter
+        vertices {
+          latitude
+          longitude
+          height
+        }
+      }
+      utilityStructures {
+        id
+        typeKey
+        label
+        apwaColor
+        latitude
+        longitude
+        rimElev
+        easting
+        northing
+      }
     }
     projectTerrain(projectId: $id) {
       demtype

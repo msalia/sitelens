@@ -134,6 +134,78 @@ impl SceneQuery {
             }
         }
 
+        // Utilities → geographic, drawn as tubes/solids by the viewer. Projected
+        // coords go through the same rotation as points so everything lines up.
+        let to_latlng = |e: f64, n: f64, z: Option<f64>| -> Option<crate::models::LatLng> {
+            let (te, tn) = rotation.map_or((e, n), |r| r.to_true(e, n));
+            crs::projected_to_geographic(epsg, te, tn).map(|(latitude, longitude)| {
+                crate::models::LatLng {
+                    latitude,
+                    longitude,
+                    height: z.unwrap_or(0.0),
+                }
+            })
+        };
+
+        let run_rows: Vec<(Uuid, String, String, Option<f64>, String)> = sqlx::query_as(
+            "SELECT r.id, r.type_key, r.label, r.diameter, t.apwa_color \
+             FROM utility_runs r JOIN utility_types t ON t.key = r.type_key \
+             WHERE r.project_id = $1 AND r.deleted_at IS NULL ORDER BY r.created_at",
+        )
+        .bind(project_id)
+        .fetch_all(pool)
+        .await?;
+        let mut utility_runs = Vec::with_capacity(run_rows.len());
+        for (id, type_key, label, diameter, apwa_color) in run_rows {
+            let verts: Vec<(f64, f64, Option<f64>)> = sqlx::query_as(
+                "SELECT northing, easting, elevation FROM utility_vertices \
+                 WHERE run_id = $1 ORDER BY seq",
+            )
+            .bind(id)
+            .fetch_all(pool)
+            .await?;
+            let vertices: Vec<crate::models::LatLng> = verts
+                .into_iter()
+                .filter_map(|(n, e, z)| to_latlng(e, n, z))
+                .collect();
+            if vertices.len() >= 2 {
+                utility_runs.push(SceneUtilityRun {
+                    id,
+                    type_key,
+                    label,
+                    apwa_color,
+                    diameter,
+                    vertices,
+                });
+            }
+        }
+
+        let struct_rows: Vec<(Uuid, String, String, f64, f64, Option<f64>, String)> =
+            sqlx::query_as(
+                "SELECT s.id, s.type_key, s.label, s.northing, s.easting, s.rim_elev, t.apwa_color \
+                 FROM utility_structures s JOIN utility_types t ON t.key = s.type_key \
+                 WHERE s.project_id = $1 AND s.deleted_at IS NULL ORDER BY s.created_at",
+            )
+            .bind(project_id)
+            .fetch_all(pool)
+            .await?;
+        let utility_structures: Vec<SceneUtilityStructure> = struct_rows
+            .into_iter()
+            .filter_map(|(id, type_key, label, n, e, rim_elev, apwa_color)| {
+                to_latlng(e, n, rim_elev).map(|ll| SceneUtilityStructure {
+                    id,
+                    type_key,
+                    label,
+                    apwa_color,
+                    latitude: ll.latitude,
+                    longitude: ll.longitude,
+                    rim_elev,
+                    easting: e,
+                    northing: n,
+                })
+            })
+            .collect();
+
         let origin = match (lat, lon) {
             (Some(latitude), Some(longitude)) => Some(crate::models::LatLng {
                 latitude,
@@ -165,6 +237,8 @@ impl SceneQuery {
             control_points,
             survey_points,
             grid_lines,
+            utility_runs,
+            utility_structures,
         })
     }
 }

@@ -659,7 +659,7 @@ export type SceneQueryVariables = Exact<{
 }>;
 
 
-export type SceneQuery = { sceneData: { originProjectedE: number | null, originProjectedN: number | null, origin: { latitude: number, longitude: number, height: number } | null, controlPoints: Array<{ id: string | null, label: string, latitude: number, longitude: number, height: number, easting: number, northing: number, categoryId: string | null }>, surveyPoints: Array<{ id: string | null, label: string, latitude: number, longitude: number, height: number, easting: number, northing: number, categoryId: string | null }>, gridLines: Array<{ label: string, coordinates: Array<{ latitude: number, longitude: number, height: number }> }> }, projectTerrain: { demtype: string, fetchedAt: string } | null, projectBuildings: { count: number, fetchedAt: string } | null, cadOverlays: Array<{ id: string, offsetE: number, offsetN: number, rotationDeg: number, scale: number, elevation: number, visible: boolean }>, pointGroups: Array<{ id: string, name: string, memberIds: Array<string> }> };
+export type SceneQuery = { sceneData: { originProjectedE: number | null, originProjectedN: number | null, origin: { latitude: number, longitude: number, height: number } | null, controlPoints: Array<{ id: string | null, label: string, latitude: number, longitude: number, height: number, easting: number, northing: number, categoryId: string | null }>, surveyPoints: Array<{ id: string | null, label: string, latitude: number, longitude: number, height: number, easting: number, northing: number, categoryId: string | null }>, gridLines: Array<{ label: string, coordinates: Array<{ latitude: number, longitude: number, height: number }> }>, utilityRuns: Array<{ id: string, typeKey: string, label: string, apwaColor: string, diameter: number | null, vertices: Array<{ latitude: number, longitude: number, height: number }> }>, utilityStructures: Array<{ id: string, typeKey: string, label: string, apwaColor: string, latitude: number, longitude: number, rimElev: number | null, easting: number, northing: number }> }, projectTerrain: { demtype: string, fetchedAt: string } | null, projectBuildings: { count: number, fetchedAt: string } | null, cadOverlays: Array<{ id: string, offsetE: number, offsetN: number, rotationDeg: number, scale: number, elevation: number, visible: boolean }>, pointGroups: Array<{ id: string, name: string, memberIds: Array<string> }> };
 
 export type TerrainContentQueryVariables = Exact<{
   id: string;
@@ -1617,6 +1617,29 @@ export const SceneDocument = new TypedDocumentString(`
         longitude
         height
       }
+    }
+    utilityRuns {
+      id
+      typeKey
+      label
+      apwaColor
+      diameter
+      vertices {
+        latitude
+        longitude
+        height
+      }
+    }
+    utilityStructures {
+      id
+      typeKey
+      label
+      apwaColor
+      latitude
+      longitude
+      rimElev
+      easting
+      northing
     }
   }
   projectTerrain(projectId: $id) {

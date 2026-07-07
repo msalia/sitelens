@@ -30,6 +30,34 @@ pub struct SceneLine {
     pub coordinates: Vec<LatLng>,
 }
 
+/// A utility run for the 3D scene: a polyline of geographic vertices (height =
+/// invert/centerline Z, meters) drawn as a diameter-sized tube in its APWA color.
+#[derive(SimpleObject, Clone)]
+pub struct SceneUtilityRun {
+    pub id: Uuid,
+    pub type_key: String,
+    pub label: String,
+    pub apwa_color: String,
+    /// Outer diameter in meters (tube radius = diameter / 2), if known.
+    pub diameter: Option<f64>,
+    pub vertices: Vec<LatLng>,
+}
+
+/// A utility structure for the 3D scene: a node drawn as a solid at its position,
+/// with `rim_elev` (top, meters) driving its height.
+#[derive(SimpleObject, Clone)]
+pub struct SceneUtilityStructure {
+    pub id: Uuid,
+    pub type_key: String,
+    pub label: String,
+    pub apwa_color: String,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub rim_elev: Option<f64>,
+    pub easting: f64,
+    pub northing: f64,
+}
+
 /// Everything the 3D viewer needs, pre-projected to geographic coordinates.
 #[derive(SimpleObject, Default)]
 pub struct SceneData {
@@ -45,4 +73,6 @@ pub struct SceneData {
     pub control_points: Vec<ScenePoint>,
     pub survey_points: Vec<ScenePoint>,
     pub grid_lines: Vec<SceneLine>,
+    pub utility_runs: Vec<SceneUtilityRun>,
+    pub utility_structures: Vec<SceneUtilityStructure>,
 }

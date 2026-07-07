@@ -1092,6 +1092,8 @@ type SceneData {
 	controlPoints: [ScenePoint!]!
 	surveyPoints: [ScenePoint!]!
 	gridLines: [SceneLine!]!
+	utilityRuns: [SceneUtilityRun!]!
+	utilityStructures: [SceneUtilityStructure!]!
 }
 
 """
@@ -1115,6 +1117,38 @@ type ScenePoint {
 	easting: Float!
 	northing: Float!
 	categoryId: UUID
+}
+
+"""
+A utility run for the 3D scene: a polyline of geographic vertices (height =
+invert/centerline Z, meters) drawn as a diameter-sized tube in its APWA color.
+"""
+type SceneUtilityRun {
+	id: UUID!
+	typeKey: String!
+	label: String!
+	apwaColor: String!
+	"""
+	Outer diameter in meters (tube radius = diameter / 2), if known.
+	"""
+	diameter: Float
+	vertices: [LatLng!]!
+}
+
+"""
+A utility structure for the 3D scene: a node drawn as a solid at its position,
+with `rim_elev` (top, meters) driving its height.
+"""
+type SceneUtilityStructure {
+	id: UUID!
+	typeKey: String!
+	label: String!
+	apwaColor: String!
+	latitude: Float!
+	longitude: Float!
+	rimElev: Float
+	easting: Float!
+	northing: Float!
 }
 
 """

@@ -38,6 +38,11 @@ test('digitize a run and place a structure → they appear in the inventory', as
   // The run shows up in the inventory.
   await expect(page.getByText('Storm line A')).toBeVisible();
 
+  // With utilities in the scene, the Display menu offers the 3D + underground toggles.
+  await page.getByRole('button', { name: 'Display' }).click();
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Underground mode' })).toBeVisible();
+  await page.keyboard.press('Escape');
+
   // --- Structure: pick a structure type, set a position, then save. ---
   await chooseSelect(page, 'ut-type', 'Catch Basin');
   await page.getByRole('button', { name: 'New structure' }).click();

@@ -27,8 +27,8 @@ use crate::models::{
     ExportColumn, ExportFormat, ExportSpace, GridAxis, GridAxisInput, GridAxisRow, ImportBatch,
     ImportFormat, ImportProfile, ImportProfileRow, InviteResult, LoginRow, Org, OrgMember,
     OrgMemberRow, PointCategory, PointGroup, Project, ProjectBuildings, ProjectRow, ProjectTerrain,
-    PublicConfig, SceneData, SceneLine, ScenePoint, SignupResult, SurveyPoint, Transform,
-    TransformResidual, User, UserRow,
+    PublicConfig, SceneData, SceneLine, ScenePoint, SceneUtilityRun, SceneUtilityStructure,
+    SignupResult, SurveyPoint, Transform, TransformResidual, User, UserRow,
 };
 use crate::plan::{Feature, Plan};
 use crate::pubsub::ScenePubSub;

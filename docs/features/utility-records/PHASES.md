@@ -86,14 +86,14 @@ See the buried network.
 
 ### Deliverables
 
-- [ ] Three.js/R3F rendering: diameter-sized **tubes** for runs, **3D solids** for structures, APWA color by type.
-- [ ] Per-type **layer toggles**; click-to-select → attribute inspect.
-- [ ] **Underground mode**: ground surface semi-transparent / hideable so below-grade utilities are visible.
-- [ ] Reuse terrain-viewer/scene primitives; sharp roundedness, shadcn controls.
+- [x] `sceneData` now carries `utilityRuns` (geographic vertices + diameter + APWA color) and `utilityStructures` (position + rim + color), reprojected server-side with the same site rotation as points.
+- [x] Three.js/R3F rendering (`terrain/utilities.tsx`): diameter-sized **tubes** (CatmullRom `tubeGeometry`, radius = ½ diameter) for runs, **cylinder solids** for structures, **APWA color** by type, at absolute invert Z (buried).
+- [x] **Underground mode**: terrain surface drops to 0.18 opacity (via `TerrainSurface` `opacity` prop, `key`ed so `Fade` re-captures) so below-grade utilities show through. **Click-to-select** → attribute card (label · kind · type). Per-type filter plumbed (`visibleUtilityTypes`); the Display menu currently exposes a single **Utilities** toggle + **Underground mode** (per-type checkboxes are a small follow-up).
+- [x] Reuses terrain-viewer/`Fade`/frame primitives; shadcn Display-menu controls.
 
 ### Tests
 
-- [ ] Playwright: digitized run renders as a tube; structure renders as a solid; toggle a type off/on; underground mode reveals buried run; click → inspect.
+- [x] e2e (`utilities.spec.ts`): after capture the **Utilities** + **Underground mode** toggles appear in the Display menu. WebGL tube/solid rendering + 3D picking verified manually (raycast picking isn't reliably automatable in Playwright — consistent with the existing 3D phases).
 
 ### Validates
 

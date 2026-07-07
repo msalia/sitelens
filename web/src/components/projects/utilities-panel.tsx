@@ -7,7 +7,6 @@ import { toast } from 'sonner';
 import type { Project, ScenePoint } from '@/lib/types';
 
 import { ConfirmDialog } from '@/components/projects/confirm-dialog';
-import { ListRow } from '@/components/projects/list-row';
 import { ImportUtilitiesDialog } from '@/components/projects/utilities/import-dialog';
 import { Button } from '@/components/ui/button';
 import { ButtonGroup } from '@/components/ui/button-group';
@@ -29,6 +28,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { gql } from '@/lib/graphql';
 import { fromMeters, toMeters, unitName } from '@/lib/units';
 
@@ -144,18 +151,28 @@ export function UtilitiesPanel({
     tags: '',
   });
 
+  // Inventory search + type filter (server-side via the `utilities` query).
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+
   const byKey = useMemo(() => new Map(types.map((t) => [t.key, t])), [types]);
 
   const loadInventory = useCallback(async () => {
     try {
-      const { utilities } = await gql(UTILITIES, { projectId: project.id });
+      const { utilities } = await gql(UTILITIES, {
+        projectId: project.id,
+        search: debouncedSearch || null,
+        typeKey: typeFilter === 'all' ? null : typeFilter,
+      });
       setRuns(utilities.runs);
       setStructures(utilities.structures);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load utilities');
     }
-  }, [project.id]);
+  }, [project.id, debouncedSearch, typeFilter]);
 
+  // Load the type catalog once.
   useEffect(() => {
     void (async () => {
       try {
@@ -164,9 +181,20 @@ export function UtilitiesPanel({
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Failed to load utility types');
       }
-      void loadInventory();
     })();
+  }, []);
+
+  // Reload the inventory whenever the filters (or project) change.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadInventory();
   }, [loadInventory]);
+
+  // Debounce the search box → server query fires ~250ms after typing settles.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(t);
+  }, [search]);
 
   // Register the scene-marker pick sink for the active mode. Functional updates
   // keep the handler correct without re-subscribing on every capture.
@@ -369,7 +397,7 @@ export function UtilitiesPanel({
                 </SelectContent>
               </Select>
             </Field>
-            <ButtonGroup>
+            <ButtonGroup className="w-full [&>*]:flex-1">
               <Button
                 type="button"
                 variant="outline"
@@ -386,11 +414,13 @@ export function UtilitiesPanel({
               >
                 <IconPlus className="size-4" /> New structure
               </Button>
+              <ImportUtilitiesDialog
+                project={project}
+                types={types}
+                onImported={loadInventory}
+                className="flex-1"
+              />
             </ButtonGroup>
-            <div className="text-muted-foreground flex items-center gap-2 text-xs">
-              <span>or bring in existing linework</span>
-              <ImportUtilitiesDialog project={project} types={types} onImported={loadInventory} />
-            </div>
           </CardContent>
         </Card>
       ) : null}
@@ -430,94 +460,137 @@ export function UtilitiesPanel({
           <CardTitle className="text-sm">
             Inventory
             <span className="text-muted-foreground ml-2 font-normal">
-              {runs.length} run{runs.length === 1 ? '' : 's'} · {structures.length} structure
-              {structures.length === 1 ? '' : 's'}
+              {runs.length + structures.length} item{runs.length + structures.length === 1 ? '' : 's'}
             </span>
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-1.5">
-          {runs.length === 0 && structures.length === 0 ? (
-            <p className="text-muted-foreground text-xs">No utilities captured yet.</p>
-          ) : null}
-          {runs.map((r) => (
-            <InventoryRow
-              key={r.id}
-              color={byKey.get(r.typeKey)?.apwaColor}
-              title={r.label}
-              subtitle={[
-                byKey.get(r.typeKey)?.label ?? r.typeKey,
-                `${r.vertices.length} pts`,
-                r.length !== null ? `${fromMeters(r.length, unit).toFixed(2)} ${unitName(unit)}` : null,
-                r.diameter !== null ? `Ø ${(r.diameter / 0.0254).toFixed(1)}"` : null,
-                ...r.tags,
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-              onDelete={() => removeRun(r.id)}
-              kind="run"
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex gap-2">
+            <Input
+              placeholder="Search label or tag…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
             />
-          ))}
-          {structures.map((s) => (
-            <InventoryRow
-              key={s.id}
-              color={byKey.get(s.typeKey)?.apwaColor}
-              title={s.label}
-              subtitle={[
-                byKey.get(s.typeKey)?.label ?? s.typeKey,
-                'structure',
-                s.rimElev !== null
-                  ? `rim ${fromMeters(s.rimElev, unit).toFixed(2)} ${unitName(unit)}`
-                  : null,
-                ...s.tags,
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-              onDelete={() => removeStructure(s.id)}
-              kind="structure"
-            />
-          ))}
+            <Select value={typeFilter} onValueChange={(v) => v && setTypeFilter(v)}>
+              <SelectTrigger className="w-44 shrink-0">
+                <SelectValue placeholder="All types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectLabel>Filter by type</SelectLabel>
+                  <SelectItem value="all">All types</SelectItem>
+                  {types.map((t) => (
+                    <SelectItem key={t.key} value={t.key}>
+                      <span
+                        className="mr-1 inline-block size-2.5 rounded-full align-middle"
+                        style={{ backgroundColor: t.apwaColor }}
+                      />
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="-mx-(--card-spacing) -mb-(--card-spacing) border-t">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted">
+                  <TableHead className="pl-(--card-spacing)">Type</TableHead>
+                  <TableHead>Item</TableHead>
+                  <TableHead className="w-10 pr-(--card-spacing)" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {[
+                  ...runs.map((r) => ({
+                    detail: [
+                      'Run',
+                      `${r.vertices.length} pts`,
+                      r.length !== null
+                        ? `${fromMeters(r.length, unit).toFixed(2)} ${unitName(unit)}`
+                        : null,
+                      r.diameter !== null ? `Ø ${(r.diameter / 0.0254).toFixed(1)}"` : null,
+                      ...r.tags,
+                    ]
+                      .filter(Boolean)
+                      .join(' · '),
+                    id: r.id,
+                    kind: 'run' as const,
+                    label: r.label,
+                    onDelete: () => removeRun(r.id),
+                    typeKey: r.typeKey,
+                  })),
+                  ...structures.map((s) => ({
+                    detail: [
+                      'Structure',
+                      s.rimElev !== null
+                        ? `rim ${fromMeters(s.rimElev, unit).toFixed(2)} ${unitName(unit)}`
+                        : null,
+                      ...s.tags,
+                    ]
+                      .filter(Boolean)
+                      .join(' · '),
+                    id: s.id,
+                    kind: 'structure' as const,
+                    label: s.label,
+                    onDelete: () => removeStructure(s.id),
+                    typeKey: s.typeKey,
+                  })),
+                ].map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell className="pl-(--card-spacing) align-top">
+                      <span className="inline-flex items-center gap-1.5 text-sm whitespace-nowrap">
+                        <span
+                          className="size-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: byKey.get(row.typeKey)?.apwaColor ?? '#94a3b8' }}
+                        />
+                        {byKey.get(row.typeKey)?.label ?? row.typeKey}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm font-medium">{row.label}</div>
+                      <div className="text-muted-foreground max-w-64 truncate text-xs">
+                        {row.detail}
+                      </div>
+                    </TableCell>
+                    <TableCell className="pr-(--card-spacing) align-top">
+                      <ConfirmDialog
+                        title={`Delete this ${row.kind}?`}
+                        description="This removes it from the inventory. The audit trail is preserved."
+                        onConfirm={row.onDelete}
+                        trigger={
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Delete ${row.label}`}
+                          >
+                            <IconTrash className="size-4" />
+                          </Button>
+                        }
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {runs.length + structures.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={3}
+                      className="text-muted-foreground py-6 text-center text-sm"
+                    >
+                      {debouncedSearch || typeFilter !== 'all'
+                        ? 'No utilities match the filter.'
+                        : 'No utilities captured yet.'}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-function InventoryRow({
-  color,
-  kind,
-  onDelete,
-  subtitle,
-  title,
-}: {
-  color?: string;
-  title: string;
-  subtitle: string;
-  kind: 'run' | 'structure';
-  onDelete: () => void;
-}) {
-  return (
-    <ListRow
-      leading={
-        <span
-          className="inline-block size-2.5 rounded-full"
-          style={{ backgroundColor: color ?? '#94a3b8' }}
-        />
-      }
-      title={title}
-      subtitle={subtitle}
-      actions={
-        <ConfirmDialog
-          title={`Delete this ${kind}?`}
-          description="This removes it from the inventory. The audit trail is preserved."
-          onConfirm={onDelete}
-          trigger={
-            <Button type="button" variant="ghost" size="icon-sm" aria-label={`Delete ${title}`}>
-              <IconTrash className="size-4" />
-            </Button>
-          }
-        />
-      }
-    />
   );
 }
 

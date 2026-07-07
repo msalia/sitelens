@@ -56,6 +56,8 @@ export function SceneToolbar({
   setShowOverlays,
   setShowPins,
   setShowTerrain,
+  setShowUtilities,
+  setUnderground,
   showBuildings,
   showComparison,
   showGrid,
@@ -63,8 +65,11 @@ export function SceneToolbar({
   showOverlays,
   showPins,
   showTerrain,
+  showUtilities,
   siteDisabled,
   siteReason,
+  underground,
+  utilitiesCount,
 }: {
   hasScene: boolean;
   categories: PointCategory[];
@@ -89,6 +94,11 @@ export function SceneToolbar({
   showComparison: boolean;
   setShowComparison: (v: boolean) => void;
   comparisonCount: number;
+  showUtilities: boolean;
+  setShowUtilities: (v: boolean) => void;
+  underground: boolean;
+  setUnderground: (v: boolean) => void;
+  utilitiesCount: number;
   projectOnTerrain: boolean;
   setProjectOnTerrain: (v: boolean) => void;
   buildingsCount: number;
@@ -321,6 +331,22 @@ export function SceneToolbar({
                 >
                   As-built comparison
                 </DropdownMenuCheckboxItem>
+              ) : null}
+              {utilitiesCount > 0 ? (
+                <>
+                  <DropdownMenuCheckboxItem
+                    checked={showUtilities}
+                    onCheckedChange={(v) => setShowUtilities(Boolean(v))}
+                  >
+                    Utilities
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                    checked={underground}
+                    onCheckedChange={(v) => setUnderground(Boolean(v))}
+                  >
+                    Underground mode
+                  </DropdownMenuCheckboxItem>
+                </>
               ) : null}
             </DropdownMenuGroup>
           </DropdownMenuContent>

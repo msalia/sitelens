@@ -48,16 +48,21 @@ function applyMorph(
 export function TerrainSurface({
   color,
   geometry,
+  opacity = 1,
   relief,
 }: {
   geometry: THREE.BufferGeometry;
   color: string;
   /** Target shape: true → full DEM relief, false → flat plane. */
   relief: boolean;
+  /** Steady-state opacity — underground mode drops it so buried utilities show
+   *  through. `key`ed onto the material so `Fade` re-captures the new base. */
+  opacity?: number;
 }) {
   const baseY = useRef<Float32Array | null>(null);
   const baseN = useRef<Float32Array | null>(null);
   const factor = useRef(relief ? 1 : 0);
+  const matRef = useRef<THREE.MeshStandardMaterial | null>(null);
 
   // Snapshot the pristine heights/normals and apply the initial factor the moment
   // the mesh attaches (ref callbacks run pre-paint) — so terrain that loads while
@@ -83,10 +88,20 @@ export function TerrainSurface({
     }
     baseY.current = by;
     baseN.current = bn;
+    matRef.current = mesh.material as THREE.MeshStandardMaterial;
     applyMorph(geo, by, bn, factor.current);
   }, []);
 
   useFrame((_, dt) => {
+    // Ease the terrain opacity toward its target (underground mode). Owned here,
+    // not via a material `key` (which would snap); `Fade` only writes opacity
+    // during show/hide transitions, so at rest this lerp controls it.
+    const m = matRef.current;
+    if (m && Math.abs(m.opacity - opacity) > 0.002) {
+      m.transparent = true;
+      m.opacity = expEase(m.opacity, opacity, dt, 6);
+    }
+
     const target = relief ? 1 : 0;
     if (factor.current === target || !baseY.current || !baseN.current) {
       return;
@@ -100,6 +115,8 @@ export function TerrainSurface({
 
   return (
     <mesh ref={setMesh} geometry={geometry}>
+      {/* No declarative `opacity` — binding it would snap on change; the
+          useFrame lerp above eases material.opacity toward the target instead. */}
       <meshStandardMaterial
         color={color}
         vertexColors
