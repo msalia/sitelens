@@ -48,8 +48,16 @@ export const SITE_PROJECTED = graphql(`
 `);
 
 export const OVERLAY_DXF = graphql(`
-  query CadOverlayDxf($id: UUID!) {
-    cadOverlayContent(id: $id)
+  query CadOverlayGeom($id: UUID!) {
+    cadOverlayGeometry(id: $id) {
+      polylines {
+        layer
+        points {
+          x
+          y
+        }
+      }
+    }
   }
 `);
 

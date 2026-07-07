@@ -84,9 +84,18 @@ export const BUILDINGS_CONTENT = graphql(`
   }
 `);
 
-export const OVERLAY_CONTENT = graphql(`
-  query OverlayContent($id: UUID!) {
-    cadOverlayContent(id: $id)
+export const OVERLAY_GEOMETRY = graphql(`
+  query OverlayGeometry($id: UUID!) {
+    cadOverlayGeometry(id: $id) {
+      layers
+      polylines {
+        layer
+        points {
+          x
+          y
+        }
+      }
+    }
   }
 `);
 

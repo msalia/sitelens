@@ -4,6 +4,7 @@ pub mod billing;
 pub mod convert;
 pub mod crs;
 pub mod db;
+pub mod dxf;
 pub mod export;
 pub mod field;
 pub mod geo;

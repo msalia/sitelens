@@ -338,12 +338,12 @@ export type SiteProjectedQueryVariables = Exact<{
 
 export type SiteProjectedQuery = { convertCoordinate: { projectedGridE: number | null, projectedGridN: number | null } };
 
-export type CadOverlayDxfQueryVariables = Exact<{
+export type CadOverlayGeomQueryVariables = Exact<{
   id: string;
 }>;
 
 
-export type CadOverlayDxfQuery = { cadOverlayContent: string };
+export type CadOverlayGeomQuery = { cadOverlayGeometry: { polylines: Array<{ layer: string, points: Array<{ x: number, y: number }> }> } };
 
 export type OverlayScenePointsQueryVariables = Exact<{
   id: string;
@@ -667,12 +667,12 @@ export type BuildingsContentQueryVariables = Exact<{
 
 export type BuildingsContentQuery = { projectBuildingsContent: string };
 
-export type OverlayContentQueryVariables = Exact<{
+export type OverlayGeometryQueryVariables = Exact<{
   id: string;
 }>;
 
 
-export type OverlayContentQuery = { cadOverlayContent: string };
+export type OverlayGeometryQuery = { cadOverlayGeometry: { layers: Array<string>, polylines: Array<{ layer: string, points: Array<{ x: number, y: number }> }> } };
 
 export type RefreshTerrainMutationVariables = Exact<{
   id: string;
@@ -1154,11 +1154,19 @@ export const SiteProjectedDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SiteProjectedQuery, SiteProjectedQueryVariables>;
-export const CadOverlayDxfDocument = new TypedDocumentString(`
-    query CadOverlayDxf($id: UUID!) {
-  cadOverlayContent(id: $id)
+export const CadOverlayGeomDocument = new TypedDocumentString(`
+    query CadOverlayGeom($id: UUID!) {
+  cadOverlayGeometry(id: $id) {
+    polylines {
+      layer
+      points {
+        x
+        y
+      }
+    }
+  }
 }
-    `) as unknown as TypedDocumentString<CadOverlayDxfQuery, CadOverlayDxfQueryVariables>;
+    `) as unknown as TypedDocumentString<CadOverlayGeomQuery, CadOverlayGeomQueryVariables>;
 export const OverlayScenePointsDocument = new TypedDocumentString(`
     query OverlayScenePoints($id: UUID!) {
   sceneData(projectId: $id) {
@@ -1615,11 +1623,20 @@ export const BuildingsContentDocument = new TypedDocumentString(`
   projectBuildingsContent(projectId: $id)
 }
     `) as unknown as TypedDocumentString<BuildingsContentQuery, BuildingsContentQueryVariables>;
-export const OverlayContentDocument = new TypedDocumentString(`
-    query OverlayContent($id: UUID!) {
-  cadOverlayContent(id: $id)
+export const OverlayGeometryDocument = new TypedDocumentString(`
+    query OverlayGeometry($id: UUID!) {
+  cadOverlayGeometry(id: $id) {
+    layers
+    polylines {
+      layer
+      points {
+        x
+        y
+      }
+    }
+  }
 }
-    `) as unknown as TypedDocumentString<OverlayContentQuery, OverlayContentQueryVariables>;
+    `) as unknown as TypedDocumentString<OverlayGeometryQuery, OverlayGeometryQueryVariables>;
 export const RefreshTerrainDocument = new TypedDocumentString(`
     mutation RefreshTerrain($id: UUID!, $south: Float!, $north: Float!, $west: Float!, $east: Float!, $force: Boolean) {
   refreshTerrain(

@@ -1,6 +1,27 @@
 #![allow(clippy::too_many_arguments)]
 use super::*;
 
+/// A 2D point in DXF drawing units.
+#[derive(async_graphql::SimpleObject)]
+pub struct DxfPoint {
+    pub x: f64,
+    pub y: f64,
+}
+
+/// A layer-grouped polyline of a parsed DXF overlay.
+#[derive(async_graphql::SimpleObject)]
+pub struct DxfPolylineGql {
+    pub layer: String,
+    pub points: Vec<DxfPoint>,
+}
+
+/// Server-parsed geometry of a DXF overlay (replaces client-side parsing).
+#[derive(async_graphql::SimpleObject)]
+pub struct DxfGeometry {
+    pub layers: Vec<String>,
+    pub polylines: Vec<DxfPolylineGql>,
+}
+
 #[derive(Default)]
 pub struct OverlayQuery;
 
@@ -28,7 +49,7 @@ impl OverlayQuery {
         Ok(rows)
     }
 
-    /// The raw DXF text of an overlay (for client-side parsing/rendering).
+    /// The raw DXF text of an overlay (kept for export / debugging).
     async fn cad_overlay_content(&self, ctx: &Context<'_>, id: Uuid) -> Result<String> {
         let auth = require_auth(ctx)?;
         require_feature(ctx, Feature::DxfOverlays).await?;
@@ -37,6 +58,36 @@ impl OverlayQuery {
         let bytes = storage.get(&key).await.map_err(async_graphql::Error::new)?;
         String::from_utf8(bytes)
             .map_err(|_| async_graphql::Error::new("overlay is not valid UTF-8"))
+    }
+
+    /// The overlay parsed into layer-grouped polylines (server-side DXF codec),
+    /// for the 3D scene to render without shipping a DXF parser to the browser.
+    async fn cad_overlay_geometry(&self, ctx: &Context<'_>, id: Uuid) -> Result<DxfGeometry> {
+        let auth = require_auth(ctx)?;
+        require_feature(ctx, Feature::DxfOverlays).await?;
+        let key = overlay_key_in_org(pool(ctx)?, id, auth.org_id).await?;
+        let bytes = storage(ctx)?
+            .get(&key)
+            .await
+            .map_err(async_graphql::Error::new)?;
+        let text = String::from_utf8(bytes)
+            .map_err(|_| async_graphql::Error::new("overlay is not UTF-8"))?;
+        let parsed = crate::dxf::parse(&text).map_err(async_graphql::Error::new)?;
+        Ok(DxfGeometry {
+            layers: parsed.layers,
+            polylines: parsed
+                .polylines
+                .into_iter()
+                .map(|pl| DxfPolylineGql {
+                    layer: pl.layer,
+                    points: pl
+                        .points
+                        .into_iter()
+                        .map(|(x, y)| DxfPoint { x, y })
+                        .collect(),
+                })
+                .collect(),
+        })
     }
 }
 

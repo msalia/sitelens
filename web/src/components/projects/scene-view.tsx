@@ -18,14 +18,13 @@ import { CameraControl } from '@/components/projects/scene-view/camera-control';
 import { SceneStats } from '@/components/projects/scene-view/scene-stats';
 import { SceneToolbar } from '@/components/projects/scene-view/scene-toolbar';
 import { Card } from '@/components/ui/card';
-import { parseDxf } from '@/lib/dxf';
 import { gql } from '@/lib/graphql';
 import { subscribeProjectChanged } from '@/lib/scene-subscription';
 
 import {
   BUILDINGS_CONTENT,
   FRESH_MS,
-  OVERLAY_CONTENT,
+  OVERLAY_GEOMETRY,
   REFRESH_BUILDINGS,
   REFRESH_TERRAIN,
   SCENE_QUERY,
@@ -188,15 +187,14 @@ export function SceneView({
       const parsed = await Promise.all(
         visible.map(async (o): Promise<RenderableOverlay | null> => {
           try {
-            const { cadOverlayContent } = await gql(OVERLAY_CONTENT, { id: o.id });
-            const dxf = parseDxf(cadOverlayContent);
-            dxf.layers.forEach((l) => layers.add(l));
+            const { cadOverlayGeometry } = await gql(OVERLAY_GEOMETRY, { id: o.id });
+            cadOverlayGeometry.layers.forEach((l) => layers.add(l));
             return {
               elevation: o.elevation,
               id: o.id,
               offsetE: o.offsetE,
               offsetN: o.offsetN,
-              polylines: dxf.polylines,
+              polylines: cadOverlayGeometry.polylines,
               rotationDeg: o.rotationDeg,
               scale: o.scale,
             };

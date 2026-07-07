@@ -236,6 +236,30 @@ type DetectedFormat {
 }
 
 """
+Server-parsed geometry of a DXF overlay (replaces client-side parsing).
+"""
+type DxfGeometry {
+	layers: [String!]!
+	polylines: [DxfPolylineGql!]!
+}
+
+"""
+A 2D point in DXF drawing units.
+"""
+type DxfPoint {
+	x: Float!
+	y: Float!
+}
+
+"""
+A layer-grouped polyline of a parsed DXF overlay.
+"""
+type DxfPolylineGql {
+	layer: String!
+	points: [DxfPoint!]!
+}
+
+"""
 An EPSG coordinate-reference-system entry for the picker.
 """
 type EpsgEntry {
@@ -925,9 +949,14 @@ type QueryRoot {
 	"""
 	cadOverlays(projectId: UUID!): [CadOverlay!]!
 	"""
-	The raw DXF text of an overlay (for client-side parsing/rendering).
+	The raw DXF text of an overlay (kept for export / debugging).
 	"""
 	cadOverlayContent(id: UUID!): String!
+	"""
+	The overlay parsed into layer-grouped polylines (server-side DXF codec),
+	for the 3D scene to render without shipping a DXF parser to the browser.
+	"""
+	cadOverlayGeometry(id: UUID!): DxfGeometry!
 	"""
 	Cached OpenTopography terrain metadata for a project (null until first
 	fetched). Drives the "Refresh terrain" 7-day cooldown on the client.

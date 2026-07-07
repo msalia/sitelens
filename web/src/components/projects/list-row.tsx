@@ -3,7 +3,22 @@
 import { IconChevronRight } from '@tabler/icons-react';
 import { type ComponentPropsWithoutRef, forwardRef, type ReactNode } from 'react';
 
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+
+/** A truncating line that reveals its full text in a shadcn tooltip on hover
+ *  (only when the content is a plain string we can echo). */
+function TruncText({ className, text }: { className: string; text: ReactNode }) {
+  if (typeof text !== 'string') {
+    return <span className={className}>{text}</span>;
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className={className} />}>{text}</TooltipTrigger>
+      <TooltipContent>{text}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 /** Shared visual for the panel list rows (Manage Points actions, utility
  *  inventory, field comparisons) so they read as one consistent component.
@@ -27,25 +42,14 @@ interface RowContent {
 }
 
 function RowBody({ hint, leading, meta, subtitle, title }: RowContent) {
-  // Native tooltip on the truncating lines: the browser shows the `title`
-  // attribute on hover, revealing text that's been clipped by `truncate`.
+  // Truncating lines reveal their full text in a shadcn tooltip on hover.
   return (
     <>
       {leading ? <span className="text-muted-foreground shrink-0">{leading}</span> : null}
       <span className="min-w-0 flex-1">
-        <span
-          className="block truncate font-medium"
-          title={typeof title === 'string' ? title : undefined}
-        >
-          {title}
-        </span>
+        <TruncText className="block truncate font-medium" text={title} />
         {subtitle ? (
-          <span
-            className="text-muted-foreground block truncate text-sm"
-            title={typeof subtitle === 'string' ? subtitle : undefined}
-          >
-            {subtitle}
-          </span>
+          <TruncText className="text-muted-foreground block truncate text-sm" text={subtitle} />
         ) : null}
         {meta}
       </span>

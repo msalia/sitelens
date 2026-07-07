@@ -21,7 +21,7 @@ import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import { Field, FieldContent, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { dxfExtent, parseDxf } from '@/lib/dxf';
+import { dxfExtent } from '@/lib/dxf';
 import { gql } from '@/lib/graphql';
 
 import {
@@ -115,7 +115,7 @@ export function OverlayRow({
       // far from the floor plan doesn't skew the span. The viewer rotates/scales
       // the overlay about this same center, with the offset placing that center
       // directly — so auto-place just sets the offset to the target.
-      const polylines = parseDxf(dxf.cadOverlayContent).polylines;
+      const polylines = dxf.cadOverlayGeometry.polylines;
       if (polylines.length === 0) {
         toast.error('The DXF has no geometry to place.');
         return;
