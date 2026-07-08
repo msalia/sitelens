@@ -14,6 +14,7 @@ mod overlays;
 mod points;
 mod projects;
 mod scene;
+mod surface;
 mod tenancy;
 mod utilities;
 mod webhooks;

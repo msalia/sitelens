@@ -37,6 +37,7 @@ rand = "0.8"
 async-trait = "0.1"
 async-stream = "0.3"
 nalgebra = "0.33"
+spade = "2"
 proj4rs = "0.1"
 crs-definitions = { version = "0.3", features = ["proj4", "wkt"] }
 csv = "1"

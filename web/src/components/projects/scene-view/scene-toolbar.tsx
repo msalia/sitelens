@@ -10,6 +10,8 @@ import {
 } from '@tabler/icons-react';
 import { type Dispatch, type SetStateAction } from 'react';
 
+import type { SurfaceMode } from '@/components/projects/terrain/surface-mesh';
+
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -39,6 +41,7 @@ export function SceneToolbar({
   groups,
   hasScene,
   hasSiteData,
+  hasSurface,
   hidden,
   onRefreshSite,
   onReload,
@@ -55,8 +58,10 @@ export function SceneToolbar({
   setShownLayers,
   setShowOverlays,
   setShowPins,
+  setShowSurface,
   setShowTerrain,
   setShowUtilities,
+  setSurfaceMode,
   setUnderground,
   showBuildings,
   showComparison,
@@ -64,10 +69,12 @@ export function SceneToolbar({
   shownLayers,
   showOverlays,
   showPins,
+  showSurface,
   showTerrain,
   showUtilities,
   siteDisabled,
   siteReason,
+  surfaceMode,
   underground,
   utilitiesCount,
 }: {
@@ -96,6 +103,11 @@ export function SceneToolbar({
   comparisonCount: number;
   showUtilities: boolean;
   setShowUtilities: (v: boolean) => void;
+  hasSurface: boolean;
+  showSurface: boolean;
+  setShowSurface: (v: boolean) => void;
+  surfaceMode: SurfaceMode;
+  setSurfaceMode: (v: SurfaceMode) => void;
   underground: boolean;
   setUnderground: (v: boolean) => void;
   utilitiesCount: number;
@@ -331,6 +343,26 @@ export function SceneToolbar({
                 >
                   As-built comparison
                 </DropdownMenuCheckboxItem>
+              ) : null}
+              {hasSurface ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuCheckboxItem
+                    checked={showSurface}
+                    onCheckedChange={(v) => setShowSurface(Boolean(v))}
+                  >
+                    Surface
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuLabel>Surface shading</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup
+                    value={surfaceMode}
+                    onValueChange={(v) => setSurfaceMode(v as SurfaceMode)}
+                  >
+                    <DropdownMenuRadioItem value="ramp">Elevation ramp</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="wireframe">Wireframe</DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                  <DropdownMenuSeparator />
+                </>
               ) : null}
               {utilitiesCount > 0 ? (
                 <>

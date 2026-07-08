@@ -13,6 +13,7 @@ import type {
   TerrainData,
   UtilityPick,
 } from '@/components/projects/terrain-viewer';
+import type { SurfaceMode } from '@/components/projects/terrain/surface-mesh';
 import type { InspectablePoint, PointCategory, Project, SceneData, ScenePoint } from '@/lib/types';
 
 import { CoordinateInspectorDialog } from '@/components/projects/coordinate-inspector-dialog';
@@ -34,6 +35,7 @@ import {
   SPAM_COOLDOWN_MS,
   TERRAIN_CONTENT,
 } from './scene-view-data';
+import { SURFACE_MESH } from './surfaces-data';
 
 // The WebGL viewer is browser-only; load it lazily and never on the server.
 const TerrainViewer = dynamic(
@@ -45,6 +47,7 @@ const TerrainViewer = dynamic(
 );
 
 export function SceneView({
+  activeSurfaceId,
   categories,
   comparison,
   digitizing,
@@ -54,8 +57,13 @@ export function SceneView({
   project,
   reloadNonce,
   stats,
+  surfaceReload,
 }: {
   project: Project;
+  /** The surface whose TIN mesh is rendered (from the Surfaces panel). */
+  activeSurfaceId?: string | null;
+  /** Bumped by the Surfaces panel after a build/rebuild to refetch the mesh. */
+  surfaceReload?: number;
   categories: PointCategory[];
   /** As-built QC comparison markers to overlay (from the Field panel). */
   comparison?: ComparisonMarker[] | null;
@@ -104,6 +112,9 @@ export function SceneView({
   const [showOverlays, setShowOverlays] = useState(true);
   const [showComparison, setShowComparison] = useState(true);
   const [showUtilities, setShowUtilities] = useState(true);
+  const [showSurface, setShowSurface] = useState(true);
+  const [surfaceMode, setSurfaceMode] = useState<SurfaceMode>('ramp');
+  const [surface, setSurface] = useState<{ contentBase64: string } | null>(null);
   const [underground, setUnderground] = useState(false);
   const [selectedUtility, setSelectedUtility] = useState<UtilityPick | null>(null);
   const [projectOnTerrain, setProjectOnTerrain] = useState(true);
@@ -151,6 +162,27 @@ export function SceneView({
       nonce: focus.nonce,
     };
   }, [focus, scene]);
+
+  // Loads the active surface's TIN mesh blob (null when none is selected). Bumped
+  // via `surfaceReload` after a build/rebuild so a same-id rebuild re-fetches.
+  const loadSurfaceMesh = useCallback(async () => {
+    if (!activeSurfaceId) {
+      setSurface(null);
+      return;
+    }
+    try {
+      const { surfaceMesh } = await gql(SURFACE_MESH, { id: activeSurfaceId });
+      setSurface({ contentBase64: surfaceMesh.contentBase64 });
+    } catch {
+      setSurface(null);
+    }
+  }, [activeSurfaceId]);
+
+  // Fetching the mesh when the active surface (or reload nonce) changes.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadSurfaceMesh();
+  }, [loadSurfaceMesh, surfaceReload]);
 
   // Loads the cached DEM bytes (no-op if there's no terrain row yet).
   const loadTerrainContent = useCallback(async () => {
@@ -406,6 +438,9 @@ export function SceneView({
         <div className="absolute inset-0">
           <TerrainViewer
             scene={scene}
+            surface={surface}
+            showSurface={showSurface}
+            surfaceMode={surfaceMode}
             terrain={terrain}
             buildings={buildings}
             showBuildings={showBuildings}
@@ -460,6 +495,11 @@ export function SceneView({
         comparisonCount={comparison?.length ?? 0}
         showUtilities={showUtilities}
         setShowUtilities={setShowUtilities}
+        hasSurface={!!surface}
+        showSurface={showSurface}
+        setShowSurface={setShowSurface}
+        surfaceMode={surfaceMode}
+        setSurfaceMode={setSurfaceMode}
         underground={underground}
         setUnderground={setUnderground}
         utilitiesCount={scene ? scene.utilityRuns.length + scene.utilityStructures.length : 0}

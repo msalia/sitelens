@@ -674,6 +674,18 @@ type MutationRoot {
 	"""
 	importUtilities(projectId: UUID!, format: String!, contentBase64: String!, mappings: [UtilityLayerMapping!]!, space: String!, unit: LengthUnit!, source: String): UtilityImportResult!
 	"""
+	Builds a new TIN surface from selected survey points.
+	"""
+	buildSurface(projectId: UUID!, input: SurfaceInput!): Surface!
+	"""
+	Rebuilds an existing surface from (possibly new) inputs → next version.
+	"""
+	rebuildSurface(id: UUID!, input: SurfaceInput!): Surface!
+	"""
+	Deletes a surface and its mesh blob.
+	"""
+	deleteSurface(id: UUID!): Boolean!
+	"""
 	Starts a hosted Stripe Checkout for the Crew plan; returns the redirect URL
 	the client sends the browser to. Admin-only.
 	"""
@@ -788,6 +800,15 @@ type PointGroup {
 	projectId: UUID!
 	name: String!
 	memberIds: [UUID!]!
+}
+
+"""
+Which survey points seed the TIN. Mirrors [`crate::models::BaselineScope`].
+"""
+enum PointScope {
+	ALL
+	CATEGORY
+	GROUP
 }
 
 """
@@ -1066,6 +1087,18 @@ type QueryRoot {
 	"""
 	exportUtilities(projectId: UUID!, format: String!, typeKey: String, search: String): FileBlob!
 	"""
+	Every surface in a project (newest first).
+	"""
+	surfaces(projectId: UUID!): [Surface!]!
+	"""
+	A single surface by id (org-scoped).
+	"""
+	surface(id: UUID!): Surface!
+	"""
+	The computed render mesh (STIN binary blob, base64-encoded).
+	"""
+	surfaceMesh(id: UUID!): FileBlob!
+	"""
 	The caller org's plan, subscription status, usage, and limits.
 	"""
 	billing: BillingInfo!
@@ -1196,6 +1229,78 @@ type SubscriptionRoot {
 	WebSocket upgrade; only members of the project's organization may subscribe.
 	"""
 	projectChanged(projectId: UUID!): UUID!
+}
+
+"""
+A named, versioned surface. The computed mesh blob (positions + indices) lives
+in Storage under `storage_key` (deliberately unexposed); the client fetches it
+via `surfaceMesh`.
+"""
+type Surface {
+	id: UUID!
+	projectId: UUID!
+	name: String!
+	version: Int!
+	kind: SurfaceKind!
+	status: SurfaceStatus!
+	failureReason: String
+	"""
+	The build-input snapshot, as a JSON object string.
+	"""
+	inputs: String!
+	vertexCount: Int!
+	triangleCount: Int!
+	createdAt: DateTime!
+}
+
+"""
+Parameters for building/rebuilding a TIN surface. Point selection is a scope
+(all / one category / one group) minus explicit exclusions. `max_edge_length`
+is accepted now but only applied once constrained triangulation lands.
+"""
+input SurfaceInput {
+	name: String!
+	scope: PointScope! = ALL
+	"""
+	Category id (scope = Category) or group id (scope = Group).
+	"""
+	scopeRef: UUID
+	"""
+	Exclude points in any of these categories.
+	"""
+	excludeCategoryIds: [UUID!]! = []
+	"""
+	Exclude points bearing any of these tags.
+	"""
+	excludeTags: [String!]! = []
+	"""
+	Exclude these specific points.
+	"""
+	excludePointIds: [UUID!]! = []
+	"""
+	Optional max triangle edge length (meters); reserved for later phases.
+	"""
+	maxEdgeLength: Float
+}
+
+"""
+A surface source: a point-built triangulated network, or an uploaded DEM grid.
+Phase 1 only builds `Tin`.
+"""
+enum SurfaceKind {
+	TIN
+	DEM
+}
+
+"""
+Build lifecycle. Triangulation runs synchronously (inside the mutation), so a
+returned surface is already `Ready` or `Failed`; `Building` exists for
+forward-compat with the larger DEM surfaces in a later phase.
+"""
+enum SurfaceStatus {
+	BUILDING
+	READY
+	FAILED
 }
 
 """

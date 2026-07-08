@@ -31,6 +31,12 @@ import {
   useBounds,
   useMarkers,
 } from './terrain-objects';
+import {
+  buildSurfaceGeometry,
+  type SurfaceGeometry,
+  SurfaceMesh,
+  type SurfaceMode,
+} from './terrain/surface-mesh';
 import { Utilities, type UtilityPick } from './terrain/utilities';
 import { silenceThreeClockWarning } from './three-clock-warning';
 
@@ -85,10 +91,16 @@ export interface TerrainViewerProps {
   showOverlays?: boolean;
   /** Whether to show the point pins (control + survey markers). */
   showPins?: boolean;
+  /** Whether to render the TIN surface mesh. */
+  showSurface?: boolean;
   /** Whether to render the terrain mesh. */
   showTerrain?: boolean;
   /** Whether to draw the buried utility runs + structures. */
   showUtilities?: boolean;
+  /** Active surface's STIN mesh blob (base64), or null when none is selected. */
+  surface?: { contentBase64: string } | null;
+  /** How to shade the TIN surface: elevation ramp or QC wireframe. */
+  surfaceMode?: SurfaceMode;
   terrain?: TerrainData | null;
   /** Underground mode: fade the terrain so buried utilities show through. */
   underground?: boolean;
@@ -122,8 +134,11 @@ export function TerrainViewer(props: TerrainViewerProps) {
     shownLayers,
     showOverlays = true,
     showPins = true,
+    showSurface = true,
     showTerrain = true,
     showUtilities = true,
+    surface,
+    surfaceMode = 'ramp',
     terrain,
     underground = false,
     view = 'iso',
@@ -184,6 +199,28 @@ export function TerrainViewer(props: TerrainViewerProps) {
 
   // Dispose the final geometry when the viewer unmounts / is replaced.
   useEffect(() => () => terrainMesh?.geometry.dispose(), [terrainMesh]);
+
+  // Build the TIN surface geometry from the server's STIN blob. Same swap-in-
+  // place discipline as the terrain mesh: keep the old geometry until the new one
+  // is ready (no flicker on rebuild), dispose the superseded one via cleanup.
+  const [surfaceGeom, setSurfaceGeom] = useState<SurfaceGeometry | null>(null);
+  useEffect(() => {
+    if (!surface?.contentBase64) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSurfaceGeom(null);
+      return;
+    }
+    try {
+      const built = buildSurfaceGeometry(base64ToArrayBuffer(surface.contentBase64), frame);
+       
+      setSurfaceGeom(built);
+    } catch {
+      /* a bad blob just renders nothing */
+    }
+  }, [surface?.contentBase64, frame]);
+
+  // Dispose the surface geometry when it's replaced / the viewer unmounts.
+  useEffect(() => () => surfaceGeom?.geometry.dispose(), [surfaceGeom]);
 
   // The terrain elevation sampler, only when projecting is enabled + loaded.
   const sampler: Sampler = projectOnTerrain ? (terrainMesh?.sample ?? null) : null;
@@ -247,6 +284,10 @@ export function TerrainViewer(props: TerrainViewerProps) {
             opacity={underground ? 0.18 : 1}
           />
         </Fade>
+      ) : null}
+
+      {surfaceGeom && showSurface ? (
+        <SurfaceMesh geometry={surfaceGeom.geometry} mode={surfaceMode} />
       ) : null}
 
       {buildings?.length ? (

@@ -24,6 +24,7 @@ mod points;
 mod projects;
 mod scene;
 mod subscription;
+mod surface;
 mod system;
 mod terrain;
 mod utilities;
@@ -44,6 +45,7 @@ pub struct QueryRoot(
     scene::SceneQuery,
     field::FieldQuery,
     utilities::UtilitiesQuery,
+    surface::SurfaceQuery,
     billing::BillingQuery,
     billing::PlanCatalogQuery,
 );
@@ -59,5 +61,6 @@ pub struct MutationRoot(
     terrain::TerrainMutation,
     field::FieldMutation,
     utilities::UtilitiesMutation,
+    surface::SurfaceMutation,
     billing::BillingMutation,
 );

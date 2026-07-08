@@ -16,18 +16,33 @@ Dependencies: P2 needs P1 (constraints feed the same triangulator). P3 needs P1 
 
 Triangulation in Rust + the indexed-mesh render path. The riskiest, most foundational piece.
 
+> **Build notes (as shipped):**
+> - Migration shipped as **0016** (sequential; the spec's "0008" was a placeholder).
+>   All four tables created up front; Phase 1 only reads/writes `surfaces`.
+> - Only **`spade`** added now (the `geo`/`geo-types` crates are deferred to Phase 2
+>   when constrained triangulation first needs them — avoids an unused dep and a
+>   name clash with the existing internal `crate::geo` Helmert module).
+> - **Synchronous build** (no background worker): triangulation runs inside the
+>   mutation via `spawn_blocking`, matching the codebase's existing convention;
+>   `status` set `ready`/`failed` inline (a failing build returns a structured
+>   error rather than persisting a `failed` row). The `status` column exists for
+>   the larger DEM surfaces in P5.
+> - Mesh blob = the **STIN** binary format (geographic vertices + `u32` indices);
+>   the client `toLocal`s each vertex so the TIN registers on the point cloud.
+
 ### Deliverables
 
-- [ ] Add Rust deps `spade` + `geo`/`geo-types`; migration **0008** (`surfaces`, `surface_breaklines`, `surface_dems`, `volumes`).
-- [ ] `api/src/surface/tin.rs` — Delaunay from selected points (point scope + exclusions), indexed-mesh output (positions + triangle indices + bbox), stored as a Storage blob; async build status (`building → ready/failed`); versioned + inputs snapshot.
-- [ ] GraphQL: `buildSurface`, `rebuildSurface`, `deleteSurface`, `surfaces`, `surface`, `surfaceMesh` (Crew-gated, tenant-scoped).
-- [ ] Web: minimal Surfaces panel (build from point scope/exclusions) + render indexed TIN mesh in the scene (extends `terrain-mesh.ts`) with the **elevation color ramp** + **wireframe** modes.
+- [x] Add Rust dep `spade`; migration **0016** (`surfaces`, `surface_breaklines`, `surface_dems`, `volumes`).
+- [x] `api/src/surface/tin.rs` — Delaunay from selected points (point scope + exclusions), indexed-mesh output (positions + triangle indices + bbox), stored as a Storage blob; synchronous build status (`ready`/`failed`); versioned + inputs snapshot.
+- [x] GraphQL: `buildSurface`, `rebuildSurface`, `deleteSurface`, `surfaces`, `surface`, `surfaceMesh` (Crew-gated, tenant-scoped); `Feature::Surfaces` added to the plan catalog.
+- [x] Web: minimal Surfaces panel (build from point scope/exclusions) + render indexed TIN mesh in the scene (extends the terrain render path) with the **elevation color ramp** + **wireframe** modes.
 
 ### Tests
 
-- [ ] Delaunay correctness on known point sets; degenerate/insufficient-point handling; version increment + inputs snapshot.
-- [ ] Migration up/down.
-- [ ] Playwright: build a TIN from points → renders as a mesh; toggle ramp/wireframe.
+- [x] Delaunay correctness on known point sets; degenerate/insufficient-point handling (unit tests in `tin.rs` + STIN blob tests in `surface/mod.rs`); `plan.rs` feature-catalog test covers `Feature::Surfaces`.
+- [x] Migration up (every `#[sqlx::test]` runs all migrations incl. 0016; this project is forward-only, no down migrations).
+- [x] Resolver integration (`tests/integration/surface.rs`): build → mesh (STIN magic) + list, version increment on rebuild + `inputs` snapshot, Crew gate, tenant isolation, insufficient-points error, delete. All green against the compose DB.
+- [x] Playwright (`web/e2e/surfaces.spec.ts`): build a TIN from points → renders + list shows triangle count; toggle ramp/wireframe; Solo-plan gate. (Authored + lint-clean; run locally — sandbox can't launch Chromium.)
 
 ### Validates
 

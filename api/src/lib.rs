@@ -17,6 +17,7 @@ pub mod ratelimit;
 pub mod report;
 pub mod schema;
 pub mod storage;
+pub mod surface;
 pub mod units;
 pub mod utilities;
 

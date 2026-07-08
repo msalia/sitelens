@@ -18,6 +18,7 @@ import { FieldPanel } from '@/components/projects/field-panel';
 import { GridEditor } from '@/components/projects/grid-editor';
 import { SceneView } from '@/components/projects/scene-view';
 import { SetupChecklist } from '@/components/projects/setup-checklist';
+import { SurfacesPanel } from '@/components/projects/surfaces-panel';
 import { SurveyPointsPanel } from '@/components/projects/survey-points-panel';
 import { TransformPanel } from '@/components/projects/transform-panel';
 import { UtilitiesPanel } from '@/components/projects/utilities-panel';
@@ -119,12 +120,13 @@ const WORKSPACE_QUERY = graphql(`
   }
 `);
 
-type Tab = 'setup' | 'control' | 'points' | 'overlays' | 'field' | 'utilities';
+type Tab = 'setup' | 'control' | 'points' | 'overlays' | 'utilities' | 'surfaces' | 'field';
 
 /** Crew-gated tabs → the plan `Feature` key their upsell dialog uses. */
 const CREW_TABS: Partial<Record<Tab, string>> = {
   field: 'field_exchange',
   overlays: 'dxf_overlays',
+  surfaces: 'surfaces',
   utilities: 'utilities',
 };
 
@@ -152,6 +154,9 @@ export default function ProjectWorkspace() {
   const pickRef = useRef<((point: ScenePoint) => void) | null>(null);
   const [digitizing, setDigitizing] = useState(false);
   const [sceneReload, setSceneReload] = useState(0);
+  // The surface shown in the scene + a nonce the panel bumps after a build/rebuild.
+  const [activeSurfaceId, setActiveSurfaceId] = useState<string | null>(null);
+  const [surfaceReload, setSurfaceReload] = useState(0);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('setup');
   // On the very first load, land on Points when the site is already set up
@@ -273,7 +278,7 @@ export default function ProjectWorkspace() {
           </div>
         </header>
 
-        <div className="flex gap-1 border-b px-3 py-2">
+        <div className="flex flex-wrap gap-1 border-b px-3 py-2">
           {(
             [
               ['setup', 'Setup'],
@@ -281,31 +286,32 @@ export default function ProjectWorkspace() {
               ['points', 'Points'],
               ['overlays', 'Overlays'],
               ['utilities', 'Utilities'],
+              ['surfaces', 'Surfaces'],
               ['field', 'Field'],
             ] as const
           )
             // Once setup is complete the guide is no longer useful — drop the tab.
             .filter(([key]) => key !== 'setup' || !setupComplete)
             .map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              // Hold Crew tabs inert until billing resolves so the click routes to
-              // the upsell (free) or the panel (Crew), never the wrong one.
-              disabled={key in CREW_TABS && billingLoading}
-              onClick={() =>
-                key in CREW_TABS && crewGated ? setUpgradeFeature(CREW_TABS[key]!) : setTab(key)
-              }
-              className={cn(
-                'flex-1 rounded-lg px-3 py-1.5 text-center text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50',
-                activeTab === key
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-              )}
-            >
-              {label}
-            </button>
-          ))}
+              <button
+                key={key}
+                type="button"
+                // Hold Crew tabs inert until billing resolves so the click routes to
+                // the upsell (free) or the panel (Crew), never the wrong one.
+                disabled={key in CREW_TABS && billingLoading}
+                onClick={() =>
+                  key in CREW_TABS && crewGated ? setUpgradeFeature(CREW_TABS[key]!) : setTab(key)
+                }
+                className={cn(
+                  'flex-1 rounded-lg px-3 py-1.5 text-center text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50',
+                  activeTab === key
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                )}
+              >
+                {label}
+              </button>
+            ))}
         </div>
 
         {/* `[&>*]:shrink-0` keeps cards at natural height (flex children would
@@ -369,6 +375,17 @@ export default function ProjectWorkspace() {
               />
             </section>
           )}
+          {activeTab === 'surfaces' && !crewGated && (
+            <section id="panel-surfaces">
+              <SurfacesPanel
+                project={project}
+                categories={categories}
+                activeSurfaceId={activeSurfaceId}
+                onSelect={setActiveSurfaceId}
+                onChanged={() => setSurfaceReload((n) => n + 1)}
+              />
+            </section>
+          )}
           {activeTab === 'field' && !crewGated && (
             <section id="panel-field">
               <FieldPanel
@@ -398,6 +415,8 @@ export default function ProjectWorkspace() {
           pickRef={pickRef}
           focus={focus}
           reloadNonce={sceneReload}
+          activeSurfaceId={activeSurfaceId}
+          surfaceReload={surfaceReload}
           stats={[
             { label: 'Control', value: points.length },
             { label: 'Points', value: pointCount },

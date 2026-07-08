@@ -86,8 +86,10 @@ pub enum Feature {
     FieldExchange,
     /// As-built utility records (runs + structures, 3D, archive).
     Utilities,
+    /// Surface modeling: TIN surfaces, contours, and cut/fill volumes.
+    Surfaces,
     // Planned site-analysis suite (add here when built):
-    //   TurningRadius, Parking, Hydrology, Traffic, Surfaces
+    //   TurningRadius, Parking, Hydrology, Traffic
 }
 
 /// Display + gating metadata for a [`Feature`].
@@ -131,6 +133,12 @@ impl Feature {
                 blurb: "As-built utilities in 3D + a durable archive.",
                 min_plan: Plan::Crew,
             },
+            Feature::Surfaces => FeatureMeta {
+                key: "surfaces",
+                label: "Surfaces",
+                blurb: "Build TIN surfaces, contours & cut/fill volumes.",
+                min_plan: Plan::Crew,
+            },
         }
     }
 
@@ -141,6 +149,7 @@ impl Feature {
             Feature::DxfOverlays,
             Feature::FieldExchange,
             Feature::Utilities,
+            Feature::Surfaces,
         ]
     }
 }
