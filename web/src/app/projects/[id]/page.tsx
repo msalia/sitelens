@@ -382,7 +382,12 @@ export default function ProjectWorkspace() {
                 categories={categories}
                 activeSurfaceId={activeSurfaceId}
                 onSelect={setActiveSurfaceId}
-                onChanged={() => setSurfaceReload((n) => n + 1)}
+                onChanged={() => {
+                  setSurfaceReload((n) => n + 1);
+                  setSceneReload((n) => n + 1);
+                }}
+                pickRef={pickRef}
+                onDigitizingChange={setDigitizing}
               />
             </section>
           )}

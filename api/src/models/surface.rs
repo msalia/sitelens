@@ -114,6 +114,101 @@ pub struct SurfaceInput {
     /// Exclude these specific points.
     #[graphql(default)]
     pub exclude_point_ids: Vec<Uuid>,
-    /// Optional max triangle edge length (meters); reserved for later phases.
+    /// Optional max triangle edge length (meters) — drops long sliver triangles.
     pub max_edge_length: Option<f64>,
+    /// Hard breaklines to enforce as constraint edges.
+    #[graphql(default)]
+    pub breakline_ids: Vec<Uuid>,
+    /// Outer boundary to clip the surface to (a breakline of kind `boundary`).
+    pub boundary_id: Option<Uuid>,
+    /// Interior holes to cut out (breaklines of kind `hole`).
+    #[graphql(default)]
+    pub hole_ids: Vec<Uuid>,
+}
+
+/// A surface constraint: a hard breakline, the outer boundary, or an interior hole.
+#[derive(Enum, Copy, Clone, Eq, PartialEq, Debug)]
+pub enum BreaklineKind {
+    Hard,
+    Boundary,
+    Hole,
+}
+
+impl BreaklineKind {
+    pub fn as_db_str(self) -> &'static str {
+        match self {
+            BreaklineKind::Hard => "hard",
+            BreaklineKind::Boundary => "boundary",
+            BreaklineKind::Hole => "hole",
+        }
+    }
+    pub fn from_db_str(s: &str) -> BreaklineKind {
+        match s {
+            "boundary" => BreaklineKind::Boundary,
+            "hole" => BreaklineKind::Hole,
+            _ => BreaklineKind::Hard,
+        }
+    }
+}
+
+/// A stored surface constraint (breakline / boundary / hole). Vertices are a JSON
+/// array string `[{n,e,z?}]` in projected meters (immutable against point edits).
+#[derive(SimpleObject)]
+pub struct SurfaceBreakline {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub kind: BreaklineKind,
+    pub closed: bool,
+    pub vertices: String,
+    pub source: String,
+    pub source_layer: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// One breakline vertex on capture (projected meters; z optional — z-filled from
+/// the nearest survey point at build time when absent).
+#[derive(InputObject, Clone)]
+pub struct BreaklineVertexInput {
+    pub n: f64,
+    pub e: f64,
+    pub z: Option<f64>,
+}
+
+/// Create/replace a breakline's geometry + kind.
+#[derive(InputObject, Clone)]
+pub struct BreaklineInput {
+    pub kind: BreaklineKind,
+    #[graphql(default)]
+    pub closed: bool,
+    pub vertices: Vec<BreaklineVertexInput>,
+}
+
+/// A DXF layer available to import as breaklines (for the mapping UI).
+#[derive(SimpleObject)]
+pub struct BreaklineImportLayer {
+    pub layer: String,
+    pub count: i32,
+    /// Suggested kind from the layer name ("hard" | "boundary" | "hole").
+    pub suggested_kind: String,
+}
+
+/// Preview of a DXF breakline import: its polyline layers.
+#[derive(SimpleObject)]
+pub struct BreaklineImportPreview {
+    pub layers: Vec<BreaklineImportLayer>,
+}
+
+/// A user-confirmed layer→kind mapping. `kind` null/empty = skip the layer.
+#[derive(InputObject)]
+pub struct BreaklineLayerMapping {
+    pub layer: String,
+    pub kind: Option<String>,
+}
+
+/// Result of committing a breakline import.
+#[derive(SimpleObject)]
+pub struct BreaklineImportResult {
+    pub created: i32,
+    pub skipped: i32,
 }

@@ -56,6 +56,7 @@ resend-rs = "0.25.1"
 
 [dev-dependencies]
 criterion = "0.5"
+base64 = "0.22"
 
 [[bench]]
 name = "core_bench"

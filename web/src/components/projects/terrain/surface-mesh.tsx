@@ -1,5 +1,6 @@
 'use client';
 
+import { useCallback } from 'react';
 import * as THREE from 'three';
 
 import { type Frame, toLocal } from '../terrain-frame';
@@ -29,6 +30,17 @@ function ramp(t: number): [number, number, number] {
     }
   }
   return RAMP[RAMP.length - 1][1];
+}
+
+/** Slope tint: flat = green, moderate = yellow, steep = red (t in [0,1]). */
+function slopeColor(t: number): [number, number, number] {
+  const x = Math.min(1, Math.max(0, t));
+  if (x < 0.5) {
+    const f = x / 0.5; // green → yellow
+    return [0.13 + (0.95 - 0.13) * f, 0.6 + (0.85 - 0.6) * f, 0.2 - 0.05 * f];
+  }
+  const f = (x - 0.5) / 0.5; // yellow → red
+  return [0.95 - (0.95 - 0.86) * f, 0.85 - (0.85 - 0.15) * f, 0.15 * (1 - f)];
 }
 
 export interface SurfaceGeometry {
@@ -95,14 +107,32 @@ export function buildSurfaceGeometry(buf: ArrayBuffer, frame: Frame): SurfaceGeo
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geometry.setIndex(new THREE.BufferAttribute(indices, 1));
   geometry.computeVertexNormals();
+
+  // Precompute a second (slope) color buffer: per-vertex slope = angle between
+  // the vertex normal and local up (Y). Both buffers ride on userData so the
+  // renderer can swap the active `color` attribute by display mode.
+  const normals = geometry.attributes.normal.array as Float32Array;
+  const slope = new Float32Array(vCount * 3);
+  const maxAng = Math.PI / 4; // 45° → full red
+  for (let i = 0; i < vCount; i++) {
+    const ny = Math.min(1, Math.abs(normals[i * 3 + 1]));
+    const t = Math.min(1, Math.acos(ny) / maxAng);
+    const [r, g, b] = slopeColor(t);
+    slope[i * 3] = r;
+    slope[i * 3 + 1] = g;
+    slope[i * 3 + 2] = b;
+  }
+  geometry.userData.rampColors = colors;
+  geometry.userData.slopeColors = slope;
+
   return { geometry, maxH, minH, triangleCount: tCount, vertexCount: vCount };
 }
 
-/** How the TIN surface is shaded: an elevation color ramp, or a QC wireframe. */
-export type SurfaceMode = 'ramp' | 'wireframe';
+/** How the TIN surface is shaded: elevation ramp, slope analysis, or QC wireframe. */
+export type SurfaceMode = 'ramp' | 'slope' | 'wireframe';
 
-/** Renders a computed TIN mesh. `ramp` shows the per-vertex hypsometric tint;
- *  `wireframe` shows the triangle edges (surface QC). */
+/** Renders a computed TIN mesh. `ramp` = hypsometric tint, `slope` = slope
+ *  analysis (both via vertex colors), `wireframe` = triangle edges (surface QC). */
 export function SurfaceMesh({
   geometry,
   mode,
@@ -111,8 +141,28 @@ export function SurfaceMesh({
   mode: SurfaceMode;
 }) {
   const wire = mode === 'wireframe';
+
+  // Swap the active vertex-color buffer (elevation ↔ slope) via a ref callback,
+  // which re-runs when `mode` changes — mutating the mesh's own geometry (not the
+  // prop in an effect), matching TerrainSurface's pattern.
+  const setMesh = useCallback(
+    (mesh: THREE.Mesh | null) => {
+      if (!mesh) {
+        return;
+      }
+      const ud = geometry.userData as { rampColors?: Float32Array; slopeColors?: Float32Array };
+      const buf = mode === 'slope' ? ud.slopeColors : ud.rampColors;
+      const attr = mesh.geometry.attributes.color as THREE.BufferAttribute | undefined;
+      if (buf && attr) {
+        (attr.array as Float32Array).set(buf);
+        attr.needsUpdate = true;
+      }
+    },
+    [geometry, mode],
+  );
+
   return (
-    <mesh geometry={geometry}>
+    <mesh ref={setMesh} geometry={geometry}>
       <meshStandardMaterial
         vertexColors={!wire}
         color={wire ? '#64748b' : '#ffffff'}

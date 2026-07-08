@@ -65,6 +65,69 @@ enum BillingInterval {
 }
 
 """
+A DXF layer available to import as breaklines (for the mapping UI).
+"""
+type BreaklineImportLayer {
+	layer: String!
+	count: Int!
+	"""
+	Suggested kind from the layer name ("hard" | "boundary" | "hole").
+	"""
+	suggestedKind: String!
+}
+
+"""
+Preview of a DXF breakline import: its polyline layers.
+"""
+type BreaklineImportPreview {
+	layers: [BreaklineImportLayer!]!
+}
+
+"""
+Result of committing a breakline import.
+"""
+type BreaklineImportResult {
+	created: Int!
+	skipped: Int!
+}
+
+"""
+Create/replace a breakline's geometry + kind.
+"""
+input BreaklineInput {
+	kind: BreaklineKind!
+	closed: Boolean! = false
+	vertices: [BreaklineVertexInput!]!
+}
+
+"""
+A surface constraint: a hard breakline, the outer boundary, or an interior hole.
+"""
+enum BreaklineKind {
+	HARD
+	BOUNDARY
+	HOLE
+}
+
+"""
+A user-confirmed layer→kind mapping. `kind` null/empty = skip the layer.
+"""
+input BreaklineLayerMapping {
+	layer: String!
+	kind: String
+}
+
+"""
+One breakline vertex on capture (projected meters; z optional — z-filled from
+the nearest survey point at build time when absent).
+"""
+input BreaklineVertexInput {
+	n: Float!
+	e: Float!
+	z: Float
+}
+
+"""
 A georeferenced DXF overlay. The raw file lives in storage (key not exposed).
 """
 type CadOverlay {
@@ -686,6 +749,27 @@ type MutationRoot {
 	"""
 	deleteSurface(id: UUID!): Boolean!
 	"""
+	Creates a digitized breakline / boundary / hole.
+	"""
+	createBreakline(projectId: UUID!, input: BreaklineInput!): SurfaceBreakline!
+	"""
+	Replaces a breakline's kind + geometry.
+	"""
+	updateBreakline(id: UUID!, input: BreaklineInput!): SurfaceBreakline!
+	"""
+	Deletes a breakline.
+	"""
+	deleteBreakline(id: UUID!): Boolean!
+	"""
+	Generates an auto concave-hull boundary from a point scope, stored as an
+	editable `boundary` breakline.
+	"""
+	autoBoundary(projectId: UUID!, scope: PointScope! = ALL, scopeRef: UUID): SurfaceBreakline!
+	"""
+	Imports breaklines from DXF polylines, one per feature, tagged by layer.
+	"""
+	importBreaklines(projectId: UUID!, contentBase64: String!, mappings: [BreaklineLayerMapping!]!, unit: LengthUnit): BreaklineImportResult!
+	"""
 	Starts a hosted Stripe Checkout for the Crew plan; returns the redirect URL
 	the client sends the browser to. Admin-only.
 	"""
@@ -1099,6 +1183,14 @@ type QueryRoot {
 	"""
 	surfaceMesh(id: UUID!): FileBlob!
 	"""
+	Every constraint (breakline / boundary / hole) in a project.
+	"""
+	breaklines(projectId: UUID!): [SurfaceBreakline!]!
+	"""
+	Previews a DXF file's polyline layers for breakline import (mapping UI).
+	"""
+	previewBreaklineImport(projectId: UUID!, contentBase64: String!): BreaklineImportPreview!
+	"""
 	The caller org's plan, subscription status, usage, and limits.
 	"""
 	billing: BillingInfo!
@@ -1254,6 +1346,22 @@ type Surface {
 }
 
 """
+A stored surface constraint (breakline / boundary / hole). Vertices are a JSON
+array string `[{n,e,z?}]` in projected meters (immutable against point edits).
+"""
+type SurfaceBreakline {
+	id: UUID!
+	projectId: UUID!
+	kind: BreaklineKind!
+	closed: Boolean!
+	vertices: String!
+	source: String!
+	sourceLayer: String
+	createdAt: DateTime!
+	updatedAt: DateTime!
+}
+
+"""
 Parameters for building/rebuilding a TIN surface. Point selection is a scope
 (all / one category / one group) minus explicit exclusions. `max_edge_length`
 is accepted now but only applied once constrained triangulation lands.
@@ -1278,9 +1386,21 @@ input SurfaceInput {
 	"""
 	excludePointIds: [UUID!]! = []
 	"""
-	Optional max triangle edge length (meters); reserved for later phases.
+	Optional max triangle edge length (meters) — drops long sliver triangles.
 	"""
 	maxEdgeLength: Float
+	"""
+	Hard breaklines to enforce as constraint edges.
+	"""
+	breaklineIds: [UUID!]! = []
+	"""
+	Outer boundary to clip the surface to (a breakline of kind `boundary`).
+	"""
+	boundaryId: UUID
+	"""
+	Interior holes to cut out (breaklines of kind `hole`).
+	"""
+	holeIds: [UUID!]! = []
 }
 
 """

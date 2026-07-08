@@ -13,6 +13,7 @@ import type {
   TerrainData,
   UtilityPick,
 } from '@/components/projects/terrain-viewer';
+import type { SceneConstraint } from '@/components/projects/terrain/surface-constraints';
 import type { SurfaceMode } from '@/components/projects/terrain/surface-mesh';
 import type { InspectablePoint, PointCategory, Project, SceneData, ScenePoint } from '@/lib/types';
 
@@ -35,7 +36,7 @@ import {
   SPAM_COOLDOWN_MS,
   TERRAIN_CONTENT,
 } from './scene-view-data';
-import { SURFACE_MESH } from './surfaces-data';
+import { BREAKLINES, SURFACE_MESH } from './surfaces-data';
 
 // The WebGL viewer is browser-only; load it lazily and never on the server.
 const TerrainViewer = dynamic(
@@ -115,6 +116,8 @@ export function SceneView({
   const [showSurface, setShowSurface] = useState(true);
   const [surfaceMode, setSurfaceMode] = useState<SurfaceMode>('ramp');
   const [surface, setSurface] = useState<{ contentBase64: string } | null>(null);
+  const [constraints, setConstraints] = useState<SceneConstraint[]>([]);
+  const [showConstraints, setShowConstraints] = useState(true);
   const [underground, setUnderground] = useState(false);
   const [selectedUtility, setSelectedUtility] = useState<UtilityPick | null>(null);
   const [projectOnTerrain, setProjectOnTerrain] = useState(true);
@@ -183,6 +186,30 @@ export function SceneView({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadSurfaceMesh();
   }, [loadSurfaceMesh, surfaceReload]);
+
+  // Loads the project's surface constraints for the overlay (parsing the stored
+  // `[{n,e,z}]` JSON into projected-meter vertices).
+  const loadConstraints = useCallback(async () => {
+    try {
+      const { breaklines } = await gql(BREAKLINES, { projectId: project.id });
+      setConstraints(
+        breaklines.map((b) => ({
+          id: b.id,
+          kind: b.kind as SceneConstraint['kind'],
+          vertices: (JSON.parse(b.vertices) as { n: number; e: number; z: number | null }[]).map(
+            (v) => ({ e: v.e, n: v.n, z: v.z ?? null }),
+          ),
+        })),
+      );
+    } catch {
+      setConstraints([]);
+    }
+  }, [project.id]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadConstraints();
+  }, [loadConstraints, surfaceReload]);
 
   // Loads the cached DEM bytes (no-op if there's no terrain row yet).
   const loadTerrainContent = useCallback(async () => {
@@ -441,6 +468,8 @@ export function SceneView({
             surface={surface}
             showSurface={showSurface}
             surfaceMode={surfaceMode}
+            constraints={constraints}
+            showConstraints={showConstraints}
             terrain={terrain}
             buildings={buildings}
             showBuildings={showBuildings}
@@ -500,6 +529,9 @@ export function SceneView({
         setShowSurface={setShowSurface}
         surfaceMode={surfaceMode}
         setSurfaceMode={setSurfaceMode}
+        hasConstraints={constraints.length > 0}
+        showConstraints={showConstraints}
+        setShowConstraints={setShowConstraints}
         underground={underground}
         setUnderground={setUnderground}
         utilitiesCount={scene ? scene.utilityRuns.length + scene.utilityStructures.length : 0}

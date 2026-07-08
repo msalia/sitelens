@@ -54,17 +54,33 @@ A Crew user builds a (still unconstrained) TIN from selected points and sees it 
 
 Make the surface survey-grade.
 
+> **Build notes (as shipped):**
+> - **No `geo`/`geo-types` crate** — the repo avoids new deps and had no polygon
+>   code, so geometry is hand-rolled + unit-tested in `api/src/surface/geom.rs`
+>   (ray-cast point-in-polygon, segment/self-intersection, alpha-shape concave
+>   hull over the spade Delaunay with convex-hull fallback, nearest-point z-fill).
+>   This also sidesteps the `crate::geo` (Helmert) name clash. (Supersedes the P1
+>   note that P2 would add `geo`.)
+> - Breaklines, boundary, and holes are all inserted as CDT constraint edges;
+>   boundary + holes additionally clip by triangle centroid. 2D/DXF vertices are
+>   z-filled from the nearest survey point. `add_constraint` is `can_add_constraint`-
+>   guarded so crossing constraints never panic.
+> - No new migration — `surface_breaklines` already exists (0016). Breakline CRUD
+>   is un-audited + hard-delete (survey constraints, not records-of-record).
+> - Constraint scene overlay places vertices via the projected origin (like DXF
+>   overlays) — correct for un-rotated sites; consistent with that existing layer.
+
 ### Deliverables
 
-- [ ] `tin.rs`: insert breaklines as CDT constraint edges; clip to boundary; remove holes + outside-boundary triangles; max-edge-length filter.
-- [ ] Breakline/boundary model + CRUD (`createBreakline`/`update`/`delete`); `autoBoundary` (concave-hull/alpha-shape) editable default; interior holes.
-- [ ] Capture UI: digitize breaklines/boundary in-scene (snap survey points) **and** import from DXF (layer mapping); **slope analysis** display mode.
+- [x] `tin.rs`: `triangulate_constrained` — breaklines as CDT constraint edges; clip to boundary; remove holes + outside-boundary triangles; max-edge-length filter (bare path routes through it).
+- [x] Breakline/boundary model + CRUD (`createBreakline`/`update`/`delete`); `autoBoundary` (alpha-shape concave hull) editable default; interior holes; build integration (`select_constraints` + `inputs` snapshot of ids).
+- [x] Capture UI: digitize breaklines/boundary/holes in-scene (snap survey points, reuses the utilities `pickRef` bridge) **and** import from DXF (layer→kind mapping); **slope analysis** display mode; in-scene constraint overlay.
 
 ### Tests
 
-- [ ] Constraint edges honored in output; boundary clip + hole removal; self-intersecting breakline rejected; auto-boundary sanity.
-- [ ] DXF breakline import + layer mapping.
-- [ ] Playwright: add a breakline → rebuild → triangle edges follow it (new version); slope mode renders.
+- [x] Constraint edge honored in output; boundary clip + hole removal; max-edge filter; self-intersecting breakline rejected; PIP / concave-hull sanity (unit tests in `tin.rs` + `geom.rs`).
+- [x] DXF breakline import + layer mapping; breakline CRUD; boundary clips build + `inputs` records id; `autoBoundary`; Crew gate (integration tests in `tests/integration/surface.rs`).
+- [x] Playwright (`web/e2e/surfaces.spec.ts`): auto boundary → rebuild bumps version; slope shading offered. (Digitize-by-scene-click covered manually — the e2e harness can't click 3D markers.) Run locally.
 
 ### Validates
 

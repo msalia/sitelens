@@ -224,3 +224,241 @@ async fn delete_surface_removes_it(pool: PgPool) {
     .await;
     assert_eq!(list["surfaces"].as_array().unwrap().len(), 0);
 }
+
+// --- Phase 2: constraints ---------------------------------------------------
+
+const CREATE_BREAKLINE: &str = r#"mutation ($pid: UUID!, $input: BreaklineInput!) {
+    createBreakline(projectId: $pid, input: $input) { id kind }
+}"#;
+
+const BUILD_FULL: &str = r#"mutation ($pid: UUID!, $input: SurfaceInput!) {
+    buildSurface(projectId: $pid, input: $input) { id version triangleCount }
+}"#;
+
+/// A paid org + project seeded with an n×n grid of design points.
+async fn seed_grid(schema: &ApiSchema, pool: &PgPool, n: i32) -> (AuthContext, Uuid) {
+    let (admin, org, _) = signup(schema, "grid@example.com", "Grid Co").await;
+    set_paid(pool, org).await;
+    let auth = admin_ctx(admin, org);
+    let pid = create_project(schema, auth.clone(), "Grid").await;
+    for r in 0..n {
+        for c in 0..n {
+            add_point(
+                schema,
+                auth.clone(),
+                pid,
+                &format!("P{r}_{c}"),
+                c as f64,
+                r as f64,
+                (r + c) as f64,
+            )
+            .await;
+        }
+    }
+    (auth, pid)
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn breakline_crud(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (auth, pid) = seed_square(&schema, &pool).await;
+
+    let created = exec_ok_vars(
+        &schema,
+        CREATE_BREAKLINE,
+        serde_json::json!({
+            "pid": pid,
+            "input": { "kind": "HARD", "closed": false, "vertices": [
+                { "n": 0.0, "e": 0.0, "z": 10.0 },
+                { "n": 100.0, "e": 100.0, "z": 15.0 }
+            ] }
+        }),
+        auth.clone(),
+    )
+    .await;
+    assert_eq!(
+        created["createBreakline"]["kind"],
+        serde_json::json!("HARD")
+    );
+    let bid = uuid_at(&created, &["createBreakline", "id"]);
+
+    let list = exec_ok(
+        &schema,
+        &format!(r#"{{ breaklines(projectId: "{pid}") {{ id }} }}"#),
+        Some(auth.clone()),
+    )
+    .await;
+    assert_eq!(list["breaklines"].as_array().unwrap().len(), 1);
+
+    let del = exec_ok(
+        &schema,
+        &format!(r#"mutation {{ deleteBreakline(id: "{bid}") }}"#),
+        Some(auth.clone()),
+    )
+    .await;
+    assert_eq!(del["deleteBreakline"], serde_json::json!(true));
+
+    let after = exec_ok(
+        &schema,
+        &format!(r#"{{ breaklines(projectId: "{pid}") {{ id }} }}"#),
+        Some(auth),
+    )
+    .await;
+    assert_eq!(after["breaklines"].as_array().unwrap().len(), 0);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn boundary_clips_the_built_surface_and_snapshots_its_id(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (auth, pid) = seed_grid(&schema, &pool, 5).await;
+
+    let bare = exec_ok_vars(
+        &schema,
+        BUILD_FULL,
+        serde_json::json!({ "pid": pid, "input": { "name": "bare", "scope": "ALL" } }),
+        auth.clone(),
+    )
+    .await;
+    let t0 = bare["buildSurface"]["triangleCount"].as_i64().unwrap();
+
+    // A boundary over the central region (z omitted → z-filled from points).
+    let b = exec_ok_vars(
+        &schema,
+        CREATE_BREAKLINE,
+        serde_json::json!({
+            "pid": pid,
+            "input": { "kind": "BOUNDARY", "closed": true, "vertices": [
+                { "n": 1.0, "e": 1.0 }, { "n": 1.0, "e": 3.0 },
+                { "n": 3.0, "e": 3.0 }, { "n": 3.0, "e": 1.0 }
+            ] }
+        }),
+        auth.clone(),
+    )
+    .await;
+    let bid = uuid_at(&b, &["createBreakline", "id"]);
+
+    let clipped = exec_ok_vars(
+        &schema,
+        BUILD_FULL,
+        serde_json::json!({
+            "pid": pid,
+            "input": { "name": "clip", "scope": "ALL", "boundaryId": bid }
+        }),
+        auth.clone(),
+    )
+    .await;
+    let t1 = clipped["buildSurface"]["triangleCount"].as_i64().unwrap();
+    assert!(
+        t1 < t0,
+        "boundary should reduce triangle count ({t1} !< {t0})"
+    );
+
+    let sid = uuid_at(&clipped, &["buildSurface", "id"]);
+    let one = exec_ok(
+        &schema,
+        &format!(r#"{{ surface(id: "{sid}") {{ inputs }} }}"#),
+        Some(auth),
+    )
+    .await;
+    assert!(
+        one["surface"]["inputs"]
+            .as_str()
+            .unwrap()
+            .contains(&bid.to_string()),
+        "inputs snapshot should record the boundary id"
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn auto_boundary_creates_a_boundary_breakline(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (auth, pid) = seed_grid(&schema, &pool, 5).await;
+
+    let ab = exec_ok_vars(
+        &schema,
+        r#"mutation ($pid: UUID!) { autoBoundary(projectId: $pid, scope: ALL) { id kind } }"#,
+        serde_json::json!({ "pid": pid }),
+        auth.clone(),
+    )
+    .await;
+    assert_eq!(ab["autoBoundary"]["kind"], serde_json::json!("BOUNDARY"));
+
+    let list = exec_ok(
+        &schema,
+        &format!(r#"{{ breaklines(projectId: "{pid}") {{ kind }} }}"#),
+        Some(auth),
+    )
+    .await;
+    assert_eq!(list["breaklines"].as_array().unwrap().len(), 1);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn dxf_import_creates_breaklines_tagged_by_layer(pool: PgPool) {
+    use base64::Engine;
+    let schema = schema(pool.clone());
+    let (auth, pid) = seed_grid(&schema, &pool, 3).await;
+
+    // Minimal DXF: one LWPOLYLINE (3 vertices) on layer "BRK".
+    let dxf = "0\nSECTION\n2\nENTITIES\n0\nLWPOLYLINE\n8\nBRK\n90\n3\n10\n0.0\n20\n0.0\n10\n5.0\n20\n0.0\n10\n5.0\n20\n5.0\n0\nENDSEC\n0\nEOF\n";
+    let b64 = base64::engine::general_purpose::STANDARD.encode(dxf);
+
+    let prev = exec_ok_vars(
+        &schema,
+        r#"query ($pid: UUID!, $c: String!) {
+            previewBreaklineImport(projectId: $pid, contentBase64: $c) {
+                layers { layer count suggestedKind }
+            }
+        }"#,
+        serde_json::json!({ "pid": pid, "c": b64 }),
+        auth.clone(),
+    )
+    .await;
+    let layers = prev["previewBreaklineImport"]["layers"].as_array().unwrap();
+    assert!(layers
+        .iter()
+        .any(|l| l["layer"] == serde_json::json!("BRK")));
+
+    let imp = exec_ok_vars(
+        &schema,
+        r#"mutation ($pid: UUID!, $c: String!, $m: [BreaklineLayerMapping!]!) {
+            importBreaklines(projectId: $pid, contentBase64: $c, mappings: $m) { created skipped }
+        }"#,
+        serde_json::json!({ "pid": pid, "c": b64, "m": [{ "layer": "BRK", "kind": "HARD" }] }),
+        auth.clone(),
+    )
+    .await;
+    assert_eq!(imp["importBreaklines"]["created"], serde_json::json!(1));
+
+    let list = exec_ok(
+        &schema,
+        &format!(r#"{{ breaklines(projectId: "{pid}") {{ source sourceLayer }} }}"#),
+        Some(auth),
+    )
+    .await;
+    let rows = list["breaklines"].as_array().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["source"], serde_json::json!("dxf"));
+    assert_eq!(rows[0]["sourceLayer"], serde_json::json!("BRK"));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn free_tier_blocks_breakline_creation(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (admin, org, _) = signup(&schema, "solo@example.com", "Solo Co").await;
+    let auth = admin_ctx(admin, org);
+    let pid = create_project(&schema, auth.clone(), "Site").await;
+
+    let msg = exec_err_vars(
+        &schema,
+        CREATE_BREAKLINE,
+        serde_json::json!({
+            "pid": pid,
+            "input": { "kind": "HARD", "closed": false, "vertices": [
+                { "n": 0.0, "e": 0.0, "z": 1.0 }, { "n": 1.0, "e": 1.0, "z": 2.0 }
+            ] }
+        }),
+        auth,
+    )
+    .await;
+    assert!(msg.contains("Crew feature"), "breaklines not gated: {msg}");
+}

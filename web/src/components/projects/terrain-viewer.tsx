@@ -32,6 +32,10 @@ import {
   useMarkers,
 } from './terrain-objects';
 import {
+  type SceneConstraint,
+  SurfaceConstraints,
+} from './terrain/surface-constraints';
+import {
   buildSurfaceGeometry,
   type SurfaceGeometry,
   SurfaceMesh,
@@ -68,6 +72,8 @@ export interface TerrainViewerProps {
   categories: PointCategory[];
   /** As-built QC comparison markers + leader lines (null/empty draws nothing). */
   comparison?: ComparisonMarker[] | null;
+  /** Surface constraints (breaklines / boundary / holes) to overlay. */
+  constraints?: SceneConstraint[];
   /** Move the camera to a point. `nonce` re-triggers. */
   focus?: FocusTarget;
   /** Called with a survey point id when picked in 3D. */
@@ -83,6 +89,8 @@ export interface TerrainViewerProps {
   scene: SceneData;
   /** Whether to render the extruded OSM buildings. */
   showBuildings?: boolean;
+  /** Whether to draw the constraint overlay. */
+  showConstraints?: boolean;
   /** Whether to draw the building-grid lines + labels. */
   showGrid?: boolean;
   /** DXF layer names to show (empty/undefined shows none). */
@@ -99,7 +107,7 @@ export interface TerrainViewerProps {
   showUtilities?: boolean;
   /** Active surface's STIN mesh blob (base64), or null when none is selected. */
   surface?: { contentBase64: string } | null;
-  /** How to shade the TIN surface: elevation ramp or QC wireframe. */
+  /** How to shade the TIN surface: elevation ramp, slope, or QC wireframe. */
   surfaceMode?: SurfaceMode;
   terrain?: TerrainData | null;
   /** Underground mode: fade the terrain so buried utilities show through. */
@@ -121,6 +129,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
     captureRef,
     categories,
     comparison,
+    constraints,
     focus,
     onSelectPoint,
     onSelectUtility,
@@ -130,6 +139,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
     projectOnTerrain = true,
     scene,
     showBuildings = true,
+    showConstraints = true,
     showGrid = true,
     shownLayers,
     showOverlays = true,
@@ -288,6 +298,19 @@ export function TerrainViewer(props: TerrainViewerProps) {
 
       {surfaceGeom && showSurface ? (
         <SurfaceMesh geometry={surfaceGeom.geometry} mode={surfaceMode} />
+      ) : null}
+
+      {constraints?.length &&
+      originProjectedE !== null &&
+      originProjectedE !== undefined &&
+      originProjectedN !== null &&
+      originProjectedN !== undefined ? (
+        <SurfaceConstraints
+          constraints={constraints}
+          originE={originProjectedE}
+          originN={originProjectedN}
+          visible={showConstraints}
+        />
       ) : null}
 
       {buildings?.length ? (

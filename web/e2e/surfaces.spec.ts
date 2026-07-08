@@ -2,9 +2,9 @@ import { expect, test } from '@playwright/test';
 
 import { createProjectAndOpen, gotoTab, importCsv, signUpAndLogin, upgradeOrg } from './helpers';
 
-// Surface Modeling (P1): build a TIN from survey points via the Surfaces panel,
-// render it in the 3D scene with elevation-ramp / wireframe display modes, and
-// the Solo-plan gate. Needs the full stack (skips if the API is down).
+// Surface Modeling (P1 + P2): build a TIN from survey points, constrain it with
+// an auto boundary (rebuild → new version), and drive the display modes. Needs
+// the full stack (skips if the API is down).
 test.beforeEach(async ({ request }) => {
   const res = await request.post('/api/graphql', { data: { query: '{ __typename }' } });
   test.skip(!res.ok(), 'API not reachable — start the full stack to run this test');
@@ -45,6 +45,51 @@ test('build a TIN from points → renders, then toggle ramp/wireframe', async ({
   await page.getByRole('button', { name: 'Delete Existing grade' }).click();
   await page.getByRole('button', { exact: true, name: 'Delete' }).click();
   await expect(page.getByText('Existing grade')).toHaveCount(0);
+});
+
+test('auto boundary → rebuild bumps the version, and slope shading is offered', async ({
+  page,
+}) => {
+  const email = await signUpAndLogin(page, 'surf-constrain');
+  upgradeOrg(email);
+  await createProjectAndOpen(page, 'Surface Constrain');
+
+  // A 3×3 grid of design points so a boundary has something to clip.
+  await importCsv(
+    page,
+    [
+      'P,N,E,Z,D',
+      'P1,0,0,10,GRD',
+      'P2,0,50,11,GRD',
+      'P3,0,100,12,GRD',
+      'P4,50,0,11,GRD',
+      'P5,50,50,13,GRD',
+      'P6,50,100,14,GRD',
+      'P7,100,0,12,GRD',
+      'P8,100,50,14,GRD',
+      'P9,100,100,15,GRD',
+    ].join('\n'),
+  );
+
+  await gotoTab(page, 'Surfaces');
+  await page.getByLabel('Name').fill('Grade');
+  await page.getByRole('button', { name: 'Build surface' }).click();
+  await expect(page.getByText('Grade')).toBeVisible();
+  await expect(page.getByText('v1')).toBeVisible();
+
+  // Generate an auto boundary → a Boundary constraint badge appears in the list
+  // (exact match avoids the "Auto boundary" button + the card description text).
+  await page.getByRole('button', { name: 'Auto boundary' }).click();
+  await expect(page.getByText('Boundary', { exact: true })).toBeVisible();
+
+  // Rebuild the surface with the constraint → version increments to v2.
+  await page.getByRole('button', { name: 'Rebuild Grade' }).click();
+  await expect(page.getByText('v2')).toBeVisible();
+
+  // Slope shading is available in the Display menu.
+  await page.getByRole('button', { name: 'Display' }).click();
+  await expect(page.getByRole('menuitemradio', { name: 'Slope' })).toBeVisible();
+  await page.getByRole('menuitemradio', { name: 'Slope' }).click();
 });
 
 test('Solo plan gates the Surfaces tab behind the upgrade dialog', async ({ page }) => {

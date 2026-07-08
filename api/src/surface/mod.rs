@@ -19,6 +19,7 @@
 //! ...     T*12   triangles: [a, b, c] (3 x u32) each, indices into vertices
 //! ```
 
+pub mod geom;
 pub mod tin;
 
 /// Magic prefix identifying a SiteLens TIN blob.

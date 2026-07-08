@@ -39,6 +39,7 @@ export function SceneToolbar({
   comparisonCount,
   groupFilter,
   groups,
+  hasConstraints,
   hasScene,
   hasSiteData,
   hasSurface,
@@ -54,6 +55,7 @@ export function SceneToolbar({
   setProjectOnTerrain,
   setShowBuildings,
   setShowComparison,
+  setShowConstraints,
   setShowGrid,
   setShownLayers,
   setShowOverlays,
@@ -65,6 +67,7 @@ export function SceneToolbar({
   setUnderground,
   showBuildings,
   showComparison,
+  showConstraints,
   showGrid,
   shownLayers,
   showOverlays,
@@ -104,6 +107,9 @@ export function SceneToolbar({
   showUtilities: boolean;
   setShowUtilities: (v: boolean) => void;
   hasSurface: boolean;
+  hasConstraints: boolean;
+  showConstraints: boolean;
+  setShowConstraints: (v: boolean) => void;
   showSurface: boolean;
   setShowSurface: (v: boolean) => void;
   surfaceMode: SurfaceMode;
@@ -359,10 +365,19 @@ export function SceneToolbar({
                     onValueChange={(v) => setSurfaceMode(v as SurfaceMode)}
                   >
                     <DropdownMenuRadioItem value="ramp">Elevation ramp</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="slope">Slope</DropdownMenuRadioItem>
                     <DropdownMenuRadioItem value="wireframe">Wireframe</DropdownMenuRadioItem>
                   </DropdownMenuRadioGroup>
                   <DropdownMenuSeparator />
                 </>
+              ) : null}
+              {hasConstraints ? (
+                <DropdownMenuCheckboxItem
+                  checked={showConstraints}
+                  onCheckedChange={(v) => setShowConstraints(Boolean(v))}
+                >
+                  Constraints
+                </DropdownMenuCheckboxItem>
               ) : null}
               {utilitiesCount > 0 ? (
                 <>
