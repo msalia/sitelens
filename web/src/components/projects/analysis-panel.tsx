@@ -179,7 +179,8 @@ export function AnalysisPanel({
   // saved analysis's path.
   const paths = useMemo(() => {
     const out: AnalysisPath[] = [];
-    if (capturing && verts.length >= 2) {
+    // Emit from the first point so its marker shows immediately as it's snapped.
+    if (capturing && verts.length >= 1) {
       out.push({ active: true, id: 'drawing', vertices: verts });
     }
     const sel = analyses.find((a) => a.id === activeAnalysisId);

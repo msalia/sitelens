@@ -14,9 +14,9 @@ export interface AnalysisPath {
   vertices: { e: number; n: number }[];
 }
 
-/** Draws analysis input geometry as linework in the local frame via the project's
- *  projected origin (matches the DXF/constraint overlays). A plan-mode primitive
- *  the analysis features build on. */
+/** Draws analysis input geometry as linework + vertex markers in the local frame
+ *  via the project's projected origin (matches the DXF/constraint overlays). The
+ *  vertex spheres give live feedback as points are snapped while drawing. */
 export function AnalysisOverlay({
   originE,
   originN,
@@ -28,15 +28,13 @@ export function AnalysisOverlay({
   originN: number;
   visible?: boolean;
 }) {
-  const lines = useMemo(
+  const items = useMemo(
     () =>
-      paths
-        .map((p) => ({
-          active: p.active ?? false,
-          id: p.id,
-          points: p.vertices.map((v) => [v.e - originE, 0.1, -(v.n - originN)] as Vec3),
-        }))
-        .filter((l) => l.points.length >= 2),
+      paths.map((p) => ({
+        active: p.active ?? false,
+        id: p.id,
+        points: p.vertices.map((v) => [v.e - originE, 0.1, -(v.n - originN)] as Vec3),
+      })),
     [paths, originE, originN],
   );
 
@@ -45,15 +43,26 @@ export function AnalysisOverlay({
   }
   return (
     <>
-      {lines.map((l) => (
-        <Line
-          key={l.id}
-          points={l.points}
-          color={l.active ? '#7c3aed' : '#a78bfa'}
-          lineWidth={l.active ? 3 : 2}
-          transparent
-          opacity={l.active ? 1 : 0.7}
-        />
+      {items.map((l) => (
+        <group key={l.id}>
+          {/* Polyline (needs 2+ points). */}
+          {l.points.length >= 2 ? (
+            <Line
+              points={l.points}
+              color={l.active ? '#7c3aed' : '#a78bfa'}
+              lineWidth={l.active ? 3 : 2}
+              transparent
+              opacity={l.active ? 1 : 0.7}
+            />
+          ) : null}
+          {/* A marker at every vertex — live feedback for the point being snapped. */}
+          {l.points.map((pt, i) => (
+            <mesh key={i} position={pt}>
+              <sphereGeometry args={[l.active ? 0.7 : 0.5, 14, 14]} />
+              <meshBasicMaterial color={l.active ? '#7c3aed' : '#a78bfa'} />
+            </mesh>
+          ))}
+        </group>
       ))}
     </>
   );
