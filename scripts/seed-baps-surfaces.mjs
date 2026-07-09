@@ -82,8 +82,6 @@ async function main() {
           name: SURFACE_NAME,
           scope: 'ALL',
           boundaryId,
-          // Drop long slivers from the concave hull's edges for a cleaner TIN.
-          maxEdgeLength: 40,
         },
       },
     );
