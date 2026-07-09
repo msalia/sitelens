@@ -112,6 +112,14 @@ export const docsOrder: DocMeta[] = [
     title: 'DXF Overlay',
   },
   {
+    description:
+      'Build TIN and DEM surfaces, derive contours, compute cut/fill volumes with a heatmap, and export LandXML/DXF/GeoTIFF/PDF.',
+    group: 'Visualization',
+    href: '/docs/surfaces',
+    slug: 'surfaces',
+    title: 'Surfaces & Volumes',
+  },
+  {
     description: 'What the Solo and Crew plans unlock, and how billing works.',
     group: 'Plans & Pricing',
     href: '/docs/plans',

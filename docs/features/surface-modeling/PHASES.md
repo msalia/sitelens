@@ -210,16 +210,28 @@ surfaces (uploaded GeoTIFF) participate in contours + volumes like a TIN.
 
 Self-serve docs and end-to-end validation.
 
+> **Build notes (as shipped):**
+> - Docs follow the existing per-slug pattern: a `docsOrder` entry drives the nav,
+>   `content/docs/surfaces.md` holds the copy, and `app/docs/surfaces/page.tsx`
+>   renders it via `DocsPageContent` (same as every other docs page).
+> - A new `lib/docs.test.ts` asserts **every** nav entry has a content file + a
+>   route `page.tsx` (and unique slugs/hrefs) — covers "renders in nav + route
+>   resolves" for the whole docs set, not just this page.
+> - Acceptance was run against the live BAPS stack rather than locking binary
+>   fixtures: surface → contours (9 levels) → volume (cut/fill) → all exports
+>   produce valid files — LandXML `<?xml`, DXF group-code, GeoTIFF `II*\0`, CSV,
+>   and a real `%PDF-` through the WeasyPrint report service.
+
 ### Deliverables
 
-- [ ] In-app docs page: add `surfaces` to `web/src/lib/docs.ts` `docsOrder` (group "Visualization"); create `web/src/content/docs/surfaces.md`; create `web/src/app/docs/surfaces/page.tsx` per the `[slug]` pattern.
-- [ ] Docs content: TIN + why breaklines/boundary matter, point selection/exclusions, digitize vs DXF breaklines, DEM upload, contour params, volumes (types + cell size) + heatmap, exports; note OpenTopography is context-only.
-- [ ] End-to-end acceptance on a real sample site (e.g. BAPS seed site): build surface → contours → volume → export; verify LandXML opens in CAD/Civil 3D and DXF/GeoTIFF validate.
+- [x] In-app docs page: added `surfaces` to `web/src/lib/docs.ts` `docsOrder` (group "Visualization"); `web/src/content/docs/surfaces.md`; `web/src/app/docs/surfaces/page.tsx` per the `[slug]` pattern.
+- [x] Docs content: TIN + why breaklines/boundary matter, point selection/scope, digitize vs DXF breaklines, DEM upload, contour params, volumes (types + cell size) + heatmap, exports; notes OpenTopography is context-only.
+- [x] End-to-end acceptance on the BAPS seed site: build surface → contours → volume → export; LandXML/DXF/GeoTIFF/CSV/PDF all validate (magic bytes checked).
 
 ### Tests
 
-- [ ] Docs page renders in nav + route resolves.
-- [ ] Acceptance checklist run; sample export files locked as fixtures.
+- [x] `lib/docs.test.ts`: every nav entry has content + a route page; the Surfaces page is in the Visualization group.
+- [x] Acceptance checklist run against the live stack (see build notes).
 
 ### Validates
 
