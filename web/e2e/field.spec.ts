@@ -82,7 +82,8 @@ test('import as-built → results table → manual pair an unmatched point', asy
 test('Solo plan sees the Field upgrade gate', async ({ page }) => {
   await signUpAndLogin(page, 'field-gate'); // not upgraded → Solo
   await createProjectAndOpen(page, 'Field Gate');
-  await page.getByRole('button', { exact: true, name: 'Field' }).click();
-  // Instead of the panel, the Crew upsell dialog appears.
+  // Field lives under the "Survey" dropdown; the locked item opens the upsell.
+  await page.getByRole('button', { exact: true, name: 'Survey' }).click();
+  await page.getByRole('menuitem', { exact: true, name: 'Field' }).click();
   await expect(page.getByRole('dialog')).toContainText('Crew');
 });

@@ -22,9 +22,15 @@ test('workspace shows all tabs, setup alerts, and stat pills', async ({ page }) 
   upgradeOrg(email);
   await createProjectAndOpen(page, 'Tabs Site');
 
-  for (const tab of ['Setup', 'Grid', 'Points', 'Overlays']) {
+  // Top-level tabs sit in one row; Grid/Points/Field live under "Survey".
+  for (const tab of ['Setup', 'Survey', 'Overlays', 'Surfaces', 'Analysis']) {
     await expect(page.getByRole('button', { exact: true, name: tab })).toBeVisible();
   }
+  await page.getByRole('button', { exact: true, name: 'Survey' }).click();
+  for (const item of ['Grid', 'Points', 'Field']) {
+    await expect(page.getByRole('menuitem', { exact: true, name: item })).toBeVisible();
+  }
+  await page.keyboard.press('Escape');
 
   // Setup tab: the first (control) step is "Next", others "To do".
   await expect(page.getByRole('alert').filter({ hasText: 'Add control points' })).toBeVisible();

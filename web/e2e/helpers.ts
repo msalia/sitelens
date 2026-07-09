@@ -113,11 +113,17 @@ export async function createProjectAndOpen(page: Page, name: string): Promise<vo
   await expect(page.getByRole('button', { exact: true, name: 'Setup' })).toBeVisible();
 }
 
-/** Switches the workspace detail panel to a tab. */
+/** Switches the workspace detail panel to a tab. Grid, Points, and Field live
+ *  under the "Survey" dropdown; the rest are direct tab buttons. */
 export async function gotoTab(
   page: Page,
-  name: 'Setup' | 'Grid' | 'Points' | 'Overlays' | 'Utilities' | 'Surfaces' | 'Field',
+  name: 'Setup' | 'Grid' | 'Points' | 'Overlays' | 'Utilities' | 'Surfaces' | 'Analysis' | 'Field',
 ): Promise<void> {
+  if (name === 'Grid' || name === 'Points' || name === 'Field') {
+    await page.getByRole('button', { exact: true, name: 'Survey' }).click();
+    await page.getByRole('menuitem', { exact: true, name }).click();
+    return;
+  }
   await page.getByRole('button', { exact: true, name }).click();
 }
 

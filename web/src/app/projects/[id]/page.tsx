@@ -1,6 +1,6 @@
 'use client';
 
-import { IconArrowLeft, IconFolderQuestion } from '@tabler/icons-react';
+import { IconArrowLeft, IconChevronDown, IconFolderQuestion } from '@tabler/icons-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -27,6 +27,12 @@ import { TransformPanel } from '@/components/projects/transform-panel';
 import { UtilitiesPanel } from '@/components/projects/utilities-panel';
 import { buttonVariants } from '@/components/ui/button';
 import { ButtonGroup } from '@/components/ui/button-group';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Empty,
   EmptyContent,
@@ -132,6 +138,15 @@ type Tab =
   | 'surfaces'
   | 'analysis'
   | 'field';
+
+/** Shared tab-button styling (flat tabs + the Survey dropdown trigger). */
+const tabClass = (active: boolean) =>
+  cn(
+    'flex-1 rounded-lg px-3 py-1.5 text-center text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50',
+    active
+      ? 'bg-primary/10 text-primary'
+      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+  );
 
 /** Crew-gated tabs → the plan `Feature` key their upsell dialog uses. */
 const CREW_TABS: Partial<Record<Tab, string>> = {
@@ -295,40 +310,70 @@ export default function ProjectWorkspace() {
         </header>
 
         <div className="flex flex-wrap gap-1 border-b px-3 py-2">
+          {/* Setup guide — a transient tab that drops once the site is set up. */}
+          {!setupComplete ? (
+            <button
+              type="button"
+              onClick={() => setTab('setup')}
+              className={tabClass(activeTab === 'setup')}
+            >
+              Setup
+            </button>
+          ) : null}
+
+          {/* "Survey" groups the Grid, Points, and Field steps so every tab fits
+              one row. Field stays Crew-gated (routes to the upsell when locked). */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  type="button"
+                  className={cn(
+                    tabClass(
+                      activeTab === 'control' || activeTab === 'points' || activeTab === 'field',
+                    ),
+                    'flex items-center justify-center gap-1',
+                  )}
+                >
+                  Survey
+                  <IconChevronDown className="size-3.5" />
+                </button>
+              }
+            />
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onClick={() => setTab('control')}>Grid</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTab('points')}>Points</DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={billingLoading}
+                onClick={() => (crewGated ? setUpgradeFeature(CREW_TABS.field!) : setTab('field'))}
+              >
+                Field
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           {(
             [
-              ['setup', 'Setup'],
-              ['control', 'Grid'],
-              ['points', 'Points'],
               ['overlays', 'Overlays'],
               ['utilities', 'Utilities'],
               ['surfaces', 'Surfaces'],
               ['analysis', 'Analysis'],
-              ['field', 'Field'],
             ] as const
-          )
-            // Once setup is complete the guide is no longer useful — drop the tab.
-            .filter(([key]) => key !== 'setup' || !setupComplete)
-            .map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                // Hold Crew tabs inert until billing resolves so the click routes to
-                // the upsell (free) or the panel (Crew), never the wrong one.
-                disabled={key in CREW_TABS && billingLoading}
-                onClick={() =>
-                  key in CREW_TABS && crewGated ? setUpgradeFeature(CREW_TABS[key]!) : setTab(key)
-                }
-                className={cn(
-                  'flex-1 rounded-lg px-3 py-1.5 text-center text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50',
-                  activeTab === key
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                )}
-              >
-                {label}
-              </button>
-            ))}
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              // Hold Crew tabs inert until billing resolves so the click routes to
+              // the upsell (free) or the panel (Crew), never the wrong one.
+              disabled={key in CREW_TABS && billingLoading}
+              onClick={() =>
+                key in CREW_TABS && crewGated ? setUpgradeFeature(CREW_TABS[key]!) : setTab(key)
+              }
+              className={tabClass(activeTab === key)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         {/* `[&>*]:shrink-0` keeps cards at natural height (flex children would
