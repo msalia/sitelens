@@ -394,6 +394,12 @@ impl AnalysisMutation {
 
         let path = parse_polyline(&input.path)?;
         let obstacles = parse_polylines(&input.obstacles)?;
+        // Keep the obstacle geometry for the render blob (the closure moves the
+        // parsed copy) so the client can show what a failing run clipped.
+        let obstacles_json: Vec<Value> = obstacles
+            .iter()
+            .map(|line| Value::Array(line.iter().map(|p| json!([p[0], p[1]])).collect()))
+            .collect();
         let v = turning::Vehicle {
             wheelbase: vehicle.wheelbase,
             front_overhang: vehicle.front_overhang,
@@ -412,14 +418,33 @@ impl AnalysisMutation {
         .map_err(|e| async_graphql::Error::new(format!("turning task failed: {e}")))?
         .map_err(async_graphql::Error::new)?;
 
-        // Decimate the body quads for a light render blob (~40 outlines max).
-        let stride = (swept.bodies.len() / 40).max(1);
+        // A handful of vehicle footprints for context (drawn as outlines).
+        let stride = (swept.bodies.len() / 24).max(1);
         let bodies: Vec<Value> = swept
             .bodies
             .iter()
             .step_by(stride)
             .map(|q| Value::Array(q.iter().map(|p| json!([p[0], p[1]])).collect()))
             .collect();
+
+        // Full-res swept-edge curves (the corner paths) — inherently smooth from
+        // the tractrix integration, so the client draws clean boundary/wheel
+        // tracks with no staircase. Lightly decimated to keep the blob small.
+        let e_stride = (swept.bodies.len() / 240).max(1);
+        let corner = |k: usize| -> Vec<Value> {
+            swept
+                .bodies
+                .iter()
+                .step_by(e_stride)
+                .map(|q| json!([q[k][0], q[k][1]]))
+                .collect()
+        };
+        let edges = json!({
+            "fl": corner(0),
+            "fr": corner(1),
+            "rr": corner(2),
+            "rl": corner(3),
+        });
 
         let pass = clips.is_empty();
         let result = json!({
@@ -432,7 +457,9 @@ impl AnalysisMutation {
             "frontTrack": points_json(&swept.front_track),
             "rearTrack": points_json(&swept.rear_track),
             "bodies": bodies,
+            "edges": edges,
             "clips": points_json(&clips),
+            "obstacles": obstacles_json,
         });
         let params = json!({
             "vehicleTemplateId": input.vehicle_template_id,

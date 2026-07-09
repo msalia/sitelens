@@ -60,6 +60,29 @@ fn perp(a: [f64; 2]) -> [f64; 2] {
 }
 
 /// Resamples a polyline to points spaced ~`step` apart (endpoints kept).
+/// Rounds the sharp corners of a drawn centre-line with Chaikin corner-cutting,
+/// keeping the endpoints. A vehicle can't pivot instantaneously, so integrating
+/// along the raw polyline produces a kink (and a rear-edge cusp) at every drawn
+/// vertex; smoothing first yields the plausible, continuous driven path.
+fn smooth_path(path: &[[f64; 2]], iterations: usize) -> Vec<[f64; 2]> {
+    if path.len() < 3 {
+        return path.to_vec();
+    }
+    let mut pts = path.to_vec();
+    for _ in 0..iterations {
+        let mut next = Vec::with_capacity(pts.len() * 2);
+        next.push(pts[0]); // pin the start
+        for w in pts.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            next.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25]);
+            next.push([a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]);
+        }
+        next.push(pts[pts.len() - 1]); // pin the end
+        pts = next;
+    }
+    pts
+}
+
 fn densify(path: &[[f64; 2]], step: f64) -> Vec<[f64; 2]> {
     let mut out = vec![path[0]];
     for w in path.windows(2) {
@@ -94,7 +117,9 @@ pub fn swept_path(path: &[[f64; 2]], v: &Vehicle, step: f64) -> Result<SweptPath
         return Err("vehicle wheelbase and width must be positive".into());
     }
 
-    let front = densify(path, step);
+    // Round drawn corners first so the driven path (and its edges) are smooth.
+    let smoothed = smooth_path(path, 3);
+    let front = densify(&smoothed, step);
     if front.len() < 2 {
         return Err("path is too short to sweep".into());
     }
