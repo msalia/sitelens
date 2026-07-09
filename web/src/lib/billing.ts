@@ -119,11 +119,17 @@ export function usePlanCatalog() {
     void (async () => {
       try {
         const data = await gql(PLAN_CATALOG_QUERY);
-        if (active) {setCatalog(data.planCatalog);}
+        if (active) {
+          setCatalog(data.planCatalog);
+        }
       } catch {
-        if (active) {setCatalog(null);}
+        if (active) {
+          setCatalog(null);
+        }
       } finally {
-        if (active) {setLoading(false);}
+        if (active) {
+          setLoading(false);
+        }
       }
     })();
     return () => {

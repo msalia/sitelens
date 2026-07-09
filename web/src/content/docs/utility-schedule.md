@@ -44,12 +44,12 @@ accent, and structure outlines are black, so the utilities themselves stand out.
   confused.
 - **The casing hatch hints at material** (color still comes from the APWA type):
 
-  | Material | Hatch |
-  | --- | --- |
-  | Ductile iron (DIP) | Cross-hatch |
-  | Concrete / RCP | Dots |
+  | Material             | Hatch            |
+  | -------------------- | ---------------- |
+  | Ductile iron (DIP)   | Cross-hatch      |
+  | Concrete / RCP       | Dots             |
   | Steel / metal / iron | Horizontal lines |
-  | PVC / HDPE / other | Diagonal lines |
+  | PVC / HDPE / other   | Diagonal lines   |
 
 **Structures are type symbols:** manhole ●, catch basin ▪, valve ◆, hydrant ▲,
 cleanout ✚, vault ⬗ — filled in the APWA color (or gray for context), with a

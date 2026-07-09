@@ -72,7 +72,13 @@ test('import GeoJSON → map layer → commit → appears in inventory', async (
   const geojson = JSON.stringify({
     features: [
       {
-        geometry: { coordinates: [[0, 0], [3, 4]], type: 'LineString' },
+        geometry: {
+          coordinates: [
+            [0, 0],
+            [3, 4],
+          ],
+          type: 'LineString',
+        },
         properties: { layer: 'WATER', name: 'WL-1' },
         type: 'Feature',
       },

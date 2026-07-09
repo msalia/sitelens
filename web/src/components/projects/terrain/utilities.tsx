@@ -100,12 +100,16 @@ export function Utilities({
   const showType = (t: string) => !visibleTypes || visibleTypes.has(t);
   return (
     <group>
-      {runs.filter((r) => showType(r.typeKey)).map((r) => (
-        <RunTube key={r.id} run={r} frame={frame} onSelect={onSelect} />
-      ))}
-      {structures.filter((s) => showType(s.typeKey)).map((s) => (
-        <StructureSolid key={s.id} structure={s} frame={frame} onSelect={onSelect} />
-      ))}
+      {runs
+        .filter((r) => showType(r.typeKey))
+        .map((r) => (
+          <RunTube key={r.id} run={r} frame={frame} onSelect={onSelect} />
+        ))}
+      {structures
+        .filter((s) => showType(s.typeKey))
+        .map((s) => (
+          <StructureSolid key={s.id} structure={s} frame={frame} onSelect={onSelect} />
+        ))}
     </group>
   );
 }

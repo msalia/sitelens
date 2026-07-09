@@ -7,12 +7,12 @@ project. It's a Crew feature.
 
 ## Supported apps & formats
 
-| App | Export | Import |
-| --- | --- | --- |
-| Trimble Access | Native JobXML (`.jxl`) + CSV | JobXML, CSV |
-| Carlson / MicroSurvey | PNEZD CSV + LandXML | CSV, LandXML |
-| Topcon / Sokkia Magnet | PNEZD CSV | CSV |
-| Generic / other | PNEZD CSV (with header) + LandXML | CSV, LandXML |
+| App                    | Export                            | Import       |
+| ---------------------- | --------------------------------- | ------------ |
+| Trimble Access         | Native JobXML (`.jxl`) + CSV      | JobXML, CSV  |
+| Carlson / MicroSurvey  | PNEZD CSV + LandXML               | CSV, LandXML |
+| Topcon / Sokkia Magnet | PNEZD CSV                         | CSV          |
+| Generic / other        | PNEZD CSV (with header) + LandXML | CSV, LandXML |
 
 Files are **natively openable** — no reformatting on the device. Carlson and
 MicroSurvey are served by the PNEZD CSV preset and LandXML (both import cleanly);

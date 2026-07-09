@@ -91,7 +91,9 @@ export function ImportBreaklinesDialog({
       setContent(base64);
       setLayers(previewBreaklineImport.layers);
       setMapping(
-        Object.fromEntries(previewBreaklineImport.layers.map((l) => [l.layer, l.suggestedKind.toUpperCase()])),
+        Object.fromEntries(
+          previewBreaklineImport.layers.map((l) => [l.layer, l.suggestedKind.toUpperCase()]),
+        ),
       );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not read the DXF');
@@ -120,7 +122,9 @@ export function ImportBreaklinesDialog({
         projectId: project.id,
         unit,
       });
-      toast.success(`Imported ${importBreaklines.created} breakline(s), skipped ${importBreaklines.skipped}.`);
+      toast.success(
+        `Imported ${importBreaklines.created} breakline(s), skipped ${importBreaklines.skipped}.`,
+      );
       onImported();
       setOpen(false);
       reset();

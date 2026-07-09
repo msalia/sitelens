@@ -10,13 +10,7 @@ import { ConfirmDialog } from '@/components/projects/confirm-dialog';
 import { ImportUtilitiesDialog } from '@/components/projects/utilities/import-dialog';
 import { Button } from '@/components/ui/button';
 import { ButtonGroup } from '@/components/ui/button-group';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -409,7 +403,11 @@ export function UtilitiesPanel({
         search: debouncedSearch || null,
         typeKey: typeFilter === 'all' ? null : typeFilter,
       });
-      downloadBase64(exportUtilities.filename, exportUtilities.mimeType, exportUtilities.contentBase64);
+      downloadBase64(
+        exportUtilities.filename,
+        exportUtilities.mimeType,
+        exportUtilities.contentBase64,
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Export failed');
     }
@@ -426,8 +424,8 @@ export function UtilitiesPanel({
           <CardHeader>
             <CardTitle>Utilities</CardTitle>
             <CardDescription>
-              Capture as-built utility runs and structures. Snap to survey points in the 3D
-              scene, or enter exact coordinates.
+              Capture as-built utility runs and structures. Snap to survey points in the 3D scene,
+              or enter exact coordinates.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
@@ -631,7 +629,9 @@ export function UtilitiesPanel({
                       <span className="inline-flex items-center gap-1.5 text-sm whitespace-nowrap">
                         <span
                           className="size-2.5 shrink-0 rounded-full"
-                          style={{ backgroundColor: byKey.get(row.typeKey)?.apwaColor ?? '#94a3b8' }}
+                          style={{
+                            backgroundColor: byKey.get(row.typeKey)?.apwaColor ?? '#94a3b8',
+                          }}
                         />
                         {byKey.get(row.typeKey)?.label ?? row.typeKey}
                       </span>
@@ -856,8 +856,8 @@ function RunBuilder({
           New run · {typeLabel}
         </CardTitle>
         <CardDescription>
-          Click survey points in the scene to add vertices, or enter coordinates. A run needs
-          at least two.
+          Click survey points in the scene to add vertices, or enter coordinates. A run needs at
+          least two.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">

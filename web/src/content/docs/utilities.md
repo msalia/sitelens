@@ -23,15 +23,15 @@ Every run and structure is tagged with a **type** from the built-in APWA catalog
 (American Public Works Association uniform color code). The type sets the display
 color everywhere — inventory, 3D scene, and exports:
 
-| Utility | APWA color |
-| --- | --- |
-| Potable water | Blue |
-| Sewer / storm / drainage | Green |
-| Reclaimed water / irrigation | Purple |
-| Gas / oil / steam | Yellow |
-| Electric power | Red |
-| Communications / fiber | Orange |
-| Proposed excavation | White / pink (temp) |
+| Utility                      | APWA color          |
+| ---------------------------- | ------------------- |
+| Potable water                | Blue                |
+| Sewer / storm / drainage     | Green               |
+| Reclaimed water / irrigation | Purple              |
+| Gas / oil / steam            | Yellow              |
+| Electric power               | Red                 |
+| Communications / fiber       | Orange              |
+| Proposed excavation          | White / pink (temp) |
 
 Pick the type when you create the entity; it drives the color and groups the item
 in the inventory. Structure types (manhole, valve, hydrant, vault…) render as
