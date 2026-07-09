@@ -154,6 +154,12 @@ export type Role =
   | 'SURVEYOR'
   | 'VIEWER';
 
+/** Surface deliverable formats. */
+export type SurfaceExportFormat =
+  | 'DXF'
+  | 'GEOTIFF'
+  | 'LANDXML';
+
 /**
  * Parameters for building/rebuilding a TIN surface. Point selection is a scope
  * (all / one category / one group) minus explicit exclusions. `max_edge_length`
@@ -278,6 +284,16 @@ export type VolumeInput = {
   /** Reference elevation in meters (required when surface↔elevation). */
   referenceElev?: number | null | undefined;
 };
+
+/** Volume report formats. */
+export type VolumeReportFormat =
+  | 'CSV'
+  | 'PDF';
+
+/** Volume display unit for reports: cubic yards (US earthwork) or cubic meters. */
+export type VolumeUnit =
+  | 'CUBIC_METER'
+  | 'CUBIC_YARD';
 
 export type WorkspaceQueryVariables = Exact<{
   id: string;
@@ -845,6 +861,25 @@ export type RebuildSurfaceMutationVariables = Exact<{
 
 
 export type RebuildSurfaceMutation = { rebuildSurface: { id: string, version: number, vertexCount: number, triangleCount: number } };
+
+export type ExportSurfaceQueryVariables = Exact<{
+  id: string;
+  format: SurfaceExportFormat;
+  contourInterval?: number | null | undefined;
+  cellSize?: number | null | undefined;
+}>;
+
+
+export type ExportSurfaceQuery = { exportSurface: { filename: string, mimeType: string, contentBase64: string } };
+
+export type ExportVolumeReportQueryVariables = Exact<{
+  id: string;
+  format: VolumeReportFormat;
+  unit?: VolumeUnit | null | undefined;
+}>;
+
+
+export type ExportVolumeReportQuery = { exportVolumeReport: { filename: string, mimeType: string, contentBase64: string } };
 
 export type DeleteSurfaceMutationVariables = Exact<{
   id: string;
@@ -2025,6 +2060,29 @@ export const RebuildSurfaceDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<RebuildSurfaceMutation, RebuildSurfaceMutationVariables>;
+export const ExportSurfaceDocument = new TypedDocumentString(`
+    query ExportSurface($id: UUID!, $format: SurfaceExportFormat!, $contourInterval: Float, $cellSize: Float) {
+  exportSurface(
+    id: $id
+    format: $format
+    contourInterval: $contourInterval
+    cellSize: $cellSize
+  ) {
+    filename
+    mimeType
+    contentBase64
+  }
+}
+    `) as unknown as TypedDocumentString<ExportSurfaceQuery, ExportSurfaceQueryVariables>;
+export const ExportVolumeReportDocument = new TypedDocumentString(`
+    query ExportVolumeReport($id: UUID!, $format: VolumeReportFormat!, $unit: VolumeUnit) {
+  exportVolumeReport(id: $id, format: $format, unit: $unit) {
+    filename
+    mimeType
+    contentBase64
+  }
+}
+    `) as unknown as TypedDocumentString<ExportVolumeReportQuery, ExportVolumeReportQueryVariables>;
 export const DeleteSurfaceDocument = new TypedDocumentString(`
     mutation DeleteSurface($id: UUID!) {
   deleteSurface(id: $id)

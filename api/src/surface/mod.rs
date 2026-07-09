@@ -20,7 +20,9 @@
 //! ```
 
 pub mod contour;
+pub mod export;
 pub mod geom;
+pub mod geotiff;
 pub mod tin;
 pub mod volume;
 

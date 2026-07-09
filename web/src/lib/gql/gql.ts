@@ -82,6 +82,8 @@ type Documents = {
     "\n  query SurfaceContours($id: UUID!, $interval: Float!, $majorInterval: Float, $smoothing: Int) {\n    surfaceContours(\n      id: $id\n      interval: $interval\n      majorInterval: $majorInterval\n      smoothing: $smoothing\n    ) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n": typeof types.SurfaceContoursDocument,
     "\n  mutation BuildSurface($projectId: UUID!, $input: SurfaceInput!) {\n    buildSurface(projectId: $projectId, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n": typeof types.BuildSurfaceDocument,
     "\n  mutation RebuildSurface($id: UUID!, $input: SurfaceInput!) {\n    rebuildSurface(id: $id, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n": typeof types.RebuildSurfaceDocument,
+    "\n  query ExportSurface(\n    $id: UUID!\n    $format: SurfaceExportFormat!\n    $contourInterval: Float\n    $cellSize: Float\n  ) {\n    exportSurface(\n      id: $id\n      format: $format\n      contourInterval: $contourInterval\n      cellSize: $cellSize\n    ) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n": typeof types.ExportSurfaceDocument,
+    "\n  query ExportVolumeReport($id: UUID!, $format: VolumeReportFormat!, $unit: VolumeUnit) {\n    exportVolumeReport(id: $id, format: $format, unit: $unit) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n": typeof types.ExportVolumeReportDocument,
     "\n  mutation DeleteSurface($id: UUID!) {\n    deleteSurface(id: $id)\n  }\n": typeof types.DeleteSurfaceDocument,
     "\n  query Volumes($projectId: UUID!) {\n    volumes(projectId: $projectId) {\n      id\n      name\n      comparison\n      baseSurfaceId\n      baseVersion\n      compareSurfaceId\n      compareVersion\n      referenceElev\n      cellSize\n      cutVolume\n      fillVolume\n      netVolume\n      area\n      hasHeatmap\n      computedAt\n    }\n  }\n": typeof types.VolumesDocument,
     "\n  mutation ComputeVolume($projectId: UUID!, $input: VolumeInput!) {\n    computeVolume(projectId: $projectId, input: $input) {\n      id\n      cutVolume\n      fillVolume\n      netVolume\n      area\n    }\n  }\n": typeof types.ComputeVolumeDocument,
@@ -188,6 +190,8 @@ const documents: Documents = {
     "\n  query SurfaceContours($id: UUID!, $interval: Float!, $majorInterval: Float, $smoothing: Int) {\n    surfaceContours(\n      id: $id\n      interval: $interval\n      majorInterval: $majorInterval\n      smoothing: $smoothing\n    ) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n": types.SurfaceContoursDocument,
     "\n  mutation BuildSurface($projectId: UUID!, $input: SurfaceInput!) {\n    buildSurface(projectId: $projectId, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n": types.BuildSurfaceDocument,
     "\n  mutation RebuildSurface($id: UUID!, $input: SurfaceInput!) {\n    rebuildSurface(id: $id, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n": types.RebuildSurfaceDocument,
+    "\n  query ExportSurface(\n    $id: UUID!\n    $format: SurfaceExportFormat!\n    $contourInterval: Float\n    $cellSize: Float\n  ) {\n    exportSurface(\n      id: $id\n      format: $format\n      contourInterval: $contourInterval\n      cellSize: $cellSize\n    ) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n": types.ExportSurfaceDocument,
+    "\n  query ExportVolumeReport($id: UUID!, $format: VolumeReportFormat!, $unit: VolumeUnit) {\n    exportVolumeReport(id: $id, format: $format, unit: $unit) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n": types.ExportVolumeReportDocument,
     "\n  mutation DeleteSurface($id: UUID!) {\n    deleteSurface(id: $id)\n  }\n": types.DeleteSurfaceDocument,
     "\n  query Volumes($projectId: UUID!) {\n    volumes(projectId: $projectId) {\n      id\n      name\n      comparison\n      baseSurfaceId\n      baseVersion\n      compareSurfaceId\n      compareVersion\n      referenceElev\n      cellSize\n      cutVolume\n      fillVolume\n      netVolume\n      area\n      hasHeatmap\n      computedAt\n    }\n  }\n": types.VolumesDocument,
     "\n  mutation ComputeVolume($projectId: UUID!, $input: VolumeInput!) {\n    computeVolume(projectId: $projectId, input: $input) {\n      id\n      cutVolume\n      fillVolume\n      netVolume\n      area\n    }\n  }\n": types.ComputeVolumeDocument,
@@ -495,6 +499,14 @@ export function graphql(source: "\n  mutation BuildSurface($projectId: UUID!, $i
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation RebuildSurface($id: UUID!, $input: SurfaceInput!) {\n    rebuildSurface(id: $id, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n"): typeof import('./graphql').RebuildSurfaceDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query ExportSurface(\n    $id: UUID!\n    $format: SurfaceExportFormat!\n    $contourInterval: Float\n    $cellSize: Float\n  ) {\n    exportSurface(\n      id: $id\n      format: $format\n      contourInterval: $contourInterval\n      cellSize: $cellSize\n    ) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n"): typeof import('./graphql').ExportSurfaceDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query ExportVolumeReport($id: UUID!, $format: VolumeReportFormat!, $unit: VolumeUnit) {\n    exportVolumeReport(id: $id, format: $format, unit: $unit) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n"): typeof import('./graphql').ExportVolumeReportDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

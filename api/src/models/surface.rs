@@ -260,6 +260,28 @@ pub struct Volume {
     pub computed_at: DateTime<Utc>,
 }
 
+/// Surface deliverable formats.
+#[derive(Enum, Copy, Clone, Eq, PartialEq, Debug)]
+pub enum SurfaceExportFormat {
+    Landxml,
+    Dxf,
+    Geotiff,
+}
+
+/// Volume report formats.
+#[derive(Enum, Copy, Clone, Eq, PartialEq, Debug)]
+pub enum VolumeReportFormat {
+    Pdf,
+    Csv,
+}
+
+/// Volume display unit for reports: cubic yards (US earthwork) or cubic meters.
+#[derive(Enum, Copy, Clone, Eq, PartialEq, Debug)]
+pub enum VolumeUnit {
+    CubicYard,
+    CubicMeter,
+}
+
 /// Parameters for computing a volume. Exactly one of `compare_surface_id`
 /// (surface↔surface) or `reference_elev` (surface↔elevation) applies, matching
 /// `comparison`. `cell_size` (meters) is the accuracy/perf knob.

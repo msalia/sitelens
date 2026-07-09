@@ -1220,6 +1220,17 @@ type QueryRoot {
 	"""
 	volumeHeatmap(id: UUID!): FileBlob!
 	"""
+	Exports a surface as LandXML, DXF (3DFACE + optional contour layers), or a
+	GeoTIFF DEM. `contour_interval` (meters) adds contour layers to DXF;
+	`cell_size` (meters) sets the GeoTIFF raster resolution (default 1 m).
+	"""
+	exportSurface(id: UUID!, format: SurfaceExportFormat!, contourInterval: Float, cellSize: Float): FileBlob!
+	"""
+	Exports a volume result as a PDF (WeasyPrint) or CSV, in cubic yards
+	(default) or cubic meters. Both carry the reproducibility metadata.
+	"""
+	exportVolumeReport(id: UUID!, format: VolumeReportFormat!, unit: VolumeUnit! = CUBIC_YARD): FileBlob!
+	"""
 	The caller org's plan, subscription status, usage, and limits.
 	"""
 	billing: BillingInfo!
@@ -1388,6 +1399,15 @@ type SurfaceBreakline {
 	sourceLayer: String
 	createdAt: DateTime!
 	updatedAt: DateTime!
+}
+
+"""
+Surface deliverable formats.
+"""
+enum SurfaceExportFormat {
+	LANDXML
+	DXF
+	GEOTIFF
 }
 
 """
@@ -1791,6 +1811,22 @@ input VolumeInput {
 	"""
 	referenceElev: Float
 	cellSize: Float!
+}
+
+"""
+Volume report formats.
+"""
+enum VolumeReportFormat {
+	PDF
+	CSV
+}
+
+"""
+Volume display unit for reports: cubic yards (US earthwork) or cubic meters.
+"""
+enum VolumeUnit {
+	CUBIC_YARD
+	CUBIC_METER
 }
 
 """

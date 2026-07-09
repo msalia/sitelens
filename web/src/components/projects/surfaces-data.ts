@@ -91,6 +91,38 @@ export const REBUILD_SURFACE = graphql(`
   }
 `);
 
+/** Export a surface as LandXML / DXF / GeoTIFF (base64 FileBlob). */
+export const EXPORT_SURFACE = graphql(`
+  query ExportSurface(
+    $id: UUID!
+    $format: SurfaceExportFormat!
+    $contourInterval: Float
+    $cellSize: Float
+  ) {
+    exportSurface(
+      id: $id
+      format: $format
+      contourInterval: $contourInterval
+      cellSize: $cellSize
+    ) {
+      filename
+      mimeType
+      contentBase64
+    }
+  }
+`);
+
+/** Export a volume result as a PDF or CSV report (base64 FileBlob). */
+export const EXPORT_VOLUME_REPORT = graphql(`
+  query ExportVolumeReport($id: UUID!, $format: VolumeReportFormat!, $unit: VolumeUnit) {
+    exportVolumeReport(id: $id, format: $format, unit: $unit) {
+      filename
+      mimeType
+      contentBase64
+    }
+  }
+`);
+
 /** Delete a surface and its mesh blob. */
 export const DELETE_SURFACE = graphql(`
   mutation DeleteSurface($id: UUID!) {

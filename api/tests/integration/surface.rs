@@ -703,3 +703,117 @@ async fn volume_requires_matching_comparison_target(pool: PgPool) {
         "expected compare-surface error: {msg}"
     );
 }
+
+// --- Phase 5: exports -------------------------------------------------------
+
+#[sqlx::test(migrations = "./migrations")]
+async fn export_surface_formats(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (auth, pid) = seed_square(&schema, &pool).await;
+    let sid = build_surface(&schema, pid, auth.clone(), "Existing & Grade").await;
+
+    // LandXML — base64 of "<?x" is "PD94"; filename is slugified.
+    let xml = exec_ok(
+        &schema,
+        &format!(
+            r#"{{ exportSurface(id: "{sid}", format: LANDXML) {{ filename contentBase64 }} }}"#
+        ),
+        Some(auth.clone()),
+    )
+    .await;
+    assert_eq!(
+        xml["exportSurface"]["filename"],
+        serde_json::json!("existing-grade.xml")
+    );
+    assert!(xml["exportSurface"]["contentBase64"]
+        .as_str()
+        .unwrap()
+        .starts_with("PD94"));
+
+    // DXF with a contour overlay — non-empty, .dxf.
+    let dxf = exec_ok(
+        &schema,
+        &format!(
+            r#"{{ exportSurface(id: "{sid}", format: DXF, contourInterval: 1.0) {{ filename contentBase64 }} }}"#
+        ),
+        Some(auth.clone()),
+    )
+    .await;
+    assert_eq!(
+        dxf["exportSurface"]["filename"],
+        serde_json::json!("existing-grade.dxf")
+    );
+    assert!(!dxf["exportSurface"]["contentBase64"]
+        .as_str()
+        .unwrap()
+        .is_empty());
+
+    // GeoTIFF — base64 of the little-endian TIFF magic "II*" is "SUkq".
+    let tif = exec_ok(
+        &schema,
+        &format!(
+            r#"{{ exportSurface(id: "{sid}", format: GEOTIFF, cellSize: 5.0) {{ filename contentBase64 }} }}"#
+        ),
+        Some(auth),
+    )
+    .await;
+    assert_eq!(
+        tif["exportSurface"]["filename"],
+        serde_json::json!("existing-grade.tif")
+    );
+    assert!(tif["exportSurface"]["contentBase64"]
+        .as_str()
+        .unwrap()
+        .starts_with("SUkq"));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn export_volume_report_csv(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (auth, pid) = seed_square(&schema, &pool).await;
+    let sid = build_surface(&schema, pid, auth.clone(), "Grade").await;
+    let vol = exec_ok_vars(
+        &schema,
+        COMPUTE_VOLUME,
+        serde_json::json!({ "pid": pid, "input": {
+            "name": "Cut", "comparison": "SURFACE_TO_ELEVATION",
+            "baseSurfaceId": sid, "referenceElev": 0.0, "cellSize": 2.0,
+        } }),
+        auth.clone(),
+    )
+    .await;
+    let vid = uuid_at(&vol, &["computeVolume", "id"]);
+
+    // CSV — base64 of "fie" (field,value…) is "Zmll".
+    let csv = exec_ok(
+        &schema,
+        &format!(
+            r#"{{ exportVolumeReport(id: "{vid}", format: CSV, unit: CUBIC_YARD) {{ filename contentBase64 }} }}"#
+        ),
+        Some(auth),
+    )
+    .await;
+    assert_eq!(
+        csv["exportVolumeReport"]["filename"],
+        serde_json::json!("cut.csv")
+    );
+    assert!(csv["exportVolumeReport"]["contentBase64"]
+        .as_str()
+        .unwrap()
+        .starts_with("Zmll"));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn export_surface_is_crew_gated(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (admin, org, _) = signup(&schema, "solo@example.com", "Solo Co").await;
+    let auth = admin_ctx(admin, org);
+    let _pid = create_project(&schema, auth.clone(), "Site").await;
+    let msg = exec_err(
+        &schema,
+        r#"{ exportSurface(id: "00000000-0000-0000-0000-000000000000", format: LANDXML) { filename } }"#,
+        Some(auth),
+    )
+    .await;
+    assert!(msg.contains("Crew feature"), "export not gated: {msg}");
+}

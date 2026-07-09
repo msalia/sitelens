@@ -167,6 +167,40 @@ test('compute a surface-to-elevation volume → totals appear + heatmap loads', 
   await expect(page.getByRole('menuitemcheckbox', { name: 'Cut/fill heatmap' })).toBeVisible();
 });
 
+test('export a surface as LandXML from the surfaces list', async ({ page }) => {
+  const email = await signUpAndLogin(page, 'surf-export');
+  upgradeOrg(email);
+  await createProjectAndOpen(page, 'Surface Export');
+
+  await importCsv(
+    page,
+    ['P,N,E,Z,D', 'P1,0,0,10,GRD', 'P2,0,100,12,GRD', 'P3,100,100,15,GRD', 'P4,100,0,11,GRD'].join(
+      '\n',
+    ),
+  );
+
+  await gotoTab(page, 'Surfaces');
+  await page.getByLabel('Name').fill('Existing Grade');
+  await page.getByRole('button', { name: 'Build surface' }).click();
+  await expect(page.getByText('Existing Grade')).toBeVisible();
+
+  // Open the surface's export menu and pick LandXML; assert the API returns a
+  // non-empty blob (a download is triggered client-side).
+  const exportResp = page.waitForResponse(
+    (r) =>
+      r.url().includes('/api/graphql') &&
+      (r.request().postData()?.includes('ExportSurface') ?? false) &&
+      r.ok(),
+  );
+  await page.getByRole('button', { name: 'Export Existing Grade' }).click();
+  await page.getByRole('menuitem', { name: 'LandXML' }).click();
+  const body = (await (await exportResp).json()) as {
+    data: { exportSurface: { filename: string; contentBase64: string } };
+  };
+  expect(body.data.exportSurface.filename).toBe('existing-grade.xml');
+  expect(body.data.exportSurface.contentBase64.length).toBeGreaterThan(0);
+});
+
 test('Solo plan gates the Surfaces tab behind the upgrade dialog', async ({ page }) => {
   await signUpAndLogin(page, 'surf-gate'); // no upgrade → Solo
   await createProjectAndOpen(page, 'Surface Gate');

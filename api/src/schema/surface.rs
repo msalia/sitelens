@@ -12,10 +12,10 @@ use super::*;
 use crate::models::{
     BreaklineImportLayer, BreaklineImportPreview, BreaklineImportResult, BreaklineInput,
     BreaklineKind, BreaklineLayerMapping, BreaklineVertexInput, FileBlob, PointScope, Surface,
-    SurfaceBreakline, SurfaceInput, SurfaceKind, SurfaceStatus, Volume, VolumeComparison,
-    VolumeInput,
+    SurfaceBreakline, SurfaceExportFormat, SurfaceInput, SurfaceKind, SurfaceStatus, Volume,
+    VolumeComparison, VolumeInput, VolumeReportFormat, VolumeUnit,
 };
-use crate::surface::{self, geom, tin, volume};
+use crate::surface::{self, contour, export, geom, geotiff, tin, volume};
 
 /// Read columns for a `surfaces` row, in the order [`row_to_surface`] expects.
 const SURFACE_COLUMNS: &str =
@@ -493,6 +493,158 @@ fn compute_volume_blob(
     })
 }
 
+// --- Exports ----------------------------------------------------------------
+
+/// A surface ready to export: `(name, epsg, projected vertices [e,n,z], triangles)`.
+type ProjectedSurface = (String, i32, Vec<[f64; 3]>, Vec<[u32; 3]>);
+
+/// Loads a surface's mesh in the project's **projected** frame `[e, n, z]`
+/// (inverting the stored geographic vertices), plus its name + EPSG — the basis
+/// for every CAD/GIS deliverable. Org-scoped; errors if not computed.
+async fn load_surface_projected(
+    ctx: &Context<'_>,
+    id: Uuid,
+    org_id: Uuid,
+) -> Result<ProjectedSurface> {
+    let pool = pool(ctx)?;
+    let row: Option<(String, Uuid, Option<String>)> = sqlx::query_as(
+        "SELECT s.name, s.project_id, s.storage_key FROM surfaces s \
+         JOIN projects p ON p.id = s.project_id \
+         WHERE s.id = $1 AND p.org_id = $2",
+    )
+    .bind(id)
+    .bind(org_id)
+    .fetch_optional(pool)
+    .await?;
+    let (name, project_id, key) = found_in_org(row, "surface")?;
+    let key = key.ok_or_else(|| async_graphql::Error::new("surface has no computed mesh yet"))?;
+    let crs = load_project_crs(pool, project_id, org_id).await?;
+    let bytes = storage(ctx)?
+        .get(&key)
+        .await
+        .map_err(async_graphql::Error::new)?;
+    let (geo, tris) = surface::deserialize_mesh(&bytes)
+        .ok_or_else(|| async_graphql::Error::new("stored surface mesh is unreadable"))?;
+    let mut verts = Vec::with_capacity(geo.len());
+    for v in &geo {
+        let (e, n) = crs::geographic_to_projected(crs.epsg, v[0], v[1]).ok_or_else(|| {
+            async_graphql::Error::new("could not project a surface vertex for export")
+        })?;
+        verts.push([e, n, v[2]]);
+    }
+    Ok((name, crs.epsg, verts, tris))
+}
+
+/// Samples a projected TIN to a DEM raster grid for GeoTIFF export.
+fn surface_to_dem_grid(
+    verts: &[[f64; 3]],
+    tris: &[[u32; 3]],
+    epsg: i32,
+    cell_size: f64,
+) -> Result<geotiff::DemGrid> {
+    let sampler = volume::SurfaceSampler::new(verts.to_vec(), tris.to_vec())
+        .ok_or_else(|| async_graphql::Error::new("surface mesh is unusable"))?;
+    let [min_e, min_n, max_e, max_n] = sampler.bounds();
+    let width = (((max_e - min_e) / cell_size).ceil() as usize).max(1);
+    let height = (((max_n - min_n) / cell_size).ceil() as usize).max(1);
+    if width.saturating_mul(height) > volume::MAX_CELLS {
+        return Err(async_graphql::Error::new(
+            "cell size is too fine for this surface's extent — increase it",
+        ));
+    }
+    let nodata = -9999.0_f32;
+    let mut data = vec![nodata; width * height];
+    for row in 0..height {
+        // Row 0 is the north edge → sample from max_n downward.
+        let n = max_n - (row as f64 + 0.5) * cell_size;
+        for col in 0..width {
+            let e = min_e + (col as f64 + 0.5) * cell_size;
+            if let Some(z) = sampler.sample(e, n) {
+                data[row * width + col] = z as f32;
+            }
+        }
+    }
+    Ok(geotiff::DemGrid {
+        width,
+        height,
+        origin_e: min_e,
+        origin_n: max_n,
+        pixel: cell_size,
+        epsg,
+        nodata,
+        data,
+    })
+}
+
+/// Renders HTML to PDF via the shared WeasyPrint report service.
+async fn render_pdf(html: &str) -> Result<Vec<u8>> {
+    let base =
+        std::env::var("REPORT_SERVICE_URL").unwrap_or_else(|_| "http://localhost:8000".to_string());
+    let url = format!("{}/render", base.trim_end_matches('/'));
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+    let resp = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .body(json!({ "html": html }).to_string())
+        .send()
+        .await
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+    if !resp.status().is_success() {
+        return Err(async_graphql::Error::new(format!(
+            "report service error: {}",
+            resp.status()
+        )));
+    }
+    Ok(resp
+        .bytes()
+        .await
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?
+        .to_vec())
+}
+
+/// Base64-encodes bytes off the async runtime, wrapping them in a `FileBlob`.
+async fn file_blob(filename: String, mime_type: &str, bytes: Vec<u8>) -> Result<FileBlob> {
+    let content_base64 = tokio::task::spawn_blocking(move || {
+        use base64::Engine;
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    })
+    .await
+    .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+    Ok(FileBlob {
+        filename,
+        mime_type: mime_type.to_string(),
+        content_base64,
+    })
+}
+
+/// m³ per cubic yard (exact: (0.9144 m)³) and m² per international foot².
+const CUBIC_YARD_M3: f64 = 0.764_554_857_984;
+const SQUARE_FOOT_M2: f64 = 0.092_903_04;
+
+/// Filename-safe slug from a name (collapses non-alphanumerics to `-`).
+fn slug(s: &str) -> String {
+    let mut out = String::new();
+    let mut dash = false;
+    for c in s.chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c.to_ascii_lowercase());
+            dash = false;
+        } else if !dash && !out.is_empty() {
+            out.push('-');
+            dash = true;
+        }
+    }
+    let trimmed = out.trim_matches('-').to_string();
+    if trimmed.is_empty() {
+        "surface".to_string()
+    } else {
+        trimmed
+    }
+}
+
 #[derive(Default)]
 pub struct SurfaceQuery;
 
@@ -742,6 +894,149 @@ impl SurfaceQuery {
             mime_type: "application/octet-stream".to_string(),
             content_base64,
         })
+    }
+
+    /// Exports a surface as LandXML, DXF (3DFACE + optional contour layers), or a
+    /// GeoTIFF DEM. `contour_interval` (meters) adds contour layers to DXF;
+    /// `cell_size` (meters) sets the GeoTIFF raster resolution (default 1 m).
+    async fn export_surface(
+        &self,
+        ctx: &Context<'_>,
+        id: Uuid,
+        format: SurfaceExportFormat,
+        contour_interval: Option<f64>,
+        cell_size: Option<f64>,
+    ) -> Result<FileBlob> {
+        require_feature(ctx, Feature::Surfaces).await?;
+        let auth = require_auth(ctx)?;
+        let (name, epsg, verts, tris) = load_surface_projected(ctx, id, auth.org_id).await?;
+        let slug = slug(&name);
+
+        match format {
+            SurfaceExportFormat::Landxml => {
+                let xml = export::surface_landxml(&name, &verts, &tris);
+                file_blob(format!("{slug}.xml"), "application/xml", xml.into_bytes()).await
+            }
+            SurfaceExportFormat::Dxf => {
+                // Optional contour overlay, computed on the projected mesh.
+                let contours = match contour_interval.filter(|i| *i > 0.0) {
+                    Some(interval) => contour::contours(
+                        &verts,
+                        &tris,
+                        &contour::ContourOptions {
+                            interval,
+                            major_interval: None,
+                            smoothing: 0,
+                        },
+                    )
+                    .map_err(async_graphql::Error::new)?,
+                    None => Vec::new(),
+                };
+                let dxf = export::surface_dxf(&verts, &tris, &contours)
+                    .map_err(async_graphql::Error::new)?;
+                file_blob(format!("{slug}.dxf"), "application/dxf", dxf.into_bytes()).await
+            }
+            SurfaceExportFormat::Geotiff => {
+                let cell = cell_size.filter(|c| *c > 0.0).unwrap_or(1.0);
+                let grid = surface_to_dem_grid(&verts, &tris, epsg, cell)?;
+                let bytes = tokio::task::spawn_blocking(move || geotiff::write_geotiff(&grid))
+                    .await
+                    .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+                file_blob(format!("{slug}.tif"), "image/tiff", bytes).await
+            }
+        }
+    }
+
+    /// Exports a volume result as a PDF (WeasyPrint) or CSV, in cubic yards
+    /// (default) or cubic meters. Both carry the reproducibility metadata.
+    async fn export_volume_report(
+        &self,
+        ctx: &Context<'_>,
+        id: Uuid,
+        format: VolumeReportFormat,
+        #[graphql(default_with = "VolumeUnit::CubicYard")] unit: VolumeUnit,
+    ) -> Result<FileBlob> {
+        require_feature(ctx, Feature::Surfaces).await?;
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        // Volume + the base/compare surface names, org-scoped.
+        // (name, comparison, base_ver, compare_ver, ref_elev, cell, cut, fill,
+        //  net, area, base_surface_name, compare_surface_name)
+        type VolumeReportRow = (
+            String,
+            String,
+            i32,
+            Option<i32>,
+            Option<f64>,
+            f64,
+            f64,
+            f64,
+            f64,
+            f64,
+            String,
+            Option<String>,
+        );
+        let row: Option<VolumeReportRow> = sqlx::query_as(
+            "SELECT v.name, v.comparison, v.base_version, v.compare_version, v.reference_elev, \
+                    v.cell_size, v.cut_volume, v.fill_volume, v.net_volume, v.area, \
+                    b.name, c.name \
+             FROM volumes v JOIN projects p ON p.id = v.project_id \
+             JOIN surfaces b ON b.id = v.base_surface_id \
+             LEFT JOIN surfaces c ON c.id = v.compare_surface_id \
+             WHERE v.id = $1 AND p.org_id = $2",
+        )
+        .bind(id)
+        .bind(auth.org_id)
+        .fetch_optional(pool)
+        .await?;
+        let (
+            vname,
+            comparison,
+            base_ver,
+            cmp_ver,
+            ref_elev,
+            cell,
+            cut,
+            fill,
+            net,
+            area,
+            base_name,
+            cmp_name,
+        ) = found_in_org(row, "volume")?;
+
+        // Convert the canonical m³ / m² results into the requested unit.
+        let (vf, vu, af, au) = match unit {
+            VolumeUnit::CubicYard => (CUBIC_YARD_M3, "yd³", SQUARE_FOOT_M2, "ft²"),
+            VolumeUnit::CubicMeter => (1.0, "m³", 1.0, "m²"),
+        };
+        let compare = cmp_name.as_deref().zip(cmp_ver);
+        let report = export::VolumeReport {
+            name: &vname,
+            comparison: &comparison,
+            base_surface: &base_name,
+            base_version: base_ver,
+            compare,
+            reference_elev: ref_elev,
+            cell_size: cell,
+            cut: cut / vf,
+            fill: fill / vf,
+            net: net / vf,
+            area: area / af,
+            vol_unit: vu,
+            area_unit: au,
+        };
+        let slug = slug(&vname);
+        match format {
+            VolumeReportFormat::Csv => {
+                let csv = export::volume_csv(&report);
+                file_blob(format!("{slug}.csv"), "text/csv", csv.into_bytes()).await
+            }
+            VolumeReportFormat::Pdf => {
+                let html = export::volume_html(&report, &crate::report::org_name());
+                let pdf = render_pdf(&html).await?;
+                file_blob(format!("{slug}.pdf"), "application/pdf", pdf).await
+            }
+        }
     }
 }
 

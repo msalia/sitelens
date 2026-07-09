@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  IconDownload,
   IconEye,
   IconEyeOff,
   IconMountain,
@@ -22,6 +23,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ButtonGroup } from '@/components/ui/button-group';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
@@ -48,6 +55,8 @@ import {
   DELETE_BREAKLINE,
   DELETE_SURFACE,
   DELETE_VOLUME,
+  EXPORT_SURFACE,
+  EXPORT_VOLUME_REPORT,
   REBUILD_SURFACE,
   SURFACES,
   VOLUMES,
@@ -99,6 +108,17 @@ const KIND_LABEL: Record<BreaklineKind, string> = {
 /** Minimum vertices for a usable constraint of the given kind. */
 function minVerts(kind: BreaklineKind): number {
   return kind === 'HARD' ? 2 : 3;
+}
+
+/** Triggers a browser download of a base64 FileBlob. */
+function downloadBase64(filename: string, mime: string, b64: string) {
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes as unknown as BlobPart], { type: mime }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 /**
@@ -371,6 +391,40 @@ export function SurfacesPanel({
     SURFACE_TO_ELEVATION: 'To elevation',
     SURFACE_TO_SURFACE: 'Surface to surface',
   };
+
+  const exportSurface = (id: string, format: 'LANDXML' | 'DXF' | 'GEOTIFF') =>
+    run(
+      () =>
+        gql(EXPORT_SURFACE, {
+          cellSize: null,
+          // Bundle contour layers into DXF when the user has an interval set.
+          contourInterval: format === 'DXF' && contours.interval > 0 ? contours.interval : null,
+          format,
+          id,
+        }),
+      {
+        error: 'Could not export the surface',
+        onDone: (res) => {
+          const b = res?.exportSurface;
+          if (b) {
+            downloadBase64(b.filename, b.mimeType, b.contentBase64);
+          }
+        },
+        success: 'Export downloaded',
+      },
+    );
+
+  const exportVolume = (id: string, format: 'PDF' | 'CSV') =>
+    run(() => gql(EXPORT_VOLUME_REPORT, { format, id, unit: volUnit }), {
+      error: 'Could not export the report',
+      onDone: (res) => {
+        const b = res?.exportVolumeReport;
+        if (b) {
+          downloadBase64(b.filename, b.mimeType, b.contentBase64);
+        }
+      },
+      success: 'Report downloaded',
+    });
 
   const vertCount = (b: BreaklineRow): number => {
     try {
@@ -682,6 +736,32 @@ export function SurfacesPanel({
                       {s.vertexCount.toLocaleString()} pts
                     </div>
                   </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Export ${s.name}`}
+                          disabled={busy}
+                        >
+                          <IconDownload className="size-4" />
+                        </Button>
+                      }
+                    />
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => exportSurface(s.id, 'LANDXML')}>
+                        LandXML
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => exportSurface(s.id, 'DXF')}>
+                        DXF{contours.interval > 0 ? ' (+ contours)' : ''}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => exportSurface(s.id, 'GEOTIFF')}>
+                        GeoTIFF (DEM)
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <Button
                     type="button"
                     variant="ghost"
@@ -835,7 +915,7 @@ export function SurfacesPanel({
               {volumes.length > 0 ? (
                 <>
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground text-xs">Results</span>
+                    <span className="text-sm font-semibold">Results</span>
                     <Select value={volUnit} onValueChange={(v) => v && setVolUnit(v as VolumeUnit)}>
                       <SelectTrigger className="h-7 w-28">
                         <SelectValue />
@@ -877,6 +957,29 @@ export function SurfacesPanel({
                                 </Badge>
                               </div>
                             </button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                render={
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    aria-label={`Export ${v.name}`}
+                                    disabled={busy}
+                                  >
+                                    <IconDownload className="size-4" />
+                                  </Button>
+                                }
+                              />
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => exportVolume(v.id, 'PDF')}>
+                                  PDF report
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => exportVolume(v.id, 'CSV')}>
+                                  CSV
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                             <ConfirmDialog
                               title={`Delete “${v.name}”?`}
                               description="This removes the volume and its heatmap grid."
