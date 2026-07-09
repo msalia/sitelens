@@ -2,6 +2,7 @@
 //! exclude sensitive columns (password hashes, tokens) from anything that maps
 //! into a GraphQL object. Split by domain under `models/`.
 
+mod analysis;
 mod assets;
 mod auth;
 mod coord;
@@ -14,6 +15,7 @@ mod scene;
 mod surface;
 mod utilities;
 
+pub use analysis::*;
 pub use assets::*;
 pub use auth::*;
 pub use coord::*;

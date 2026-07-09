@@ -88,8 +88,9 @@ pub enum Feature {
     Utilities,
     /// Surface modeling: TIN surfaces, contours, and cut/fill volumes.
     Surfaces,
-    // Planned site-analysis suite (add here when built):
-    //   TurningRadius, Parking, Hydrology, Traffic
+    /// Site analysis: turning radius, parking, hydrology, and traffic — the whole
+    /// civil-analysis module gates as one Crew capability.
+    SiteAnalysis,
 }
 
 /// Display + gating metadata for a [`Feature`].
@@ -139,6 +140,12 @@ impl Feature {
                 blurb: "Build TIN surfaces, contours & cut/fill volumes.",
                 min_plan: Plan::Crew,
             },
+            Feature::SiteAnalysis => FeatureMeta {
+                key: "site_analysis",
+                label: "Site Analysis",
+                blurb: "Turning radius, parking, hydrology & traffic on the survey.",
+                min_plan: Plan::Crew,
+            },
         }
     }
 
@@ -150,6 +157,7 @@ impl Feature {
             Feature::FieldExchange,
             Feature::Utilities,
             Feature::Surfaces,
+            Feature::SiteAnalysis,
         ]
     }
 }

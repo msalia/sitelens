@@ -14,6 +14,7 @@ use async_graphql::MergedObject;
 mod common;
 pub(crate) use common::*;
 
+mod analysis;
 mod auth;
 mod billing;
 mod coords;
@@ -46,6 +47,7 @@ pub struct QueryRoot(
     field::FieldQuery,
     utilities::UtilitiesQuery,
     surface::SurfaceQuery,
+    analysis::AnalysisQuery,
     billing::BillingQuery,
     billing::PlanCatalogQuery,
 );
@@ -62,5 +64,6 @@ pub struct MutationRoot(
     field::FieldMutation,
     utilities::UtilitiesMutation,
     surface::SurfaceMutation,
+    analysis::AnalysisMutation,
     billing::BillingMutation,
 );

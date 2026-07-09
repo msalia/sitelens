@@ -1,4 +1,73 @@
 """
+One analysis instance. `params`, `input_geometry`, `result`, and
+`result_geometry` are JSON object/array strings (projected meters).
+"""
+type Analysis {
+	id: UUID!
+	projectId: UUID!
+	type: AnalysisType!
+	name: String!
+	status: AnalysisStatus!
+	"""
+	Per-type parameters, as a JSON object string.
+	"""
+	params: String!
+	"""
+	Drawn input geometry (GeoJSON-ish), as a JSON string; null until drawn.
+	"""
+	inputGeometry: String
+	"""
+	Summary metrics + result-geometry references, as a JSON object string.
+	"""
+	result: String!
+	"""
+	Computed output geometry, as a JSON string; null until a run completes.
+	"""
+	resultGeometry: String
+	error: String
+	createdAt: DateTime!
+	updatedAt: DateTime!
+}
+
+"""
+Create/update an analysis. Phase 1 persists the drawn input + params as a
+`draft`; the per-type run mutations (later phases) compute the result.
+"""
+input AnalysisInput {
+	type: AnalysisType!
+	name: String!
+	"""
+	Per-type parameters as a JSON object string (defaults to `{}`).
+	"""
+	params: String! = "{}"
+	"""
+	Drawn input geometry as a JSON string (nullable).
+	"""
+	inputGeometry: String
+}
+
+"""
+Analysis lifecycle. Interactive analyses (turning/parking) go straight to
+`complete`; external-data ones (hydrology/traffic) pass through `running`.
+"""
+enum AnalysisStatus {
+	DRAFT
+	RUNNING
+	COMPLETE
+	FAILED
+}
+
+"""
+The kind of civil analysis.
+"""
+enum AnalysisType {
+	TURNING
+	PARKING
+	HYDROLOGY
+	TRAFFIC
+}
+
+"""
 An inbound as-built import + comparison run (snapshots the tolerance spec).
 """
 type AsBuiltBatch {
@@ -821,6 +890,22 @@ type MutationRoot {
 	"""
 	buildDemSurface(projectId: UUID!, name: String!, filename: String!, contentBase64: String!, grid: DemGridInput!): Surface!
 	"""
+	Creates a draft analysis from a drawn input + params.
+	"""
+	createAnalysis(projectId: UUID!, input: AnalysisInput!): Analysis!
+	"""
+	Updates a draft analysis's name / params / drawn input (resets it to draft).
+	"""
+	updateAnalysis(id: UUID!, input: AnalysisInput!): Analysis!
+	"""
+	Deletes an analysis.
+	"""
+	deleteAnalysis(id: UUID!): Boolean!
+	"""
+	Clones an analysis (input + params) as a fresh draft — informal scenarios.
+	"""
+	duplicateAnalysis(id: UUID!): Analysis!
+	"""
 	Starts a hosted Stripe Checkout for the Crew plan; returns the redirect URL
 	the client sends the browser to. Admin-only.
 	"""
@@ -1271,6 +1356,14 @@ type QueryRoot {
 	(default) or cubic meters. Both carry the reproducibility metadata.
 	"""
 	exportVolumeReport(id: UUID!, format: VolumeReportFormat!, unit: VolumeUnit! = CUBIC_YARD): FileBlob!
+	"""
+	Every analysis in a project (newest first).
+	"""
+	analyses(projectId: UUID!): [Analysis!]!
+	"""
+	A single analysis by id (org-scoped).
+	"""
+	analysis(id: UUID!): Analysis!
 	"""
 	The caller org's plan, subscription status, usage, and limits.
 	"""

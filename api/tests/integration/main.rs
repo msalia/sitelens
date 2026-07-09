@@ -4,6 +4,7 @@
 
 mod common;
 
+mod analysis;
 mod auth;
 mod billing;
 mod coords;
