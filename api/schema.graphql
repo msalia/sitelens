@@ -288,6 +288,40 @@ The input/output is a string in RFC3339 format.
 scalar DateTime
 
 """
+An uploaded DEM's downsampled elevation grid (parsed client-side from the
+GeoTIFF with geotiff.js). Nodes are in the DEM's own CRS (`epsg`); row 0 is the
+north edge. `values_base64` is a little-endian `f32` array, row-major,
+`width * height`.
+"""
+input DemGridInput {
+	"""
+	Source CRS EPSG (projected, or 4326/4269 geographic).
+	"""
+	epsg: Int!
+	"""
+	World coordinate of node (0,0): west easting / max northing (or min lon /
+	max lat for a geographic grid).
+	"""
+	originE: Float!
+	originN: Float!
+	"""
+	Node spacing (CRS units); `pixel_y` is the north→south step magnitude.
+	"""
+	pixelX: Float!
+	pixelY: Float!
+	width: Int!
+	height: Int!
+	"""
+	NODATA sentinel, if the source declares one.
+	"""
+	nodata: Float
+	"""
+	Little-endian `f32` samples, row-major (`width * height`).
+	"""
+	valuesBase64: String!
+}
+
+"""
 Result of auto-detecting an uploaded file's format.
 """
 type DetectedFormat {
@@ -779,6 +813,13 @@ type MutationRoot {
 	Deletes a volume computation and its heatmap grid blob.
 	"""
 	deleteVolume(id: UUID!): Boolean!
+	"""
+	Builds a `dem`-kind surface from an uploaded GeoTIFF the client parsed with
+	geotiff.js into a downsampled `grid`. The raw file is stored (for re-export)
+	and the grid is triangulated + reprojected to a mesh that renders and takes
+	part in volumes exactly like a point-built TIN.
+	"""
+	buildDemSurface(projectId: UUID!, name: String!, filename: String!, contentBase64: String!, grid: DemGridInput!): Surface!
 	"""
 	Starts a hosted Stripe Checkout for the Crew plan; returns the redirect URL
 	the client sends the browser to. Admin-only.

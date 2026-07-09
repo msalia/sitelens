@@ -20,6 +20,7 @@ import type { PointCategory, Project, ScenePoint } from '@/lib/types';
 import { ConfirmDialog } from '@/components/projects/confirm-dialog';
 import { ListRow, TooltipIconButton } from '@/components/projects/list-row';
 import { ImportBreaklinesDialog } from '@/components/projects/surfaces/import-breaklines-dialog';
+import { UploadDemDialog } from '@/components/projects/surfaces/upload-dem-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ButtonGroup } from '@/components/ui/button-group';
@@ -601,10 +602,25 @@ export function SurfacesPanel({
             />
           </Field>
 
-          <Button type="button" onClick={build} disabled={busy || !scopeValid}>
-            <IconMountain className="mr-1 size-4" />
-            {busy ? 'Building…' : 'Build surface'}
-          </Button>
+          <div className="flex flex-col gap-2">
+            <Button type="button" onClick={build} disabled={busy || !scopeValid}>
+              <IconMountain className="mr-1 size-4" />
+              {busy ? 'Building…' : 'Build surface'}
+            </Button>
+            <div className="flex items-center gap-2">
+              <div className="bg-border h-px flex-1" />
+              <span className="text-muted-foreground text-xs">or</span>
+              <div className="bg-border h-px flex-1" />
+            </div>
+            <UploadDemDialog
+              project={project}
+              onUploaded={(id) => {
+                void load();
+                onSelect(id);
+                onChanged();
+              }}
+            />
+          </div>
         </CardContent>
       </Card>
 

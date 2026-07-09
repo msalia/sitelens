@@ -79,6 +79,7 @@ type Documents = {
   '\n  query SurfaceMesh($id: UUID!) {\n    surfaceMesh(id: $id) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n': typeof types.SurfaceMeshDocument;
   '\n  query SurfaceContours($id: UUID!, $interval: Float!, $majorInterval: Float, $smoothing: Int) {\n    surfaceContours(\n      id: $id\n      interval: $interval\n      majorInterval: $majorInterval\n      smoothing: $smoothing\n    ) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n': typeof types.SurfaceContoursDocument;
   '\n  mutation BuildSurface($projectId: UUID!, $input: SurfaceInput!) {\n    buildSurface(projectId: $projectId, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n': typeof types.BuildSurfaceDocument;
+  '\n  mutation BuildDemSurface(\n    $projectId: UUID!\n    $name: String!\n    $filename: String!\n    $contentBase64: String!\n    $grid: DemGridInput!\n  ) {\n    buildDemSurface(\n      projectId: $projectId\n      name: $name\n      filename: $filename\n      contentBase64: $contentBase64\n      grid: $grid\n    ) {\n      id\n      vertexCount\n      triangleCount\n    }\n  }\n': typeof types.BuildDemSurfaceDocument;
   '\n  mutation RebuildSurface($id: UUID!, $input: SurfaceInput!) {\n    rebuildSurface(id: $id, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n': typeof types.RebuildSurfaceDocument;
   '\n  query ExportSurface(\n    $id: UUID!\n    $format: SurfaceExportFormat!\n    $contourInterval: Float\n    $cellSize: Float\n  ) {\n    exportSurface(\n      id: $id\n      format: $format\n      contourInterval: $contourInterval\n      cellSize: $cellSize\n    ) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n': typeof types.ExportSurfaceDocument;
   '\n  query ExportVolumeReport($id: UUID!, $format: VolumeReportFormat!, $unit: VolumeUnit) {\n    exportVolumeReport(id: $id, format: $format, unit: $unit) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n': typeof types.ExportVolumeReportDocument;
@@ -252,6 +253,8 @@ const documents: Documents = {
     types.SurfaceContoursDocument,
   '\n  mutation BuildSurface($projectId: UUID!, $input: SurfaceInput!) {\n    buildSurface(projectId: $projectId, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n':
     types.BuildSurfaceDocument,
+  '\n  mutation BuildDemSurface(\n    $projectId: UUID!\n    $name: String!\n    $filename: String!\n    $contentBase64: String!\n    $grid: DemGridInput!\n  ) {\n    buildDemSurface(\n      projectId: $projectId\n      name: $name\n      filename: $filename\n      contentBase64: $contentBase64\n      grid: $grid\n    ) {\n      id\n      vertexCount\n      triangleCount\n    }\n  }\n':
+    types.BuildDemSurfaceDocument,
   '\n  mutation RebuildSurface($id: UUID!, $input: SurfaceInput!) {\n    rebuildSurface(id: $id, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n':
     types.RebuildSurfaceDocument,
   '\n  query ExportSurface(\n    $id: UUID!\n    $format: SurfaceExportFormat!\n    $contourInterval: Float\n    $cellSize: Float\n  ) {\n    exportSurface(\n      id: $id\n      format: $format\n      contourInterval: $contourInterval\n      cellSize: $cellSize\n    ) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n':
@@ -730,6 +733,12 @@ export function graphql(
 export function graphql(
   source: '\n  mutation BuildSurface($projectId: UUID!, $input: SurfaceInput!) {\n    buildSurface(projectId: $projectId, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n',
 ): typeof import('./graphql').BuildSurfaceDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  mutation BuildDemSurface(\n    $projectId: UUID!\n    $name: String!\n    $filename: String!\n    $contentBase64: String!\n    $grid: DemGridInput!\n  ) {\n    buildDemSurface(\n      projectId: $projectId\n      name: $name\n      filename: $filename\n      contentBase64: $contentBase64\n      grid: $grid\n    ) {\n      id\n      vertexCount\n      triangleCount\n    }\n  }\n',
+): typeof import('./graphql').BuildDemSurfaceDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

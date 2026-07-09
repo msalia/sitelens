@@ -79,6 +79,29 @@ export const BUILD_SURFACE = graphql(`
   }
 `);
 
+/** Build a DEM surface from an uploaded GeoTIFF (client-parsed into a grid). */
+export const BUILD_DEM_SURFACE = graphql(`
+  mutation BuildDemSurface(
+    $projectId: UUID!
+    $name: String!
+    $filename: String!
+    $contentBase64: String!
+    $grid: DemGridInput!
+  ) {
+    buildDemSurface(
+      projectId: $projectId
+      name: $name
+      filename: $filename
+      contentBase64: $contentBase64
+      grid: $grid
+    ) {
+      id
+      vertexCount
+      triangleCount
+    }
+  }
+`);
+
 /** Rebuild an existing surface from (possibly new) inputs → next version. */
 export const REBUILD_SURFACE = graphql(`
   mutation RebuildSurface($id: UUID!, $input: SurfaceInput!) {

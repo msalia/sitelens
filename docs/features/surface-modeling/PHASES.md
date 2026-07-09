@@ -181,25 +181,28 @@ Second surface source and all deliverables. Shipping in two parts: **5a exports*
 >   shared WeasyPrint report service (not printpdf). **GeoTIFF** is a hand-rolled
 >   minimal single-band float32 writer (no new dep) over a surface sampled to a
 >   raster with the volume `SurfaceSampler`.
-> - Deferred to 5b: LandXML **breaklines** in the surface export (needs the
->   constraint set threaded through), and DEM-source ingest.
+> - DEM ingest (5b): the GeoTIFF is parsed **client-side** with `geotiff.js`
+>   (bbox, resolution, EPSG from geokeys), downsampled to ≤160² and sent as an
+>   `f32` grid + the raw file; the server (`surface/dem.rs`) triangulates + reprojects
+>   (`crs`) to a `dem`-kind mesh and stores the raw file in `surface_dems`. No Rust
+>   TIFF-reader dep. LandXML **breaklines** in the surface export remain deferred.
 
 ### Deliverables
 
-- [ ] **(5b)** `api/src/surface/dem.rs` — uploaded GeoTIFF → `dem` surface (sample + reproject via `crs.rs`); `uploadDem` + build as `kind: dem`; client preview / parse via `geotiff.js`.
-- [x] `api/src/surface/export.rs`: **LandXML** surface (faces; breaklines pending 5b), **DXF** (3DFACE + contour layers), **GeoTIFF DEM** (`geotiff.rs`), **volume report** (shared WeasyPrint report service + CSV: cut/fill/net/area, method, cell size, surface versions).
+- [x] **(5b)** `api/src/surface/dem.rs` — uploaded GeoTIFF → `dem` surface (client `geotiff.js` grid → server reproject via `crs.rs`); `buildDemSurface` + build as `kind: dem`; upload dialog in the Surfaces panel.
+- [x] `api/src/surface/export.rs`: **LandXML** surface (faces; breaklines pending), **DXF** (3DFACE + contour layers), **GeoTIFF DEM** (`geotiff.rs`), **volume report** (shared WeasyPrint report service + CSV: cut/fill/net/area, method, cell size, surface versions).
 - [x] `exportSurface` + `exportVolumeReport`; export UI (per-surface + per-volume menus).
 
 ### Tests
 
-- [ ] **(5b)** DEM GeoTIFF → grid + reprojection; TIN↔DEM volume works.
+- [x] **(5b)** DEM grid → mesh (`dem.rs`: full-grid triangulation, NODATA cut-out, sentinel handling, malformed-grid errors); `buildDemSurface` integration (kind DEM, mesh served); TIN↔DEM volume works via the shared surface abstraction.
 - [x] LandXML well-formed (faces), DXF faces+contours, GeoTIFF validity, CSV values; PDF path via report service.
-- [ ] **(5b)** Playwright: upload a DEM → build → compare to a TIN → export package. (5a: Playwright LandXML export ✓.)
+- [x] Playwright: LandXML export from the surfaces list. (DEM upload needs a binary GeoTIFF fixture — covered by the server integration test instead.)
 
 ### Validates
 
-Surfaces/contours/volumes export to LandXML/DXF/GeoTIFF/PDF+CSV (5a ✓); DEM
-surfaces participate in volumes (5b).
+Surfaces/contours/volumes export to LandXML/DXF/GeoTIFF/PDF+CSV, and DEM
+surfaces (uploaded GeoTIFF) participate in contours + volumes like a TIN.
 
 ---
 

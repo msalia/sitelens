@@ -66,6 +66,32 @@ export type CsvMappingInput = {
   northingCol: number;
 };
 
+/**
+ * An uploaded DEM's downsampled elevation grid (parsed client-side from the
+ * GeoTIFF with geotiff.js). Nodes are in the DEM's own CRS (`epsg`); row 0 is the
+ * north edge. `values_base64` is a little-endian `f32` array, row-major,
+ * `width * height`.
+ */
+export type DemGridInput = {
+  /** Source CRS EPSG (projected, or 4326/4269 geographic). */
+  epsg: number;
+  height: number;
+  /** NODATA sentinel, if the source declares one. */
+  nodata?: number | null | undefined;
+  /**
+   * World coordinate of node (0,0): west easting / max northing (or min lon /
+   * max lat for a geographic grid).
+   */
+  originE: number;
+  originN: number;
+  /** Node spacing (CRS units); `pixel_y` is the north→south step magnitude. */
+  pixelX: number;
+  pixelY: number;
+  /** Little-endian `f32` samples, row-major (`width * height`). */
+  valuesBase64: string;
+  width: number;
+};
+
 /** A selectable CSV column (caller chooses inclusion + order). */
 export type ExportColumn =
   | 'DESCRIPTION'
@@ -1011,6 +1037,18 @@ export type BuildSurfaceMutationVariables = Exact<{
 
 export type BuildSurfaceMutation = {
   buildSurface: { id: string; version: number; vertexCount: number; triangleCount: number };
+};
+
+export type BuildDemSurfaceMutationVariables = Exact<{
+  projectId: string;
+  name: string;
+  filename: string;
+  contentBase64: string;
+  grid: DemGridInput;
+}>;
+
+export type BuildDemSurfaceMutation = {
+  buildDemSurface: { id: string; vertexCount: number; triangleCount: number };
 };
 
 export type RebuildSurfaceMutationVariables = Exact<{
@@ -2373,6 +2411,21 @@ export const BuildSurfaceDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<BuildSurfaceMutation, BuildSurfaceMutationVariables>;
+export const BuildDemSurfaceDocument = new TypedDocumentString(`
+    mutation BuildDemSurface($projectId: UUID!, $name: String!, $filename: String!, $contentBase64: String!, $grid: DemGridInput!) {
+  buildDemSurface(
+    projectId: $projectId
+    name: $name
+    filename: $filename
+    contentBase64: $contentBase64
+    grid: $grid
+  ) {
+    id
+    vertexCount
+    triangleCount
+  }
+}
+    `) as unknown as TypedDocumentString<BuildDemSurfaceMutation, BuildDemSurfaceMutationVariables>;
 export const RebuildSurfaceDocument = new TypedDocumentString(`
     mutation RebuildSurface($id: UUID!, $input: SurfaceInput!) {
   rebuildSurface(id: $id, input: $input) {
