@@ -365,6 +365,8 @@ export function TerrainViewer(props: TerrainViewerProps) {
           paths={analysisPaths}
           originE={originProjectedE}
           originN={originProjectedN}
+          frame={frame}
+          sample={terrainMesh?.sample ?? null}
         />
       ) : null}
 
@@ -377,6 +379,8 @@ export function TerrainViewer(props: TerrainViewerProps) {
           result={analysisResult}
           originE={originProjectedE}
           originN={originProjectedN}
+          frame={frame}
+          sample={terrainMesh?.sample ?? null}
         />
       ) : null}
 

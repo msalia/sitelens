@@ -3,7 +3,7 @@
 import { Line } from '@react-three/drei';
 import { useMemo } from 'react';
 
-import type { Vec3 } from '../terrain-frame';
+import { drapeLocalY, type Frame, type Sampler, type Vec3 } from '../terrain-frame';
 
 /** Parsed turning-analysis result geometry (projected-meter coordinates). */
 export interface AnalysisResult {
@@ -27,8 +27,13 @@ export function parseAnalysisResult(json: string | null | undefined): AnalysisRe
 }
 
 const toVec =
-  (originE: number, originN: number, lift: number) =>
-  (p: [number, number]): Vec3 => [p[0] - originE, lift, -(p[1] - originN)];
+  (originE: number, originN: number, lift: number, frame?: Frame, sample?: Sampler) =>
+  (p: [number, number]): Vec3 => {
+    const x = p[0] - originE;
+    const z = -(p[1] - originN);
+    const y = frame ? drapeLocalY(frame, sample ?? null, x, z, 0, lift) : lift;
+    return [x, y, z];
+  };
 
 /**
  * Renders a turning analysis's swept path in the scene: the envelope (closed
@@ -36,18 +41,29 @@ const toVec =
  * vehicle outlines, and red clip markers where an obstacle is caught.
  */
 export function AnalysisResultOverlay({
+  frame,
   originE,
   originN,
   result,
+  sample = null,
   visible = true,
 }: {
   result: AnalysisResult;
   originE: number;
   originN: number;
+  /** Frame + sampler to drape the swept path onto the terrain (falls back flat). */
+  frame?: Frame;
+  sample?: Sampler;
   visible?: boolean;
 }) {
-  const v = useMemo(() => toVec(originE, originN, 0.12), [originE, originN]);
-  const vLow = useMemo(() => toVec(originE, originN, 0.08), [originE, originN]);
+  const v = useMemo(
+    () => toVec(originE, originN, 0.18, frame, sample),
+    [originE, originN, frame, sample],
+  );
+  const vLow = useMemo(
+    () => toVec(originE, originN, 0.12, frame, sample),
+    [originE, originN, frame, sample],
+  );
 
   const envelope = useMemo(() => {
     const pts = (result.envelope ?? []).map(v);

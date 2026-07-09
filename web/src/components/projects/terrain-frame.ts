@@ -53,6 +53,24 @@ export function drapeTo(
   return toLocal(f, lat, lon, drapedHeight(sample, lat, lon, height) + lift);
 }
 
+/** Terrain height at a local X/Z (meters): inverts the frame back to lat/lon and
+ *  samples, falling back to `fallback` when there's no terrain, plus an optional
+ *  `lift` to clear the surface. The counterpart to {@link drapeTo} for features
+ *  already living in local/projected meters (analysis + surface overlays), whose
+ *  E/N maps to X/Z the same way the frame maps lon/lat. */
+export function drapeLocalY(
+  f: Frame,
+  sample: Sampler,
+  x: number,
+  z: number,
+  fallback = 0,
+  lift = 0,
+): number {
+  const lat = f.lat0 - z / f.mPerLat;
+  const lon = f.lon0 + x / f.mPerLon;
+  return drapedHeight(sample, lat, lon, fallback) + lift;
+}
+
 /** Decodes base64 (e.g. a GeoTIFF payload) into an ArrayBuffer. */
 export function base64ToArrayBuffer(b64: string): ArrayBuffer {
   const bin = atob(b64);
