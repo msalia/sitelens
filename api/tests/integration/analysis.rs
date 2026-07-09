@@ -183,3 +183,133 @@ async fn invalid_geometry_json_is_rejected(pool: PgPool) {
         "expected JSON error: {msg}"
     );
 }
+
+// --- Phase 2: turning radius ------------------------------------------------
+
+#[sqlx::test(migrations = "./migrations")]
+async fn vehicle_presets_are_global_and_custom_are_org_scoped(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (auth, _pid) = seed(&schema, &pool, "veh@example.com").await;
+
+    // Seeded global presets are visible to any Crew org, read-only.
+    let list = exec_ok(
+        &schema,
+        "{ vehicleTemplates { id name isPreset } }",
+        Some(auth.clone()),
+    )
+    .await;
+    let rows = list["vehicleTemplates"].as_array().unwrap();
+    assert!(
+        rows.len() >= 8,
+        "expected the seeded presets, got {}",
+        rows.len()
+    );
+    assert!(rows
+        .iter()
+        .all(|v| v["isPreset"] == serde_json::json!(true)));
+
+    // A custom vehicle appears for its org…
+    let created = exec_ok_vars(
+        &schema,
+        r#"mutation ($in: VehicleTemplateInput!) {
+            createVehicleTemplate(input: $in) { id name isPreset wheelbase }
+        }"#,
+        serde_json::json!({ "in": { "name": "Yard truck", "wheelbase": 4.5, "width": 2.5 } }),
+        auth.clone(),
+    )
+    .await;
+    assert_eq!(
+        created["createVehicleTemplate"]["isPreset"],
+        serde_json::json!(false)
+    );
+    let after = exec_ok(&schema, "{ vehicleTemplates { id isPreset } }", Some(auth)).await;
+    let custom = after["vehicleTemplates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|v| v["isPreset"] == serde_json::json!(false))
+        .count();
+    assert_eq!(custom, 1);
+
+    // …but not for a different org (only its presets).
+    let (admin2, org2, _) = signup(&schema, "veh2@example.com", "Veh Two").await;
+    set_paid(&pool, org2).await;
+    let other = admin_ctx(admin2, org2);
+    let other_list = exec_ok(&schema, "{ vehicleTemplates { isPreset } }", Some(other)).await;
+    assert!(other_list["vehicleTemplates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|v| v["isPreset"] == serde_json::json!(true)));
+}
+
+const RUN_TURNING: &str = r#"mutation ($pid: UUID!, $in: TurningInput!) {
+    runTurningAnalysis(projectId: $pid, input: $in) { id type status result resultGeometry }
+}"#;
+
+#[sqlx::test(migrations = "./migrations")]
+async fn turning_analysis_passes_clear_and_fails_clipped(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (auth, pid) = seed(&schema, &pool, "turn@example.com").await;
+    // Grab a preset vehicle id.
+    let veh = exec_ok(
+        &schema,
+        "{ vehicleTemplates { id name } }",
+        Some(auth.clone()),
+    )
+    .await;
+    let vid = veh["vehicleTemplates"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // A straight run with no obstacles → complete + pass.
+    let ok = exec_ok_vars(
+        &schema,
+        RUN_TURNING,
+        serde_json::json!({ "pid": pid, "in": {
+            "name": "Driveway", "vehicleTemplateId": vid, "path": "[[0,0],[30,0]]", "stepResolution": 0.5,
+        } }),
+        auth.clone(),
+    )
+    .await;
+    let a = &ok["runTurningAnalysis"];
+    assert_eq!(a["type"], serde_json::json!("TURNING"));
+    assert_eq!(a["status"], serde_json::json!("COMPLETE"));
+    assert!(a["result"].as_str().unwrap().contains("\"pass\":true"));
+    assert!(a["resultGeometry"].as_str().unwrap().contains("rearTrack"));
+
+    // A curb point sitting on the centerline → fail (clipped).
+    let bad = exec_ok_vars(
+        &schema,
+        RUN_TURNING,
+        serde_json::json!({ "pid": pid, "in": {
+            "name": "Tight", "vehicleTemplateId": vid, "path": "[[0,0],[30,0]]",
+            "obstacles": "[[[15,0]]]", "stepResolution": 0.5,
+        } }),
+        auth.clone(),
+    )
+    .await;
+    assert!(bad["runTurningAnalysis"]["result"]
+        .as_str()
+        .unwrap()
+        .contains("\"pass\":false"));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn turning_run_is_crew_gated(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (admin, org, _) = signup(&schema, "solo@example.com", "Solo Co").await;
+    let auth = admin_ctx(admin, org);
+    let pid = create_project(&schema, auth.clone(), "Site").await;
+    let msg = exec_err_vars(
+        &schema,
+        RUN_TURNING,
+        serde_json::json!({ "pid": pid, "in": {
+            "name": "x", "vehicleTemplateId": "00000000-0000-0000-0000-000000000000", "path": "[[0,0],[1,0]]",
+        } }),
+        auth,
+    )
+    .await;
+    assert!(msg.contains("Crew feature"), "turning not gated: {msg}");
+}

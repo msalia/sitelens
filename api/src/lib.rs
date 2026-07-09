@@ -1,3 +1,4 @@
+pub mod analysis;
 pub mod archive;
 pub mod auth;
 pub mod billing;

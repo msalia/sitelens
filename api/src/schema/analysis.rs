@@ -6,7 +6,11 @@
 use serde_json::{json, Value};
 
 use super::*;
-use crate::models::{Analysis, AnalysisInput, AnalysisStatus, AnalysisType};
+use crate::analysis::turning;
+use crate::models::{
+    Analysis, AnalysisInput, AnalysisStatus, AnalysisType, TurningInput, VehicleTemplate,
+    VehicleTemplateInput,
+};
 
 /// Read columns for an `analysis` row, in the order [`row_to_analysis`] expects.
 const ANALYSIS_COLUMNS: &str = "id, project_id, type, name, status, params, input_geometry, \
@@ -76,6 +80,63 @@ async fn analysis_in_org(pool: &PgPool, id: Uuid, org_id: Uuid) -> Result<Uuid> 
     Ok(found_in_org(row, "analysis")?.0)
 }
 
+// --- Vehicle templates ------------------------------------------------------
+
+const VEHICLE_COLUMNS: &str = "id, org_id, name, vehicle_class, wheelbase, front_overhang, \
+     rear_overhang, width, max_steering_angle, lock_to_lock_time, source";
+
+type VehicleRow = (
+    Uuid,
+    Option<Uuid>,
+    String,
+    String,
+    f64,
+    f64,
+    f64,
+    f64,
+    f64,
+    Option<f64>,
+    Option<String>,
+);
+
+fn row_to_vehicle(r: VehicleRow) -> VehicleTemplate {
+    VehicleTemplate {
+        is_preset: r.1.is_none(),
+        id: r.0,
+        org_id: r.1,
+        name: r.2,
+        vehicle_class: r.3,
+        wheelbase: r.4,
+        front_overhang: r.5,
+        rear_overhang: r.6,
+        width: r.7,
+        max_steering_angle: r.8,
+        lock_to_lock_time: r.9,
+        source: r.10,
+    }
+}
+
+/// Parses a `[[e,n],…]` polyline string into planar points.
+fn parse_polyline(s: &str) -> Result<Vec<[f64; 2]>> {
+    serde_json::from_str(s.trim())
+        .map_err(|e| async_graphql::Error::new(format!("invalid path JSON: {e}")))
+}
+
+/// Parses a `[[[e,n],…],…]` obstacle-set string.
+fn parse_polylines(s: &str) -> Result<Vec<Vec<[f64; 2]>>> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Ok(Vec::new());
+    }
+    serde_json::from_str(s)
+        .map_err(|e| async_graphql::Error::new(format!("invalid obstacles JSON: {e}")))
+}
+
+/// JSON array of `[e,n]` points.
+fn points_json(pts: &[[f64; 2]]) -> Value {
+    Value::Array(pts.iter().map(|p| json!([p[0], p[1]])).collect())
+}
+
 #[derive(Default)]
 pub struct AnalysisQuery;
 
@@ -112,6 +173,22 @@ impl AnalysisQuery {
         .fetch_optional(pool)
         .await?;
         Ok(row_to_analysis(found_in_org(row, "analysis")?))
+    }
+
+    /// The vehicle library: global presets + the caller org's custom vehicles.
+    async fn vehicle_templates(&self, ctx: &Context<'_>) -> Result<Vec<VehicleTemplate>> {
+        require_feature(ctx, Feature::SiteAnalysis).await?;
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        let rows: Vec<VehicleRow> = sqlx::query_as(&format!(
+            "SELECT {VEHICLE_COLUMNS} FROM vehicle_template \
+             WHERE org_id IS NULL OR org_id = $1 \
+             ORDER BY org_id NULLS FIRST, name"
+        ))
+        .bind(auth.org_id)
+        .fetch_all(pool)
+        .await?;
+        Ok(rows.into_iter().map(row_to_vehicle).collect())
     }
 }
 
@@ -207,6 +284,175 @@ impl AnalysisMutation {
              FROM analysis WHERE id = $1 RETURNING {ANALYSIS_COLUMNS}"
         ))
         .bind(id)
+        .bind(auth.user_id)
+        .fetch_one(pool)
+        .await?;
+        Ok(row_to_analysis(row))
+    }
+
+    /// Creates a per-org custom vehicle.
+    async fn create_vehicle_template(
+        &self,
+        ctx: &Context<'_>,
+        input: VehicleTemplateInput,
+    ) -> Result<VehicleTemplate> {
+        require_feature(ctx, Feature::SiteAnalysis).await?;
+        let auth = require_editor_active(ctx).await?;
+        let pool = pool(ctx)?;
+        let row: VehicleRow = sqlx::query_as(&format!(
+            "INSERT INTO vehicle_template \
+               (org_id, name, vehicle_class, wheelbase, front_overhang, rear_overhang, width, \
+                max_steering_angle, lock_to_lock_time, source) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING {VEHICLE_COLUMNS}"
+        ))
+        .bind(auth.org_id)
+        .bind(&input.name)
+        .bind(&input.vehicle_class)
+        .bind(input.wheelbase)
+        .bind(input.front_overhang)
+        .bind(input.rear_overhang)
+        .bind(input.width)
+        .bind(input.max_steering_angle)
+        .bind(input.lock_to_lock_time)
+        .bind(&input.source)
+        .fetch_one(pool)
+        .await?;
+        Ok(row_to_vehicle(row))
+    }
+
+    /// Updates one of the org's custom vehicles (presets are read-only).
+    async fn update_vehicle_template(
+        &self,
+        ctx: &Context<'_>,
+        id: Uuid,
+        input: VehicleTemplateInput,
+    ) -> Result<VehicleTemplate> {
+        require_feature(ctx, Feature::SiteAnalysis).await?;
+        let auth = require_editor_active(ctx).await?;
+        let pool = pool(ctx)?;
+        let row: Option<VehicleRow> = sqlx::query_as(&format!(
+            "UPDATE vehicle_template SET name = $2, vehicle_class = $3, wheelbase = $4, \
+               front_overhang = $5, rear_overhang = $6, width = $7, max_steering_angle = $8, \
+               lock_to_lock_time = $9, source = $10 \
+             WHERE id = $1 AND org_id = $11 RETURNING {VEHICLE_COLUMNS}"
+        ))
+        .bind(id)
+        .bind(&input.name)
+        .bind(&input.vehicle_class)
+        .bind(input.wheelbase)
+        .bind(input.front_overhang)
+        .bind(input.rear_overhang)
+        .bind(input.width)
+        .bind(input.max_steering_angle)
+        .bind(input.lock_to_lock_time)
+        .bind(&input.source)
+        .bind(auth.org_id)
+        .fetch_optional(pool)
+        .await?;
+        Ok(row_to_vehicle(found_in_org(row, "vehicle")?))
+    }
+
+    /// Deletes one of the org's custom vehicles (presets can't be deleted).
+    async fn delete_vehicle_template(&self, ctx: &Context<'_>, id: Uuid) -> Result<bool> {
+        require_feature(ctx, Feature::SiteAnalysis).await?;
+        let auth = require_editor_active(ctx).await?;
+        let pool = pool(ctx)?;
+        let row: Option<(Uuid,)> = sqlx::query_as(
+            "DELETE FROM vehicle_template WHERE id = $1 AND org_id = $2 RETURNING id",
+        )
+        .bind(id)
+        .bind(auth.org_id)
+        .fetch_optional(pool)
+        .await?;
+        found_in_org(row, "vehicle")?;
+        Ok(true)
+    }
+
+    /// Runs a turning-radius analysis: tractrix swept path for the chosen vehicle
+    /// along the drawn path, plus an obstacle-clearance pass/fail. Synchronous.
+    async fn run_turning_analysis(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        input: TurningInput,
+    ) -> Result<Analysis> {
+        require_feature(ctx, Feature::SiteAnalysis).await?;
+        let auth = require_editor_active(ctx).await?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+
+        // Load the vehicle (a global preset or the org's own custom vehicle).
+        let vr: Option<VehicleRow> = sqlx::query_as(&format!(
+            "SELECT {VEHICLE_COLUMNS} FROM vehicle_template \
+             WHERE id = $1 AND (org_id IS NULL OR org_id = $2)"
+        ))
+        .bind(input.vehicle_template_id)
+        .bind(auth.org_id)
+        .fetch_optional(pool)
+        .await?;
+        let vehicle = row_to_vehicle(found_in_org(vr, "vehicle")?);
+
+        let path = parse_polyline(&input.path)?;
+        let obstacles = parse_polylines(&input.obstacles)?;
+        let v = turning::Vehicle {
+            wheelbase: vehicle.wheelbase,
+            front_overhang: vehicle.front_overhang,
+            rear_overhang: vehicle.rear_overhang,
+            width: vehicle.width,
+        };
+        let step = input.step_resolution;
+        // CPU-bound geometry off the async runtime.
+        let (swept, clips) = tokio::task::spawn_blocking(move || {
+            turning::swept_path(&path, &v, step).map(|sp| {
+                let clips = turning::clearance(&sp.bodies, &obstacles);
+                (sp, clips)
+            })
+        })
+        .await
+        .map_err(|e| async_graphql::Error::new(format!("turning task failed: {e}")))?
+        .map_err(async_graphql::Error::new)?;
+
+        // Decimate the body quads for a light render blob (~40 outlines max).
+        let stride = (swept.bodies.len() / 40).max(1);
+        let bodies: Vec<Value> = swept
+            .bodies
+            .iter()
+            .step_by(stride)
+            .map(|q| Value::Array(q.iter().map(|p| json!([p[0], p[1]])).collect()))
+            .collect();
+
+        let pass = clips.is_empty();
+        let result = json!({
+            "pass": pass,
+            "clipCount": clips.len(),
+            "vehicle": vehicle.name,
+        });
+        let result_geometry = json!({
+            "envelope": points_json(&swept.envelope),
+            "frontTrack": points_json(&swept.front_track),
+            "rearTrack": points_json(&swept.rear_track),
+            "bodies": bodies,
+            "clips": points_json(&clips),
+        });
+        let params = json!({
+            "vehicleTemplateId": input.vehicle_template_id,
+            "stepResolution": step,
+        });
+        // The drawn path, stored verbatim as the analysis input geometry.
+        let input_geo: Value =
+            serde_json::from_str(input.path.trim()).unwrap_or_else(|_| json!([]));
+
+        let row: AnalysisRow = sqlx::query_as(&format!(
+            "INSERT INTO analysis \
+               (project_id, type, name, status, params, input_geometry, result, result_geometry, created_by) \
+             VALUES ($1, 'turning', $2, 'complete', $3, $4, $5, $6, $7) RETURNING {ANALYSIS_COLUMNS}"
+        ))
+        .bind(project_id)
+        .bind(&input.name)
+        .bind(sqlx::types::Json(params))
+        .bind(sqlx::types::Json(input_geo))
+        .bind(sqlx::types::Json(result))
+        .bind(sqlx::types::Json(result_geometry))
         .bind(auth.user_id)
         .fetch_one(pool)
         .await?;

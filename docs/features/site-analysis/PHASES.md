@@ -75,18 +75,35 @@ survey backdrop and save it — the shared substrate every analysis builds on.
 
 Draw a path, pick a vehicle, get a swept envelope and a pass/fail against obstacles.
 
+> **Build notes (as shipped):**
+> - `analysis/turning.rs` — single-unit **tractrix** pursuit (rear axle trails the
+>   drawn front-axle path by the wheelbase) → body quads + front/rear tracks +
+>   envelope. Golden test: front axle on a circle radius R ⇒ rear radius √(R²−L²).
+> - **Clearance** tests obstacle vertices/segments against the per-step body quads
+>   (exact swept region) → clip points; pass = no clips.
+> - Migration **0018** seeds global vehicle presets (P, SU-30, BUS-40, WB-40/50/62,
+>   fire pumper + aerial) with AASHTO/NFPA sources. **Articulated WB-\* are
+>   approximated as a single unit** at the trailer's effective wheelbase (dominates
+>   off-tracking) — flagged in each `source`; true articulation is a v2 refinement.
+> - `runTurningAnalysis` is synchronous (`spawn_blocking`); it stores the envelope/
+>   tracks/decimated bodies/clips in `result_geometry` and pass/fail in `result`.
+> - UI: turning draw → vehicle picker + step → **Run**; the scene overlays the
+>   envelope, front/rear tracks, vehicle outlines, and red clip markers, with a
+>   Pass/Fail badge in the list. Obstacle-layer selection (DXF/survey) as clearance
+>   input is deferred; the engine + `obstacles` param already support it.
+
 ### Deliverables
-- [ ] Seed `vehicle_template` presets (AASHTO P, SU-30, WB-40/50/62, BUS-40; pumper + aerial fire apparatus) with sources.
-- [ ] Per-org **custom vehicle** create/edit/delete.
-- [ ] **Tractrix swept-path** compute in Rust (rear-axle track → body corners + tire tracks), 2D plan, authoritative.
-- [ ] **Obstacle-clearance pass/fail**: envelope vs selected DXF/survey obstacle layers, with clip locations.
-- [ ] `runTurningAnalysis` synchronous mutation; result geometry stored.
-- [ ] UI: draw centerline path, pick vehicle, select obstacle layers, render envelope + verdict (drape in 3D too).
+- [x] Seed `vehicle_template` presets (AASHTO P, SU-30, WB-40/50/62, BUS-40; pumper + aerial fire apparatus) with sources (migration 0018).
+- [x] Per-org **custom vehicle** create/edit/delete (`createVehicleTemplate`/`update`/`delete`, presets read-only).
+- [x] **Tractrix swept-path** compute in Rust (rear-axle track → body corners + tracks), 2D plan, authoritative.
+- [x] **Obstacle-clearance pass/fail**: swept quads vs obstacle geometry, with clip locations.
+- [x] `runTurningAnalysis` synchronous mutation; result geometry stored.
+- [~] UI: draw centerline path, pick vehicle, render envelope + tracks + verdict in 3D. (Obstacle-**layer** picker deferred; the run accepts obstacle geometry today.)
 
 ### Tests
-- [ ] **Golden-value test**: tractrix envelope for a known turn matches reference within tolerance.
-- [ ] Clearance detection: known clipping vs clearing cases.
-- [ ] Playwright: draw path → run → see envelope + pass/fail.
+- [x] **Golden-value test**: tractrix rear-axle radius matches √(R²−L²) off-tracking; straight-trail + quarter-turn + degenerate cases (`analysis/turning.rs`).
+- [x] Clearance detection: on-centerline clip, off-to-the-side clear, crossing-segment clip.
+- [x] Integration: presets global + custom org-scoped; turning run pass vs clipped; Crew gate. Playwright: draw path → run → Pass verdict. (Run locally.)
 
 ### Validates
 An engineer can prove a fire truck fits (or doesn't) a driveway — the module's flagship

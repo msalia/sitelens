@@ -906,6 +906,23 @@ type MutationRoot {
 	"""
 	duplicateAnalysis(id: UUID!): Analysis!
 	"""
+	Creates a per-org custom vehicle.
+	"""
+	createVehicleTemplate(input: VehicleTemplateInput!): VehicleTemplate!
+	"""
+	Updates one of the org's custom vehicles (presets are read-only).
+	"""
+	updateVehicleTemplate(id: UUID!, input: VehicleTemplateInput!): VehicleTemplate!
+	"""
+	Deletes one of the org's custom vehicles (presets can't be deleted).
+	"""
+	deleteVehicleTemplate(id: UUID!): Boolean!
+	"""
+	Runs a turning-radius analysis: tractrix swept path for the chosen vehicle
+	along the drawn path, plus an obstacle-clearance pass/fail. Synchronous.
+	"""
+	runTurningAnalysis(projectId: UUID!, input: TurningInput!): Analysis!
+	"""
 	Starts a hosted Stripe Checkout for the Crew plan; returns the redirect URL
 	the client sends the browser to. Admin-only.
 	"""
@@ -1365,6 +1382,10 @@ type QueryRoot {
 	"""
 	analysis(id: UUID!): Analysis!
 	"""
+	The vehicle library: global presets + the caller org's custom vehicles.
+	"""
+	vehicleTemplates: [VehicleTemplate!]!
+	"""
 	The caller org's plan, subscription status, usage, and limits.
 	"""
 	billing: BillingInfo!
@@ -1656,6 +1677,26 @@ type TransformResidual {
 }
 
 """
+Parameters for a turning run: the vehicle + drawn path + optional obstacles.
+"""
+input TurningInput {
+	name: String!
+	vehicleTemplateId: UUID!
+	"""
+	Front-axle centerline path as a JSON `[[e,n],…]` string (projected meters).
+	"""
+	path: String!
+	"""
+	Obstacle polylines as a JSON `[[[e,n],…],…]` string (projected meters).
+	"""
+	obstacles: String! = "[]"
+	"""
+	Sampling step in meters (default 0.5).
+	"""
+	stepResolution: Float! = 0.5
+}
+
+"""
 A UUID is a unique 128-bit number, stored as 16 octets. UUIDs are parsed as
 Strings within GraphQL. UUIDs are used to assign unique identifiers to
 entities without requiring a central allocating authority.
@@ -1889,6 +1930,47 @@ input UtilityVertexInput {
 	easting: Float!
 	elevation: Float
 	sourcePointId: UUID
+}
+
+"""
+A vehicle in the turning-analysis library. `org_id` null = global preset;
+set = an org's custom vehicle (only its own org sees/edits it). Dimensions are
+meters, steering degrees.
+"""
+type VehicleTemplate {
+	id: UUID!
+	"""
+	Null for a global preset (read-only); the owning org for a custom vehicle.
+	"""
+	orgId: UUID
+	name: String!
+	vehicleClass: String!
+	wheelbase: Float!
+	frontOverhang: Float!
+	rearOverhang: Float!
+	width: Float!
+	maxSteeringAngle: Float!
+	lockToLockTime: Float
+	source: String
+	"""
+	Whether this is a global preset (`org_id` is null) — presets are read-only.
+	"""
+	isPreset: Boolean!
+}
+
+"""
+Create/update a custom vehicle. Dimensions in meters, steering in degrees.
+"""
+input VehicleTemplateInput {
+	name: String!
+	vehicleClass: String! = "custom"
+	wheelbase: Float!
+	frontOverhang: Float! = 0.0
+	rearOverhang: Float! = 0.0
+	width: Float!
+	maxSteeringAngle: Float! = 30.0
+	lockToLockTime: Float
+	source: String
 }
 
 """
