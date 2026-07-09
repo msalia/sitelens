@@ -819,6 +819,7 @@ export function SurfacesPanel({
                 <span className="text-sm font-semibold">Contours</span>
                 <Switch
                   id="ctr-show"
+                  aria-label="Show contours"
                   checked={contours.enabled}
                   onCheckedChange={(v) => setContour('enabled', v)}
                 />

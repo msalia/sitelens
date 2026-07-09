@@ -27,7 +27,8 @@ test('create an analysis by drawing geometry with numeric entry', async ({ page 
   await page.getByRole('button', { exact: true, name: 'Add' }).click();
   await expect(page.getByText('Drawing — 2 point(s)')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Save' }).click();
+  // Turning is the default type, so the create action is Run (compute + save).
+  await page.getByRole('button', { exact: true, name: 'Run' }).click();
 
   // It appears in the Analyses list with its type badge.
   await expect(page.getByText('Driveway path')).toBeVisible();

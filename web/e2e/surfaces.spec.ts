@@ -30,7 +30,7 @@ test('build a TIN from points → renders, then toggle ramp/wireframe', async ({
   await page.getByRole('button', { name: 'Build surface' }).click();
 
   // It appears in the surfaces list, reporting its triangle count (a square → 2).
-  await expect(page.getByText('Existing grade')).toBeVisible();
+  await expect(page.getByText('Existing grade', { exact: true })).toBeVisible();
   await expect(page.getByText(/2 triangles/)).toBeVisible();
 
   // With a surface active, the Display menu offers the Surface toggle + shading.
@@ -42,9 +42,9 @@ test('build a TIN from points → renders, then toggle ramp/wireframe', async ({
   await page.keyboard.press('Escape');
 
   // Delete it → it leaves the list.
-  await page.getByRole('button', { name: 'Delete Existing grade' }).click();
+  await page.getByRole('button', { name: 'Delete surface' }).click();
   await page.getByRole('button', { exact: true, name: 'Delete' }).click();
-  await expect(page.getByText('Existing grade')).toHaveCount(0);
+  await expect(page.getByText('Existing grade', { exact: true })).toHaveCount(0);
 });
 
 test('auto boundary → rebuild bumps the version, and slope shading is offered', async ({
@@ -74,8 +74,8 @@ test('auto boundary → rebuild bumps the version, and slope shading is offered'
   await gotoTab(page, 'Surfaces');
   await page.getByLabel('Name').fill('Grade');
   await page.getByRole('button', { name: 'Build surface' }).click();
-  await expect(page.getByText('Grade')).toBeVisible();
-  await expect(page.getByText('v1')).toBeVisible();
+  await expect(page.getByText('Grade', { exact: true })).toBeVisible();
+  await expect(page.getByText('v1', { exact: true })).toBeVisible();
 
   // Generate an auto boundary → a Boundary constraint badge appears in the list
   // (exact match avoids the "Auto boundary" button + the card description text).
@@ -83,8 +83,8 @@ test('auto boundary → rebuild bumps the version, and slope shading is offered'
   await expect(page.getByText('Boundary', { exact: true })).toBeVisible();
 
   // Rebuild the surface with the constraint → version increments to v2.
-  await page.getByRole('button', { name: 'Rebuild Grade' }).click();
-  await expect(page.getByText('v2')).toBeVisible();
+  await page.getByRole('button', { name: 'Rebuild surface' }).click();
+  await expect(page.getByText('v2', { exact: true })).toBeVisible();
 
   // Slope shading is available in the Display menu.
   await page.getByRole('button', { name: 'Display' }).click();
@@ -107,7 +107,7 @@ test('enable contours → the API returns iso-lines and the controls appear', as
   await gotoTab(page, 'Surfaces');
   await page.getByLabel('Name').fill('Grade');
   await page.getByRole('button', { name: 'Build surface' }).click();
-  await expect(page.getByText('Grade')).toBeVisible();
+  await expect(page.getByText('Grade', { exact: true })).toBeVisible();
 
   // Enabling contours fetches them from the API; assert the response carries a
   // non-empty SCTR blob, and that the interval/label controls appear.
@@ -119,7 +119,9 @@ test('enable contours → the API returns iso-lines and the controls appear', as
   );
   await page.getByLabel('Show contours').click();
   await expect(page.getByLabel(/Interval/)).toBeVisible();
-  await expect(page.getByLabel('Elevation labels on majors')).toBeVisible();
+  // Target the switch by role — base-ui renders a visible switch + a hidden
+  // proxy input, so a bare getByLabel matches both.
+  await expect(page.getByRole('switch', { name: 'Elevation labels on majors' })).toBeVisible();
 
   const body = (await (await contourResp).json()) as {
     data: { surfaceContours: { contentBase64: string } };
@@ -142,7 +144,7 @@ test('compute a surface-to-elevation volume → totals appear + heatmap loads', 
   await gotoTab(page, 'Surfaces');
   await page.getByLabel('Name').fill('Grade');
   await page.getByRole('button', { name: 'Build surface' }).click();
-  await expect(page.getByText('Grade')).toBeVisible();
+  await expect(page.getByText('Grade', { exact: true })).toBeVisible();
 
   // The Volumes card defaults to a surface-to-elevation comparison; the base
   // surface auto-selects the one just built. Fill the datum + compute.
@@ -182,7 +184,7 @@ test('export a surface as LandXML from the surfaces list', async ({ page }) => {
   await gotoTab(page, 'Surfaces');
   await page.getByLabel('Name').fill('Existing Grade');
   await page.getByRole('button', { name: 'Build surface' }).click();
-  await expect(page.getByText('Existing Grade')).toBeVisible();
+  await expect(page.getByText('Existing Grade', { exact: true })).toBeVisible();
 
   // Open the surface's export menu and pick LandXML; assert the API returns a
   // non-empty blob (a download is triggered client-side).
