@@ -126,6 +126,29 @@ pub struct SurfaceInput {
     pub hole_ids: Vec<Uuid>,
 }
 
+/// An uploaded DEM's downsampled elevation grid (parsed client-side from the
+/// GeoTIFF with geotiff.js). Nodes are in the DEM's own CRS (`epsg`); row 0 is the
+/// north edge. `values_base64` is a little-endian `f32` array, row-major,
+/// `width * height`.
+#[derive(InputObject, Clone)]
+pub struct DemGridInput {
+    /// Source CRS EPSG (projected, or 4326/4269 geographic).
+    pub epsg: i32,
+    /// World coordinate of node (0,0): west easting / max northing (or min lon /
+    /// max lat for a geographic grid).
+    pub origin_e: f64,
+    pub origin_n: f64,
+    /// Node spacing (CRS units); `pixel_y` is the north→south step magnitude.
+    pub pixel_x: f64,
+    pub pixel_y: f64,
+    pub width: i32,
+    pub height: i32,
+    /// NODATA sentinel, if the source declares one.
+    pub nodata: Option<f64>,
+    /// Little-endian `f32` samples, row-major (`width * height`).
+    pub values_base64: String,
+}
+
 /// A surface constraint: a hard breakline, the outer boundary, or an interior hole.
 #[derive(Enum, Copy, Clone, Eq, PartialEq, Debug)]
 pub enum BreaklineKind {

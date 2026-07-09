@@ -169,23 +169,37 @@ A Crew user computes reproducible earthwork volumes and sees the cut/fill heatma
 
 ## Phase 5 — DEM source + exports
 
-Second surface source and all deliverables.
+Second surface source and all deliverables. Shipping in two parts: **5a exports**
+(done) and **5b DEM source** (next).
+
+> **Build notes (5a, as shipped):**
+> - Exports live in `surface/export.rs` (+ `surface/geotiff.rs`), all in the
+>   project's **projected** frame (the resolver inverts the stored geographic mesh
+>   via `crs::geographic_to_projected`), so deliverables land in the surveyor's CRS.
+> - **DXF** uses the existing **ixmilia `dxf`** crate (3DFACE + contour polylines);
+>   **LandXML 1.2** + **CSV** are hand-formatted; the **volume PDF** goes through the
+>   shared WeasyPrint report service (not printpdf). **GeoTIFF** is a hand-rolled
+>   minimal single-band float32 writer (no new dep) over a surface sampled to a
+>   raster with the volume `SurfaceSampler`.
+> - Deferred to 5b: LandXML **breaklines** in the surface export (needs the
+>   constraint set threaded through), and DEM-source ingest.
 
 ### Deliverables
 
-- [ ] `api/src/surface/dem.rs` — uploaded GeoTIFF → `dem` surface (sample + reproject via `crs.rs`); `uploadDem` + build as `kind: dem`; client preview via `geotiff.js`.
-- [ ] `api/src/surface/export.rs`: **LandXML** surface (faces + breaklines), **DXF** (3DFACE + contour layers), **GeoTIFF DEM**, **volume report** (shared WeasyPrint report service, not `printpdf`, + CSV: cut/fill/net/area, method, cell size, surface versions).
-- [ ] `exportSurface` + `exportVolumeReport`; export UI (formats + scope).
+- [ ] **(5b)** `api/src/surface/dem.rs` — uploaded GeoTIFF → `dem` surface (sample + reproject via `crs.rs`); `uploadDem` + build as `kind: dem`; client preview / parse via `geotiff.js`.
+- [x] `api/src/surface/export.rs`: **LandXML** surface (faces; breaklines pending 5b), **DXF** (3DFACE + contour layers), **GeoTIFF DEM** (`geotiff.rs`), **volume report** (shared WeasyPrint report service + CSV: cut/fill/net/area, method, cell size, surface versions).
+- [x] `exportSurface` + `exportVolumeReport`; export UI (per-surface + per-volume menus).
 
 ### Tests
 
-- [ ] DEM GeoTIFF → grid + reprojection; TIN↔DEM volume works.
-- [ ] LandXML round-trip (faces/breaklines), DXF faces+contours, GeoTIFF validity, PDF smoke + CSV values.
-- [ ] Playwright: upload a DEM → build → compare to a TIN → export package.
+- [ ] **(5b)** DEM GeoTIFF → grid + reprojection; TIN↔DEM volume works.
+- [x] LandXML well-formed (faces), DXF faces+contours, GeoTIFF validity, CSV values; PDF path via report service.
+- [ ] **(5b)** Playwright: upload a DEM → build → compare to a TIN → export package. (5a: Playwright LandXML export ✓.)
 
 ### Validates
 
-DEM surfaces participate in volumes, and surfaces/contours/volumes export to LandXML/DXF/GeoTIFF/PDF+CSV.
+Surfaces/contours/volumes export to LandXML/DXF/GeoTIFF/PDF+CSV (5a ✓); DEM
+surfaces participate in volumes (5b).
 
 ---
 

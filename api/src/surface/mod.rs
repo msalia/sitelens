@@ -20,6 +20,7 @@
 //! ```
 
 pub mod contour;
+pub mod dem;
 pub mod export;
 pub mod geom;
 pub mod geotiff;
@@ -38,8 +39,9 @@ pub const SCTR_VERSION: u32 = 1;
 
 /// Magic prefix identifying a SiteLens volume-heatmap blob.
 pub const SVOL_MAGIC: &[u8; 4] = b"SVOL";
-/// Current volume-heatmap-blob format version.
-pub const SVOL_VERSION: u32 = 1;
+/// Current volume-heatmap-blob format version. v2 carries the base surface mesh
+/// with a per-vertex Δz (so the heatmap follows the surface outline exactly).
+pub const SVOL_VERSION: u32 = 2;
 
 /// An indexed mesh decoded from a blob: `(vertices [x/lat, y/lon, z], triangles)`.
 pub type MeshData = (Vec<[f64; 3]>, Vec<[u32; 3]>);
@@ -151,37 +153,45 @@ pub fn serialize_contours(levels: &[contour::ContourLevel]) -> Vec<u8> {
     buf
 }
 
-/// Serializes a cut/fill heatmap into the **SVOL** blob (little-endian). Each cell
-/// is `[lat, lon, base_z, dz]` — geographic center, the base elevation there
-/// (meters, for draping), and the signed Δz (+ fill / − cut). `cell_size` (meters)
-/// sizes each rendered quad; `min_dz`/`max_dz` drive the legend.
+/// Serializes a cut/fill heatmap into the **SVOL** blob (little-endian): the base
+/// surface mesh with a signed Δz per vertex (+ fill / − cut), so the rendered
+/// heatmap follows the surface's exact outline. Vertices are geographic
+/// `[lat, lon, height]`; `min_dz`/`max_dz` drive the color scale + legend.
 ///
 /// ```text
 /// offset  bytes  field
 /// 0       4      magic "SVOL"
 /// 4       4      version (u32)
-/// 8       8      cell_size (f64, meters)
-/// 16      8      min_dz (f64)
-/// 24      8      max_dz (f64)
-/// 32      4      cell_count N (u32)
-/// 36      N*32   cells: [lat, lon, base_z, dz] (4 x f64) each
+/// 8       8      min_dz (f64)
+/// 16      8      max_dz (f64)
+/// 24      4      vertex_count V (u32)
+/// 28      4      triangle_count T (u32)
+/// 32      V*32   vertices: [lat, lon, height, dz] (4 x f64) each
+/// ...     T*12   triangles: [a, b, c] (3 x u32) each
 /// ```
-pub fn serialize_volume_grid(
-    cell_size: f64,
+pub fn serialize_volume_heatmap(
+    vertices: &[[f64; 3]],
+    dz: &[f64],
+    indices: &[[u32; 3]],
     min_dz: f64,
     max_dz: f64,
-    cells: &[[f64; 4]],
 ) -> Vec<u8> {
-    let mut buf = Vec::with_capacity(36 + cells.len() * 32);
+    let mut buf = Vec::with_capacity(32 + vertices.len() * 32 + indices.len() * 12);
     buf.extend_from_slice(SVOL_MAGIC);
     buf.extend_from_slice(&SVOL_VERSION.to_le_bytes());
-    buf.extend_from_slice(&cell_size.to_le_bytes());
     buf.extend_from_slice(&min_dz.to_le_bytes());
     buf.extend_from_slice(&max_dz.to_le_bytes());
-    buf.extend_from_slice(&(cells.len() as u32).to_le_bytes());
-    for c in cells {
-        for v in c {
-            buf.extend_from_slice(&v.to_le_bytes());
+    buf.extend_from_slice(&(vertices.len() as u32).to_le_bytes());
+    buf.extend_from_slice(&(indices.len() as u32).to_le_bytes());
+    for (v, d) in vertices.iter().zip(dz) {
+        for c in v {
+            buf.extend_from_slice(&c.to_le_bytes());
+        }
+        buf.extend_from_slice(&d.to_le_bytes());
+    }
+    for tri in indices {
+        for i in tri {
+            buf.extend_from_slice(&i.to_le_bytes());
         }
     }
     buf
@@ -284,21 +294,26 @@ mod tests {
     }
 
     #[test]
-    fn volume_grid_blob_has_expected_header_and_cells() {
-        let cells = [[40.0, -74.0, 12.5, -3.0], [40.1, -74.1, 9.0, 2.5]];
-        let blob = serialize_volume_grid(2.0, -3.0, 2.5, &cells);
+    fn volume_heatmap_blob_has_expected_header_and_mesh() {
+        let verts = [[40.0, -74.0, 12.5], [40.1, -74.1, 9.0], [40.0, -74.1, 11.0]];
+        let dz = [-3.0, 2.5, 0.5];
+        let tris = [[0u32, 1, 2]];
+        let blob = serialize_volume_heatmap(&verts, &dz, &tris, -3.0, 2.5);
         assert_eq!(&blob[0..4], SVOL_MAGIC);
         assert_eq!(
             u32::from_le_bytes(blob[4..8].try_into().unwrap()),
             SVOL_VERSION
         );
-        assert_eq!(f64::from_le_bytes(blob[8..16].try_into().unwrap()), 2.0);
-        assert_eq!(f64::from_le_bytes(blob[16..24].try_into().unwrap()), -3.0);
-        assert_eq!(f64::from_le_bytes(blob[24..32].try_into().unwrap()), 2.5);
-        assert_eq!(u32::from_le_bytes(blob[32..36].try_into().unwrap()), 2);
-        assert_eq!(blob.len(), 36 + 2 * 32);
-        // First cell: lat 40.0, lon -74.0, base_z 12.5, dz -3.0.
-        assert_eq!(f64::from_le_bytes(blob[36..44].try_into().unwrap()), 40.0);
-        assert_eq!(f64::from_le_bytes(blob[60..68].try_into().unwrap()), -3.0);
+        assert_eq!(f64::from_le_bytes(blob[8..16].try_into().unwrap()), -3.0);
+        assert_eq!(f64::from_le_bytes(blob[16..24].try_into().unwrap()), 2.5);
+        assert_eq!(u32::from_le_bytes(blob[24..28].try_into().unwrap()), 3);
+        assert_eq!(u32::from_le_bytes(blob[28..32].try_into().unwrap()), 1);
+        assert_eq!(blob.len(), 32 + 3 * 32 + 12);
+        // First vertex: lat 40.0 … dz -3.0 at offset 32+24.
+        assert_eq!(f64::from_le_bytes(blob[32..40].try_into().unwrap()), 40.0);
+        assert_eq!(
+            f64::from_le_bytes(blob[32 + 24..32 + 32].try_into().unwrap()),
+            -3.0
+        );
     }
 }

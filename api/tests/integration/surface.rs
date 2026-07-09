@@ -817,3 +817,63 @@ async fn export_surface_is_crew_gated(pool: PgPool) {
     .await;
     assert!(msg.contains("Crew feature"), "export not gated: {msg}");
 }
+
+// --- Phase 5b: DEM source ---------------------------------------------------
+
+#[sqlx::test(migrations = "./migrations")]
+async fn build_dem_surface_from_a_grid(pool: PgPool) {
+    use base64::Engine;
+    let schema = schema(pool.clone());
+    let (auth, pid) = seed_square(&schema, &pool).await;
+
+    // A 4×4 projected (EPSG:32111) grid near the seed square, as LE f32 bytes.
+    let (w, h) = (4usize, 4usize);
+    let mut vals: Vec<u8> = Vec::new();
+    for r in 0..h {
+        for c in 0..w {
+            let z = 10.0 + c as f32 + r as f32 * 0.5;
+            vals.extend_from_slice(&z.to_le_bytes());
+        }
+    }
+    let values_b64 = base64::engine::general_purpose::STANDARD.encode(&vals);
+    // A tiny fake "GeoTIFF" payload (only stored, never parsed server-side).
+    let content_b64 = base64::engine::general_purpose::STANDARD.encode(b"II*\0fake");
+
+    let res = exec_ok_vars(
+        &schema,
+        r#"mutation ($pid: UUID!, $name: String!, $file: String!, $c: String!, $g: DemGridInput!) {
+            buildDemSurface(projectId: $pid, name: $name, filename: $file, contentBase64: $c, grid: $g) {
+                id kind vertexCount triangleCount
+            }
+        }"#,
+        serde_json::json!({
+            "pid": pid, "name": "Drone DEM", "file": "site.tif", "c": content_b64,
+            "g": {
+                "epsg": 32111,
+                "originE": 188500.0, "originN": 215050.0,
+                "pixelX": 5.0, "pixelY": 5.0,
+                "width": w, "height": h, "nodata": null, "valuesBase64": values_b64,
+            }
+        }),
+        auth.clone(),
+    )
+    .await;
+    let s = &res["buildDemSurface"];
+    assert_eq!(s["kind"], serde_json::json!("DEM"));
+    assert_eq!(s["vertexCount"], serde_json::json!(16));
+    // 3×3 cells × 2 triangles.
+    assert_eq!(s["triangleCount"], serde_json::json!(18));
+
+    // The DEM surface serves a mesh like any other (STIN magic "STI" → "U1RJ").
+    let sid = uuid_at(&res, &["buildDemSurface", "id"]);
+    let mesh = exec_ok(
+        &schema,
+        &format!(r#"{{ surfaceMesh(id: "{sid}") {{ contentBase64 }} }}"#),
+        Some(auth),
+    )
+    .await;
+    assert!(mesh["surfaceMesh"]["contentBase64"]
+        .as_str()
+        .unwrap()
+        .starts_with("U1RJ"));
+}
