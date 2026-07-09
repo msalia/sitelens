@@ -157,6 +157,7 @@ export default function ProjectWorkspace() {
   const [sceneReload, setSceneReload] = useState(0);
   // The surface shown in the scene + a nonce the panel bumps after a build/rebuild.
   const [activeSurfaceId, setActiveSurfaceId] = useState<string | null>(null);
+  const [activeVolumeId, setActiveVolumeId] = useState<string | null>(null);
   const [surfaceReload, setSurfaceReload] = useState(0);
   const [contours, setContours] = useState<ContourSettings>(DEFAULT_CONTOURS);
   const [loading, setLoading] = useState(true);
@@ -384,6 +385,8 @@ export default function ProjectWorkspace() {
                 categories={categories}
                 activeSurfaceId={activeSurfaceId}
                 onSelect={setActiveSurfaceId}
+                activeVolumeId={activeVolumeId}
+                onSelectVolume={setActiveVolumeId}
                 onChanged={() => {
                   setSurfaceReload((n) => n + 1);
                   setSceneReload((n) => n + 1);
@@ -425,6 +428,7 @@ export default function ProjectWorkspace() {
           focus={focus}
           reloadNonce={sceneReload}
           activeSurfaceId={activeSurfaceId}
+          activeVolumeId={activeVolumeId}
           surfaceReload={surfaceReload}
           contours={contours}
           stats={[

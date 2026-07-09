@@ -98,6 +98,60 @@ export const DELETE_SURFACE = graphql(`
   }
 `);
 
+/** Every volume computation in a project (newest first). */
+export const VOLUMES = graphql(`
+  query Volumes($projectId: UUID!) {
+    volumes(projectId: $projectId) {
+      id
+      name
+      comparison
+      baseSurfaceId
+      baseVersion
+      compareSurfaceId
+      compareVersion
+      referenceElev
+      cellSize
+      cutVolume
+      fillVolume
+      netVolume
+      area
+      hasHeatmap
+      computedAt
+    }
+  }
+`);
+
+/** Compute a reproducible cut/fill volume. */
+export const COMPUTE_VOLUME = graphql(`
+  mutation ComputeVolume($projectId: UUID!, $input: VolumeInput!) {
+    computeVolume(projectId: $projectId, input: $input) {
+      id
+      cutVolume
+      fillVolume
+      netVolume
+      area
+    }
+  }
+`);
+
+/** Delete a volume and its heatmap grid. */
+export const DELETE_VOLUME = graphql(`
+  mutation DeleteVolume($id: UUID!) {
+    deleteVolume(id: $id)
+  }
+`);
+
+/** The cut/fill heatmap grid (SVOL binary blob, base64-encoded). */
+export const VOLUME_HEATMAP = graphql(`
+  query VolumeHeatmap($id: UUID!) {
+    volumeHeatmap(id: $id) {
+      filename
+      mimeType
+      contentBase64
+    }
+  }
+`);
+
 /** Every constraint (breakline / boundary / hole) in a project. */
 export const BREAKLINES = graphql(`
   query Breaklines($projectId: UUID!) {

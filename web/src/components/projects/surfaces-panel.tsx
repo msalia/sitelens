@@ -36,17 +36,21 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { gql, useMutation } from '@/lib/graphql';
 import { UNIT_LABELS } from '@/lib/types';
+import { formatArea, formatVolume, toMeters, type VolumeUnit } from '@/lib/units';
 
 import {
   AUTO_BOUNDARY,
   BREAKLINES,
   BUILD_SURFACE,
+  COMPUTE_VOLUME,
   type ContourSettings,
   CREATE_BREAKLINE,
   DELETE_BREAKLINE,
   DELETE_SURFACE,
+  DELETE_VOLUME,
   REBUILD_SURFACE,
   SURFACES,
+  VOLUMES,
 } from './surfaces-data';
 import { POINT_GROUPS } from './survey-points-data';
 
@@ -74,6 +78,18 @@ interface BreaklineRow {
   vertices: string;
 }
 
+type VolumeComparison = 'SURFACE_TO_SURFACE' | 'SURFACE_TO_ELEVATION';
+
+interface VolumeRow {
+  area: number;
+  comparison: VolumeComparison;
+  cutVolume: number;
+  fillVolume: number;
+  id: string;
+  name: string;
+  netVolume: number;
+}
+
 const KIND_LABEL: Record<BreaklineKind, string> = {
   BOUNDARY: 'Boundary',
   HARD: 'Breakline',
@@ -92,12 +108,14 @@ function minVerts(kind: BreaklineKind): number {
  */
 export function SurfacesPanel({
   activeSurfaceId,
+  activeVolumeId,
   categories,
   contours,
   onChanged,
   onContoursChange,
   onDigitizingChange,
   onSelect,
+  onSelectVolume,
   pickRef,
   project,
 }: {
@@ -107,6 +125,10 @@ export function SurfacesPanel({
   activeSurfaceId: string | null;
   /** Selects (or clears) the scene's active surface. */
   onSelect: (id: string | null) => void;
+  /** The volume whose heatmap is shown in the scene (null = none). */
+  activeVolumeId: string | null;
+  /** Selects (or clears) the scene's active volume heatmap. */
+  onSelectVolume: (id: string | null) => void;
   /** Bumped after a build/rebuild/constraint change so the scene refetches. */
   onChanged: () => void;
   /** Current contour-generation settings (rendered live in the scene). */
@@ -129,6 +151,15 @@ export function SurfacesPanel({
   const [captureKind, setCaptureKind] = useState<BreaklineKind>('HARD');
   const [capturing, setCapturing] = useState(false);
   const [captureVerts, setCaptureVerts] = useState<{ e: number; n: number; z: number }[]>([]);
+  // Volume state.
+  const [volumes, setVolumes] = useState<VolumeRow[]>([]);
+  const [volName, setVolName] = useState('Volume 1');
+  const [volComparison, setVolComparison] = useState<VolumeComparison>('SURFACE_TO_ELEVATION');
+  const [volBase, setVolBase] = useState('');
+  const [volCompare, setVolCompare] = useState('');
+  const [volRefElev, setVolRefElev] = useState('');
+  const [volCell, setVolCell] = useState('1');
+  const [volUnit, setVolUnit] = useState<VolumeUnit>('CUBIC_YARD');
   const { busy, run } = useMutation();
 
   const load = useCallback(async () => {
@@ -158,14 +189,24 @@ export function SurfacesPanel({
     }
   }, [project.id]);
 
-  // Loading surfaces + breaklines + groups on mount is a data-fetching effect;
-  // the setState inside each loader runs after its await.
+  const loadVolumes = useCallback(async () => {
+    try {
+      const { volumes: rows } = await gql(VOLUMES, { projectId: project.id });
+      setVolumes(rows as VolumeRow[]);
+    } catch {
+      setVolumes([]);
+    }
+  }, [project.id]);
+
+  // Loading surfaces + breaklines + groups + volumes on mount is a data-fetching
+  // effect; the setState inside each loader runs after its await.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
     void loadBreaklines();
     void loadGroups();
-  }, [load, loadBreaklines, loadGroups]);
+    void loadVolumes();
+  }, [load, loadBreaklines, loadGroups, loadVolumes]);
 
   // Route snapped survey points into the active capture while digitizing.
   useEffect(() => {
@@ -278,6 +319,59 @@ export function SurfacesPanel({
       success: 'Constraint deleted',
     });
 
+  // The base surface defaults to whichever surface is active in the scene.
+  const volBaseId = volBase || activeSurfaceId || '';
+  const s2s = volComparison === 'SURFACE_TO_SURFACE';
+  const volValid =
+    volBaseId !== '' &&
+    (s2s ? volCompare !== '' && volCompare !== volBaseId : volRefElev !== '') &&
+    Number(volCell) > 0;
+
+  const computeVolume = () =>
+    run(
+      () =>
+        gql(COMPUTE_VOLUME, {
+          input: {
+            baseSurfaceId: volBaseId,
+            cellSize: Number(volCell) || 1,
+            compareSurfaceId: s2s ? volCompare : null,
+            comparison: volComparison,
+            name: volName.trim() || 'Volume',
+            referenceElev: s2s ? null : toMeters(Number(volRefElev) || 0, project.displayUnit),
+          },
+          projectId: project.id,
+        }),
+      {
+        error: 'Could not compute the volume',
+        onDone: async (res) => {
+          await loadVolumes();
+          if (res?.computeVolume.id) {
+            onSelectVolume(res.computeVolume.id);
+          }
+          onChanged();
+        },
+        success: 'Volume computed',
+      },
+    );
+
+  const removeVolume = (id: string) =>
+    run(() => gql(DELETE_VOLUME, { id }), {
+      error: 'Could not delete the volume',
+      onDone: async () => {
+        if (activeVolumeId === id) {
+          onSelectVolume(null);
+        }
+        await loadVolumes();
+        onChanged();
+      },
+      success: 'Volume deleted',
+    });
+
+  const VOL_COMPARISON_LABEL: Record<VolumeComparison, string> = {
+    SURFACE_TO_ELEVATION: 'To elevation',
+    SURFACE_TO_SURFACE: 'Surface to surface',
+  };
+
   const vertCount = (b: BreaklineRow): number => {
     try {
       return (JSON.parse(b.vertices) as unknown[]).length;
@@ -296,7 +390,7 @@ export function SurfacesPanel({
   };
 
   return (
-    <>
+    <div className="flex flex-col gap-4">
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">Build a surface</CardTitle>
@@ -467,37 +561,49 @@ export function SurfacesPanel({
               </div>
             </div>
           ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              <Select
-                value={captureKind}
-                onValueChange={(v) => v && setCaptureKind(v as BreaklineKind)}
-              >
-                <SelectTrigger className="w-36 shrink-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectLabel>Constraint kind</SelectLabel>
-                    <SelectItem value="HARD">Hard breakline</SelectItem>
-                    <SelectItem value="BOUNDARY">Boundary</SelectItem>
-                    <SelectItem value="HOLE">Hole</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <Button type="button" size="sm" onClick={() => setCapturing(true)}>
-                <IconPencil className="mr-1 size-4" /> Digitize
-              </Button>
-              <ButtonGroup>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <Select
+                  value={captureKind}
+                  onValueChange={(v) => v && setCaptureKind(v as BreaklineKind)}
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Constraint kind</SelectLabel>
+                      <SelectItem value="HARD">Hard breakline</SelectItem>
+                      <SelectItem value="BOUNDARY">Boundary</SelectItem>
+                      <SelectItem value="HOLE">Hole</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => setCapturing(true)}
+                >
+                  <IconPencil className="mr-1 size-4" /> Digitize
+                </Button>
+              </div>
+              <ButtonGroup className="w-full">
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
+                  className="flex-1"
                   onClick={autoBoundary}
                   disabled={busy}
                 >
                   <IconVectorTriangle className="mr-1 size-4" /> Auto boundary
                 </Button>
-                <ImportBreaklinesDialog project={project} onImported={loadBreaklines} />
+                <ImportBreaklinesDialog
+                  project={project}
+                  onImported={loadBreaklines}
+                  className="flex-1"
+                />
               </ButtonGroup>
             </div>
           )}
@@ -610,6 +716,222 @@ export function SurfacesPanel({
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-sm">
+            Volumes
+            <span className="text-muted-foreground ml-2 font-normal">{volumes.length}</span>
+          </CardTitle>
+          <CardDescription>
+            Cut/fill earthwork between a base surface and another surface or a reference elevation.
+            Results snapshot the surface versions used.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          {surfaces.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              Build a surface first to compute volumes.
+            </p>
+          ) : (
+            <>
+              <Field>
+                <FieldLabel htmlFor="vol-name">Name</FieldLabel>
+                <Input
+                  id="vol-name"
+                  value={volName}
+                  onChange={(e) => setVolName(e.target.value)}
+                  placeholder="Earthwork"
+                />
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="vol-comparison">Compare</FieldLabel>
+                <Select
+                  value={volComparison}
+                  onValueChange={(v) => v && setVolComparison(v as VolumeComparison)}
+                >
+                  <SelectTrigger id="vol-comparison" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Comparison</SelectLabel>
+                      <SelectItem value="SURFACE_TO_ELEVATION">To a reference elevation</SelectItem>
+                      <SelectItem value="SURFACE_TO_SURFACE">To another surface</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="vol-base">Base surface</FieldLabel>
+                <Select value={volBaseId} onValueChange={(v) => v && setVolBase(v)}>
+                  <SelectTrigger id="vol-base" className="w-full">
+                    <SelectValue placeholder="Choose a surface…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Base surface</SelectLabel>
+                      {surfaces.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name} (v{s.version})
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+
+              {s2s ? (
+                <Field>
+                  <FieldLabel htmlFor="vol-compare">Compare surface</FieldLabel>
+                  <Select value={volCompare} onValueChange={(v) => v && setVolCompare(v)}>
+                    <SelectTrigger id="vol-compare" className="w-full">
+                      <SelectValue placeholder="Choose a surface…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectLabel>Compare surface</SelectLabel>
+                        {surfaces
+                          .filter((s) => s.id !== volBaseId)
+                          .map((s) => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {s.name} (v{s.version})
+                            </SelectItem>
+                          ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              ) : (
+                <Field>
+                  <FieldLabel htmlFor="vol-ref">Reference elevation ({unit})</FieldLabel>
+                  <Input
+                    id="vol-ref"
+                    type="number"
+                    step="any"
+                    value={volRefElev}
+                    onChange={(e) => setVolRefElev(e.target.value)}
+                    placeholder="Datum / pad elevation"
+                  />
+                </Field>
+              )}
+
+              <Field>
+                <FieldLabel htmlFor="vol-cell">Cell size (m)</FieldLabel>
+                <Input
+                  id="vol-cell"
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={volCell}
+                  onChange={(e) => setVolCell(e.target.value)}
+                  placeholder="Grid resolution"
+                />
+              </Field>
+
+              <Button type="button" onClick={computeVolume} disabled={busy || !volValid}>
+                {busy ? 'Computing…' : 'Compute volume'}
+              </Button>
+
+              {volumes.length > 0 ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground text-xs">Results</span>
+                    <Select value={volUnit} onValueChange={(v) => v && setVolUnit(v as VolumeUnit)}>
+                      <SelectTrigger className="h-7 w-28">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectLabel>Volume unit</SelectLabel>
+                          <SelectItem value="CUBIC_YARD">Cubic yards</SelectItem>
+                          <SelectItem value="CUBIC_METER">Cubic meters</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {volumes.map((v) => {
+                      const active = v.id === activeVolumeId;
+                      return (
+                        <div
+                          key={v.id}
+                          className={`flex flex-col gap-1 rounded-md border px-3 py-2 ${
+                            active ? 'border-primary bg-primary/5' : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              className="min-w-0 flex-1 text-left"
+                              onClick={() => onSelectVolume(active ? null : v.id)}
+                            >
+                              <div className="flex items-center gap-2">
+                                {active ? (
+                                  <IconEye className="text-primary size-4 shrink-0" />
+                                ) : (
+                                  <IconEyeOff className="text-muted-foreground size-4 shrink-0" />
+                                )}
+                                <span className="truncate text-sm font-medium">{v.name}</span>
+                                <Badge variant="outline" className="shrink-0">
+                                  {VOL_COMPARISON_LABEL[v.comparison]}
+                                </Badge>
+                              </div>
+                            </button>
+                            <ConfirmDialog
+                              title={`Delete “${v.name}”?`}
+                              description="This removes the volume and its heatmap grid."
+                              onConfirm={() => removeVolume(v.id)}
+                              trigger={
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label={`Delete ${v.name}`}
+                                >
+                                  <IconTrash className="size-4" />
+                                </Button>
+                              }
+                            />
+                          </div>
+                          <div className="text-muted-foreground grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
+                            <span>
+                              Cut:{' '}
+                              <span className="text-foreground">
+                                {formatVolume(v.cutVolume, volUnit)}
+                              </span>
+                            </span>
+                            <span>
+                              Fill:{' '}
+                              <span className="text-foreground">
+                                {formatVolume(v.fillVolume, volUnit)}
+                              </span>
+                            </span>
+                            <span>
+                              Net:{' '}
+                              <span className="text-foreground">
+                                {formatVolume(v.netVolume, volUnit)}
+                              </span>
+                            </span>
+                            <span>
+                              Area:{' '}
+                              <span className="text-foreground">
+                                {formatArea(v.area, project.displayUnit)}
+                              </span>
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : null}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="text-sm">Contours</CardTitle>
           <CardDescription>
             Iso-lines generated from the active surface, drawn live in the 3D scene. Intervals are
@@ -698,6 +1020,6 @@ export function SurfacesPanel({
           )}
         </CardContent>
       </Card>
-    </>
+    </div>
   );
 }

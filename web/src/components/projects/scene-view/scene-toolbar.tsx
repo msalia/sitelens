@@ -43,6 +43,7 @@ export function SceneToolbar({
   hasScene,
   hasSiteData,
   hasSurface,
+  hasVolume,
   hidden,
   onRefreshSite,
   onReload,
@@ -63,6 +64,7 @@ export function SceneToolbar({
   setShowSurface,
   setShowTerrain,
   setShowUtilities,
+  setShowVolume,
   setSurfaceMode,
   setUnderground,
   showBuildings,
@@ -75,6 +77,7 @@ export function SceneToolbar({
   showSurface,
   showTerrain,
   showUtilities,
+  showVolume,
   siteDisabled,
   siteReason,
   surfaceMode,
@@ -110,6 +113,9 @@ export function SceneToolbar({
   hasConstraints: boolean;
   showConstraints: boolean;
   setShowConstraints: (v: boolean) => void;
+  hasVolume: boolean;
+  showVolume: boolean;
+  setShowVolume: (v: boolean) => void;
   showSurface: boolean;
   setShowSurface: (v: boolean) => void;
   surfaceMode: SurfaceMode;
@@ -377,6 +383,14 @@ export function SceneToolbar({
                   onCheckedChange={(v) => setShowConstraints(Boolean(v))}
                 >
                   Constraints
+                </DropdownMenuCheckboxItem>
+              ) : null}
+              {hasVolume ? (
+                <DropdownMenuCheckboxItem
+                  checked={showVolume}
+                  onCheckedChange={(v) => setShowVolume(Boolean(v))}
+                >
+                  Cut/fill heatmap
                 </DropdownMenuCheckboxItem>
               ) : null}
               {utilitiesCount > 0 ? (

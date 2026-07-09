@@ -83,6 +83,10 @@ type Documents = {
     "\n  mutation BuildSurface($projectId: UUID!, $input: SurfaceInput!) {\n    buildSurface(projectId: $projectId, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n": typeof types.BuildSurfaceDocument,
     "\n  mutation RebuildSurface($id: UUID!, $input: SurfaceInput!) {\n    rebuildSurface(id: $id, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n": typeof types.RebuildSurfaceDocument,
     "\n  mutation DeleteSurface($id: UUID!) {\n    deleteSurface(id: $id)\n  }\n": typeof types.DeleteSurfaceDocument,
+    "\n  query Volumes($projectId: UUID!) {\n    volumes(projectId: $projectId) {\n      id\n      name\n      comparison\n      baseSurfaceId\n      baseVersion\n      compareSurfaceId\n      compareVersion\n      referenceElev\n      cellSize\n      cutVolume\n      fillVolume\n      netVolume\n      area\n      hasHeatmap\n      computedAt\n    }\n  }\n": typeof types.VolumesDocument,
+    "\n  mutation ComputeVolume($projectId: UUID!, $input: VolumeInput!) {\n    computeVolume(projectId: $projectId, input: $input) {\n      id\n      cutVolume\n      fillVolume\n      netVolume\n      area\n    }\n  }\n": typeof types.ComputeVolumeDocument,
+    "\n  mutation DeleteVolume($id: UUID!) {\n    deleteVolume(id: $id)\n  }\n": typeof types.DeleteVolumeDocument,
+    "\n  query VolumeHeatmap($id: UUID!) {\n    volumeHeatmap(id: $id) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n": typeof types.VolumeHeatmapDocument,
     "\n  query Breaklines($projectId: UUID!) {\n    breaklines(projectId: $projectId) {\n      id\n      kind\n      closed\n      vertices\n      source\n      sourceLayer\n    }\n  }\n": typeof types.BreaklinesDocument,
     "\n  mutation CreateBreakline($projectId: UUID!, $input: BreaklineInput!) {\n    createBreakline(projectId: $projectId, input: $input) {\n      id\n      kind\n    }\n  }\n": typeof types.CreateBreaklineDocument,
     "\n  mutation DeleteBreakline($id: UUID!) {\n    deleteBreakline(id: $id)\n  }\n": typeof types.DeleteBreaklineDocument,
@@ -185,6 +189,10 @@ const documents: Documents = {
     "\n  mutation BuildSurface($projectId: UUID!, $input: SurfaceInput!) {\n    buildSurface(projectId: $projectId, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n": types.BuildSurfaceDocument,
     "\n  mutation RebuildSurface($id: UUID!, $input: SurfaceInput!) {\n    rebuildSurface(id: $id, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n": types.RebuildSurfaceDocument,
     "\n  mutation DeleteSurface($id: UUID!) {\n    deleteSurface(id: $id)\n  }\n": types.DeleteSurfaceDocument,
+    "\n  query Volumes($projectId: UUID!) {\n    volumes(projectId: $projectId) {\n      id\n      name\n      comparison\n      baseSurfaceId\n      baseVersion\n      compareSurfaceId\n      compareVersion\n      referenceElev\n      cellSize\n      cutVolume\n      fillVolume\n      netVolume\n      area\n      hasHeatmap\n      computedAt\n    }\n  }\n": types.VolumesDocument,
+    "\n  mutation ComputeVolume($projectId: UUID!, $input: VolumeInput!) {\n    computeVolume(projectId: $projectId, input: $input) {\n      id\n      cutVolume\n      fillVolume\n      netVolume\n      area\n    }\n  }\n": types.ComputeVolumeDocument,
+    "\n  mutation DeleteVolume($id: UUID!) {\n    deleteVolume(id: $id)\n  }\n": types.DeleteVolumeDocument,
+    "\n  query VolumeHeatmap($id: UUID!) {\n    volumeHeatmap(id: $id) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n": types.VolumeHeatmapDocument,
     "\n  query Breaklines($projectId: UUID!) {\n    breaklines(projectId: $projectId) {\n      id\n      kind\n      closed\n      vertices\n      source\n      sourceLayer\n    }\n  }\n": types.BreaklinesDocument,
     "\n  mutation CreateBreakline($projectId: UUID!, $input: BreaklineInput!) {\n    createBreakline(projectId: $projectId, input: $input) {\n      id\n      kind\n    }\n  }\n": types.CreateBreaklineDocument,
     "\n  mutation DeleteBreakline($id: UUID!) {\n    deleteBreakline(id: $id)\n  }\n": types.DeleteBreaklineDocument,
@@ -491,6 +499,22 @@ export function graphql(source: "\n  mutation RebuildSurface($id: UUID!, $input:
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation DeleteSurface($id: UUID!) {\n    deleteSurface(id: $id)\n  }\n"): typeof import('./graphql').DeleteSurfaceDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query Volumes($projectId: UUID!) {\n    volumes(projectId: $projectId) {\n      id\n      name\n      comparison\n      baseSurfaceId\n      baseVersion\n      compareSurfaceId\n      compareVersion\n      referenceElev\n      cellSize\n      cutVolume\n      fillVolume\n      netVolume\n      area\n      hasHeatmap\n      computedAt\n    }\n  }\n"): typeof import('./graphql').VolumesDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation ComputeVolume($projectId: UUID!, $input: VolumeInput!) {\n    computeVolume(projectId: $projectId, input: $input) {\n      id\n      cutVolume\n      fillVolume\n      netVolume\n      area\n    }\n  }\n"): typeof import('./graphql').ComputeVolumeDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DeleteVolume($id: UUID!) {\n    deleteVolume(id: $id)\n  }\n"): typeof import('./graphql').DeleteVolumeDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query VolumeHeatmap($id: UUID!) {\n    volumeHeatmap(id: $id) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n"): typeof import('./graphql').VolumeHeatmapDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

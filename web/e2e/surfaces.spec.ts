@@ -127,6 +127,46 @@ test('enable contours → the API returns iso-lines and the controls appear', as
   expect(body.data.surfaceContours.contentBase64.length).toBeGreaterThan(0);
 });
 
+test('compute a surface-to-elevation volume → totals appear + heatmap loads', async ({ page }) => {
+  const email = await signUpAndLogin(page, 'surf-volume');
+  upgradeOrg(email);
+  await createProjectAndOpen(page, 'Surface Volume');
+
+  await importCsv(
+    page,
+    ['P,N,E,Z,D', 'P1,0,0,10,GRD', 'P2,0,100,12,GRD', 'P3,100,100,15,GRD', 'P4,100,0,11,GRD'].join(
+      '\n',
+    ),
+  );
+
+  await gotoTab(page, 'Surfaces');
+  await page.getByLabel('Name').fill('Grade');
+  await page.getByRole('button', { name: 'Build surface' }).click();
+  await expect(page.getByText('Grade')).toBeVisible();
+
+  // The Volumes card defaults to a surface-to-elevation comparison; the base
+  // surface auto-selects the one just built. Fill the datum + compute.
+  await page.getByLabel(/Reference elevation/).fill('0');
+  const volResp = page.waitForResponse(
+    (r) =>
+      r.url().includes('/api/graphql') &&
+      (r.request().postData()?.includes('ComputeVolume') ?? false) &&
+      r.ok(),
+  );
+  await page.getByRole('button', { name: 'Compute volume' }).click();
+
+  const body = (await (await volResp).json()) as {
+    data: { computeVolume: { cutVolume: number } };
+  };
+  // A surface entirely above the datum is all cut.
+  expect(body.data.computeVolume.cutVolume).toBeGreaterThan(0);
+
+  // Results render (cut/fill/net/area), and the cut/fill heatmap toggle appears.
+  await expect(page.getByText(/Cut:/)).toBeVisible();
+  await page.getByRole('button', { name: 'Display' }).click();
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Cut/fill heatmap' })).toBeVisible();
+});
+
 test('Solo plan gates the Surfaces tab behind the upgrade dialog', async ({ page }) => {
   await signUpAndLogin(page, 'surf-gate'); // no upgrade → Solo
   await createProjectAndOpen(page, 'Surface Gate');

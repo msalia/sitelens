@@ -770,6 +770,16 @@ type MutationRoot {
 	"""
 	importBreaklines(projectId: UUID!, contentBase64: String!, mappings: [BreaklineLayerMapping!]!, unit: LengthUnit): BreaklineImportResult!
 	"""
+	Computes a reproducible cut/fill volume between a base surface and either a
+	compare surface (surface↔surface) or a reference elevation (surface↔elevation),
+	snapshotting the surface versions + params so the result never changes.
+	"""
+	computeVolume(projectId: UUID!, input: VolumeInput!): Volume!
+	"""
+	Deletes a volume computation and its heatmap grid blob.
+	"""
+	deleteVolume(id: UUID!): Boolean!
+	"""
 	Starts a hosted Stripe Checkout for the Crew plan; returns the redirect URL
 	the client sends the browser to. Admin-only.
 	"""
@@ -1197,6 +1207,18 @@ type QueryRoot {
 	Previews a DXF file's polyline layers for breakline import (mapping UI).
 	"""
 	previewBreaklineImport(projectId: UUID!, contentBase64: String!): BreaklineImportPreview!
+	"""
+	Every volume computation in a project (newest first).
+	"""
+	volumes(projectId: UUID!): [Volume!]!
+	"""
+	A single volume by id (org-scoped).
+	"""
+	volume(id: UUID!): Volume!
+	"""
+	The cut/fill heatmap grid (SVOL binary blob, base64-encoded).
+	"""
+	volumeHeatmap(id: UUID!): FileBlob!
 	"""
 	The caller org's plan, subscription status, usage, and limits.
 	"""
@@ -1713,6 +1735,62 @@ input UtilityVertexInput {
 	easting: Float!
 	elevation: Float
 	sourcePointId: UUID
+}
+
+"""
+A reproducible cut/fill computation. Snapshots the surface **versions** and
+parameters used, so the result never silently changes after a rebuild. Results
+are in canonical meters (m³ volumes, m² area); the client converts for display.
+The per-cell Δz heatmap grid lives in Storage (unexposed); fetch via `volumeHeatmap`.
+"""
+type Volume {
+	id: UUID!
+	projectId: UUID!
+	name: String!
+	comparison: VolumeComparison!
+	baseSurfaceId: UUID!
+	baseVersion: Int!
+	compareSurfaceId: UUID
+	compareVersion: Int
+	referenceElev: Float
+	cellSize: Float!
+	cutVolume: Float!
+	fillVolume: Float!
+	netVolume: Float!
+	area: Float!
+	"""
+	Whether a heatmap grid blob was stored (fetchable via `volumeHeatmap`).
+	"""
+	hasHeatmap: Boolean!
+	computedAt: DateTime!
+}
+
+"""
+What a volume is measured against: another surface, or a flat reference elevation.
+"""
+enum VolumeComparison {
+	SURFACE_TO_SURFACE
+	SURFACE_TO_ELEVATION
+}
+
+"""
+Parameters for computing a volume. Exactly one of `compare_surface_id`
+(surface↔surface) or `reference_elev` (surface↔elevation) applies, matching
+`comparison`. `cell_size` (meters) is the accuracy/perf knob.
+"""
+input VolumeInput {
+	name: String!
+	comparison: VolumeComparison!
+	baseSurfaceId: UUID!
+	"""
+	Compare surface (required when `comparison` is surface↔surface).
+	"""
+	compareSurfaceId: UUID
+	"""
+	Reference elevation in meters (required when surface↔elevation).
+	"""
+	referenceElev: Float
+	cellSize: Float!
 }
 
 """

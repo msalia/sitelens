@@ -38,3 +38,32 @@ const UNIT_NAMES = Object.fromEntries(UNIT_OPTIONS.map((o) => [o.value, o.label]
 export function unitName(unit: LengthUnit): string {
   return UNIT_NAMES[unit];
 }
+
+// --- Volume / area --------------------------------------------------------
+// Volumes are computed canonically in cubic meters; earthwork is reported in
+// cubic yards (US convention) or cubic meters.
+
+/** A volume display unit. */
+export type VolumeUnit = 'CUBIC_YARD' | 'CUBIC_METER';
+
+const CUBIC_YARD_M3 = 0.764554857984; // (0.9144 m)³, exact
+
+/** Converts a cubic-meter volume to the given volume unit. */
+export function fromCubicMeters(m3: number, unit: VolumeUnit): number {
+  return unit === 'CUBIC_YARD' ? m3 / CUBIC_YARD_M3 : m3;
+}
+
+/** Compact volume label, e.g. "1,234 yd³". */
+export function formatVolume(m3: number, unit: VolumeUnit): string {
+  const v = fromCubicMeters(m3, unit);
+  const suffix = unit === 'CUBIC_YARD' ? 'yd³' : 'm³';
+  return `${v.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${suffix}`;
+}
+
+/** Converts a square-meter area to the given length unit's square, with a label. */
+export function formatArea(m2: number, unit: LengthUnit): string {
+  const f = factor(unit);
+  const v = m2 / (f * f);
+  const suffix = unit === 'METER' ? 'm²' : 'ft²';
+  return `${v.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${suffix}`;
+}

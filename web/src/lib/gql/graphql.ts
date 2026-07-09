@@ -258,6 +258,27 @@ export type UtilityVertexInput = {
   sourcePointId?: string | null | undefined;
 };
 
+/** What a volume is measured against: another surface, or a flat reference elevation. */
+export type VolumeComparison =
+  | 'SURFACE_TO_ELEVATION'
+  | 'SURFACE_TO_SURFACE';
+
+/**
+ * Parameters for computing a volume. Exactly one of `compare_surface_id`
+ * (surface↔surface) or `reference_elev` (surface↔elevation) applies, matching
+ * `comparison`. `cell_size` (meters) is the accuracy/perf knob.
+ */
+export type VolumeInput = {
+  baseSurfaceId: string;
+  cellSize: number;
+  /** Compare surface (required when `comparison` is surface↔surface). */
+  compareSurfaceId?: string | null | undefined;
+  comparison: VolumeComparison;
+  name: string;
+  /** Reference elevation in meters (required when surface↔elevation). */
+  referenceElev?: number | null | undefined;
+};
+
 export type WorkspaceQueryVariables = Exact<{
   id: string;
 }>;
@@ -831,6 +852,35 @@ export type DeleteSurfaceMutationVariables = Exact<{
 
 
 export type DeleteSurfaceMutation = { deleteSurface: boolean };
+
+export type VolumesQueryVariables = Exact<{
+  projectId: string;
+}>;
+
+
+export type VolumesQuery = { volumes: Array<{ id: string, name: string, comparison: VolumeComparison, baseSurfaceId: string, baseVersion: number, compareSurfaceId: string | null, compareVersion: number | null, referenceElev: number | null, cellSize: number, cutVolume: number, fillVolume: number, netVolume: number, area: number, hasHeatmap: boolean, computedAt: string }> };
+
+export type ComputeVolumeMutationVariables = Exact<{
+  projectId: string;
+  input: VolumeInput;
+}>;
+
+
+export type ComputeVolumeMutation = { computeVolume: { id: string, cutVolume: number, fillVolume: number, netVolume: number, area: number } };
+
+export type DeleteVolumeMutationVariables = Exact<{
+  id: string;
+}>;
+
+
+export type DeleteVolumeMutation = { deleteVolume: boolean };
+
+export type VolumeHeatmapQueryVariables = Exact<{
+  id: string;
+}>;
+
+
+export type VolumeHeatmapQuery = { volumeHeatmap: { filename: string, mimeType: string, contentBase64: string } };
 
 export type BreaklinesQueryVariables = Exact<{
   projectId: string;
@@ -1980,6 +2030,52 @@ export const DeleteSurfaceDocument = new TypedDocumentString(`
   deleteSurface(id: $id)
 }
     `) as unknown as TypedDocumentString<DeleteSurfaceMutation, DeleteSurfaceMutationVariables>;
+export const VolumesDocument = new TypedDocumentString(`
+    query Volumes($projectId: UUID!) {
+  volumes(projectId: $projectId) {
+    id
+    name
+    comparison
+    baseSurfaceId
+    baseVersion
+    compareSurfaceId
+    compareVersion
+    referenceElev
+    cellSize
+    cutVolume
+    fillVolume
+    netVolume
+    area
+    hasHeatmap
+    computedAt
+  }
+}
+    `) as unknown as TypedDocumentString<VolumesQuery, VolumesQueryVariables>;
+export const ComputeVolumeDocument = new TypedDocumentString(`
+    mutation ComputeVolume($projectId: UUID!, $input: VolumeInput!) {
+  computeVolume(projectId: $projectId, input: $input) {
+    id
+    cutVolume
+    fillVolume
+    netVolume
+    area
+  }
+}
+    `) as unknown as TypedDocumentString<ComputeVolumeMutation, ComputeVolumeMutationVariables>;
+export const DeleteVolumeDocument = new TypedDocumentString(`
+    mutation DeleteVolume($id: UUID!) {
+  deleteVolume(id: $id)
+}
+    `) as unknown as TypedDocumentString<DeleteVolumeMutation, DeleteVolumeMutationVariables>;
+export const VolumeHeatmapDocument = new TypedDocumentString(`
+    query VolumeHeatmap($id: UUID!) {
+  volumeHeatmap(id: $id) {
+    filename
+    mimeType
+    contentBase64
+  }
+}
+    `) as unknown as TypedDocumentString<VolumeHeatmapQuery, VolumeHeatmapQueryVariables>;
 export const BreaklinesDocument = new TypedDocumentString(`
     query Breaklines($projectId: UUID!) {
   breaklines(projectId: $projectId) {

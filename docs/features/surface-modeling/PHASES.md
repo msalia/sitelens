@@ -131,17 +131,35 @@ Users generate and view smoothed, labeled contours from any surface.
 
 The money output.
 
+> **Build notes (as shipped):**
+> - `volume.rs` is a **grid-Riemann** engine over a height-field `SurfaceSampler`
+>   (uniform spatial index → barycentric point query). `Δz = compare − base` (or
+>   `reference − base`); + = fill, − = cut; `net = fill − cut`; `area` = footprint
+>   of cells with data. Analysis window = the two surfaces' overlap (s↔s) or the
+>   base extent (s↔e).
+> - The stored mesh is **geographic**, so the resolver builds a shared local
+>   **equirectangular metric frame** (from the base centroid) to do the planar math
+>   (rigid → areas/volumes unaffected), then converts heatmap cells back to
+>   geographic. No `crs` inverse needed; the engine stays pure + unit-tested.
+> - Heatmap = a new **SVOL** blob (per-cell `[lat, lon, base_z, Δz]` + Δz range +
+>   cell size), rendered client-side as a diverging red→blue colored quad grid over
+>   the base surface, with a legend. No persistence beyond the Storage blob.
+> - **No new migration** — the `volumes` table shipped in 0016. Results snapshot the
+>   base/compare **versions**, so a later rebuild never changes a computed volume.
+> - Volume display defaults to **cubic yards** (m³ toggle); area in the display
+>   unit². Cell size is meters (matches the max-edge convention).
+
 ### Deliverables
 
-- [ ] `api/src/surface/volume.rs` — grid sampling; surface-to-surface + surface-to-reference-elevation; cut/fill/net/area; per-cell Δz grid persisted for heatmap; results snapshot surface **versions** + params.
-- [ ] `computeVolume`, `volumes`, `volume`, `volumeHeatmap`, `deleteVolume`.
-- [ ] Web: volume UI (comparison type, base/compare or reference elev, cell size) → results + **cut/fill heatmap** display mode (vertex colors + legend). Default cubic yards (m³ option).
+- [x] `api/src/surface/volume.rs` — grid sampling; surface-to-surface + surface-to-reference-elevation; cut/fill/net/area; per-cell Δz grid persisted for heatmap; results snapshot surface **versions** + params.
+- [x] `computeVolume`, `volumes`, `volume`, `volumeHeatmap`, `deleteVolume` (Crew-gated, tenant-scoped).
+- [x] Web: volume UI (comparison type, base/compare or reference elev, cell size) → results + **cut/fill heatmap** display (vertex-colored quad grid + legend). Default cubic yards (m³ option).
 
 ### Tests
 
-- [ ] Cut/fill vs closed-form solids (prism/cone/flat-pad-to-datum) within cell tolerance; net = fill − cut; surface-to-elevation; non-overlap → zero.
-- [ ] Snapshot immutability: rebuild a referenced surface → existing volume unchanged.
-- [ ] Playwright: run a surface-to-elevation volume → totals + heatmap.
+- [x] Cut/fill vs closed-form solids (flat-pad-to-datum, square **pyramid** to closed form, surface-to-surface pure fill) within cell tolerance; net = fill − cut; non-overlap → zero; bad-input errors (unit tests in `volume.rs` + SVOL blob test in `surface/mod.rs`).
+- [x] Snapshot immutability: rebuild a referenced surface → existing volume's `baseVersion` + result unchanged (integration `tests/integration/surface.rs`); s↔e all-cut-above-datum; Crew gate; comparison-target validation.
+- [x] Playwright (`web/e2e/surfaces.spec.ts`): compute a surface-to-elevation volume → totals appear + heatmap toggle. (Authored + lint-clean; run locally — sandbox can't launch Chromium.)
 
 ### Validates
 

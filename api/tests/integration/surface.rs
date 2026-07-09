@@ -537,3 +537,169 @@ async fn surface_contours_are_tenant_isolated(pool: PgPool) {
         "expected not-found for other org: {msg}"
     );
 }
+
+// --- Phase 4: volumes -------------------------------------------------------
+
+const COMPUTE_VOLUME: &str = r#"mutation ($pid: UUID!, $input: VolumeInput!) {
+    computeVolume(projectId: $pid, input: $input) {
+        id comparison baseVersion compareVersion cutVolume fillVolume netVolume area hasHeatmap
+    }
+}"#;
+
+/// Builds a TIN from all design points and returns its id.
+async fn build_surface(schema: &ApiSchema, pid: Uuid, auth: AuthContext, name: &str) -> Uuid {
+    let built = exec_ok_vars(
+        schema,
+        BUILD,
+        serde_json::json!({ "pid": pid, "input": { "name": name, "scope": "ALL" } }),
+        auth,
+    )
+    .await;
+    uuid_at(&built, &["buildSurface", "id"])
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn surface_to_elevation_volume_is_all_cut_above_datum(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (auth, pid) = seed_square(&schema, &pool).await; // z spans 10..15, all > 0
+    let sid = build_surface(&schema, pid, auth.clone(), "Grade").await;
+
+    let res = exec_ok_vars(
+        &schema,
+        COMPUTE_VOLUME,
+        serde_json::json!({ "pid": pid, "input": {
+            "name": "To datum", "comparison": "SURFACE_TO_ELEVATION",
+            "baseSurfaceId": sid, "referenceElev": 0.0, "cellSize": 2.0,
+        } }),
+        auth.clone(),
+    )
+    .await;
+    let v = &res["computeVolume"];
+    assert_eq!(v["comparison"], serde_json::json!("SURFACE_TO_ELEVATION"));
+    assert_eq!(v["baseVersion"], serde_json::json!(1));
+    assert!(
+        v["cutVolume"].as_f64().unwrap() > 1000.0,
+        "cut = {}",
+        v["cutVolume"]
+    );
+    assert!(
+        v["fillVolume"].as_f64().unwrap().abs() < 1e-6,
+        "fill = {}",
+        v["fillVolume"]
+    );
+    assert!(v["area"].as_f64().unwrap() > 1000.0, "area = {}", v["area"]);
+    assert_eq!(v["hasHeatmap"], serde_json::json!(true));
+    let vid = uuid_at(&res, &["computeVolume", "id"]);
+
+    // The heatmap grid is served, base64, starting with the "SVOL" magic
+    // ("SVO" → base64 "U1ZP").
+    let heat = exec_ok(
+        &schema,
+        &format!(r#"{{ volumeHeatmap(id: "{vid}") {{ filename contentBase64 }} }}"#),
+        Some(auth.clone()),
+    )
+    .await;
+    let b64 = heat["volumeHeatmap"]["contentBase64"].as_str().unwrap();
+    assert!(
+        b64.starts_with("U1ZP"),
+        "heatmap should start with SVOL magic; got {b64:.8}"
+    );
+
+    // It appears in the project's volume list.
+    let list = exec_ok(
+        &schema,
+        &format!(r#"{{ volumes(projectId: "{pid}") {{ id name }} }}"#),
+        Some(auth),
+    )
+    .await;
+    assert_eq!(list["volumes"].as_array().unwrap().len(), 1);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn volume_snapshots_surface_version_across_rebuild(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (auth, pid) = seed_square(&schema, &pool).await;
+    let base = build_surface(&schema, pid, auth.clone(), "Base").await;
+    let compare = build_surface(&schema, pid, auth.clone(), "Compare").await;
+
+    let res = exec_ok_vars(
+        &schema,
+        COMPUTE_VOLUME,
+        serde_json::json!({ "pid": pid, "input": {
+            "name": "S2S", "comparison": "SURFACE_TO_SURFACE",
+            "baseSurfaceId": base, "compareSurfaceId": compare, "cellSize": 2.0,
+        } }),
+        auth.clone(),
+    )
+    .await;
+    let v = &res["computeVolume"];
+    assert_eq!(v["baseVersion"], serde_json::json!(1));
+    assert_eq!(v["compareVersion"], serde_json::json!(1));
+    assert!(v["area"].as_f64().unwrap() > 1000.0);
+    let net_before = v["netVolume"].as_f64().unwrap();
+    let vid = uuid_at(&res, &["computeVolume", "id"]);
+
+    // Rebuild the base surface → its version bumps to 2.
+    let rebuilt = exec_ok_vars(
+        &schema,
+        r#"mutation ($id: UUID!, $input: SurfaceInput!) {
+            rebuildSurface(id: $id, input: $input) { version } }"#,
+        serde_json::json!({ "id": base, "input": { "name": "Base", "scope": "ALL" } }),
+        auth.clone(),
+    )
+    .await;
+    assert_eq!(rebuilt["rebuildSurface"]["version"], serde_json::json!(2));
+
+    // The volume still reports the snapshotted version 1 + unchanged result.
+    let after = exec_ok(
+        &schema,
+        &format!(r#"{{ volume(id: "{vid}") {{ baseVersion netVolume }} }}"#),
+        Some(auth),
+    )
+    .await;
+    assert_eq!(after["volume"]["baseVersion"], serde_json::json!(1));
+    assert!((after["volume"]["netVolume"].as_f64().unwrap() - net_before).abs() < 1e-6);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn free_tier_blocks_volumes(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (admin, org, _) = signup(&schema, "solo@example.com", "Solo Co").await;
+    let auth = admin_ctx(admin, org);
+    let pid = create_project(&schema, auth.clone(), "Site").await;
+    let msg = exec_err_vars(
+        &schema,
+        COMPUTE_VOLUME,
+        serde_json::json!({ "pid": pid, "input": {
+            "name": "V", "comparison": "SURFACE_TO_ELEVATION",
+            "baseSurfaceId": "00000000-0000-0000-0000-000000000000",
+            "referenceElev": 0.0, "cellSize": 1.0,
+        } }),
+        auth,
+    )
+    .await;
+    assert!(msg.contains("Crew feature"), "volumes not gated: {msg}");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn volume_requires_matching_comparison_target(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (auth, pid) = seed_square(&schema, &pool).await;
+    let sid = build_surface(&schema, pid, auth.clone(), "Grade").await;
+
+    // surface-to-surface without a compare surface is rejected.
+    let msg = exec_err_vars(
+        &schema,
+        COMPUTE_VOLUME,
+        serde_json::json!({ "pid": pid, "input": {
+            "name": "Bad", "comparison": "SURFACE_TO_SURFACE",
+            "baseSurfaceId": sid, "cellSize": 2.0,
+        } }),
+        auth,
+    )
+    .await;
+    assert!(
+        msg.contains("compare surface"),
+        "expected compare-surface error: {msg}"
+    );
+}

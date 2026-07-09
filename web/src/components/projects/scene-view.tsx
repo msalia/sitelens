@@ -21,10 +21,11 @@ import { CoordinateInspectorDialog } from '@/components/projects/coordinate-insp
 import { CameraControl } from '@/components/projects/scene-view/camera-control';
 import { SceneStats } from '@/components/projects/scene-view/scene-stats';
 import { SceneToolbar } from '@/components/projects/scene-view/scene-toolbar';
+import { readHeatmapRange } from '@/components/projects/terrain/volume-heatmap';
 import { Card } from '@/components/ui/card';
 import { gql } from '@/lib/graphql';
 import { subscribeProjectChanged } from '@/lib/scene-subscription';
-import { toMeters } from '@/lib/units';
+import { fromMeters, toMeters } from '@/lib/units';
 
 import {
   BUILDINGS_CONTENT,
@@ -43,6 +44,7 @@ import {
   DEFAULT_CONTOURS,
   SURFACE_CONTOURS,
   SURFACE_MESH,
+  VOLUME_HEATMAP,
 } from './surfaces-data';
 
 // The WebGL viewer is browser-only; load it lazily and never on the server.
@@ -56,6 +58,7 @@ const TerrainViewer = dynamic(
 
 export function SceneView({
   activeSurfaceId,
+  activeVolumeId,
   categories,
   comparison,
   contours = DEFAULT_CONTOURS,
@@ -71,6 +74,8 @@ export function SceneView({
   project: Project;
   /** The surface whose TIN mesh is rendered (from the Surfaces panel). */
   activeSurfaceId?: string | null;
+  /** The volume whose cut/fill heatmap is rendered (from the Surfaces panel). */
+  activeVolumeId?: string | null;
   /** Bumped by the Surfaces panel after a build/rebuild to refetch the mesh. */
   surfaceReload?: number;
   categories: PointCategory[];
@@ -127,6 +132,8 @@ export function SceneView({
   const [surfaceMode, setSurfaceMode] = useState<SurfaceMode>('ramp');
   const [surface, setSurface] = useState<{ contentBase64: string } | null>(null);
   const [contourBlob, setContourBlob] = useState<{ contentBase64: string } | null>(null);
+  const [volumeBlob, setVolumeBlob] = useState<{ contentBase64: string } | null>(null);
+  const [showVolume, setShowVolume] = useState(true);
   const [constraints, setConstraints] = useState<SceneConstraint[]>([]);
   const [showConstraints, setShowConstraints] = useState(true);
   const [underground, setUnderground] = useState(false);
@@ -224,6 +231,31 @@ export function SceneView({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadContours();
   }, [loadContours, surfaceReload]);
+
+  // Loads the active volume's cut/fill heatmap grid (null when none selected).
+  const loadVolumeHeatmap = useCallback(async () => {
+    if (!activeVolumeId) {
+      setVolumeBlob(null);
+      return;
+    }
+    try {
+      const { volumeHeatmap } = await gql(VOLUME_HEATMAP, { id: activeVolumeId });
+      setVolumeBlob({ contentBase64: volumeHeatmap.contentBase64 });
+    } catch {
+      setVolumeBlob(null);
+    }
+  }, [activeVolumeId]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadVolumeHeatmap();
+  }, [loadVolumeHeatmap, surfaceReload]);
+
+  // Δz range (for the legend), read cheaply from the heatmap blob header.
+  const volumeRange = useMemo(
+    () => (volumeBlob ? readHeatmapRange(volumeBlob.contentBase64) : null),
+    [volumeBlob],
+  );
 
   // Loads the project's surface constraints for the overlay (parsing the stored
   // `[{n,e,z}]` JSON into projected-meter vertices).
@@ -509,6 +541,8 @@ export function SceneView({
             contours={contourBlob}
             showContours={contours.enabled}
             contourLabels={contours.labels}
+            volumeHeatmap={volumeBlob}
+            showVolume={showVolume}
             displayUnit={project.displayUnit}
             constraints={constraints}
             showConstraints={showConstraints}
@@ -574,6 +608,9 @@ export function SceneView({
         hasConstraints={constraints.length > 0}
         showConstraints={showConstraints}
         setShowConstraints={setShowConstraints}
+        hasVolume={!!volumeBlob}
+        showVolume={showVolume}
+        setShowVolume={setShowVolume}
         underground={underground}
         setUnderground={setUnderground}
         utilitiesCount={scene ? scene.utilityRuns.length + scene.utilityStructures.length : 0}
@@ -594,6 +631,29 @@ export function SceneView({
       ) : null}
 
       {scene ? <CameraControl view={view} onViewChange={setView2} /> : null}
+
+      {/* Cut/fill legend — shown when a volume heatmap is active. */}
+      {scene && volumeBlob && showVolume && volumeRange ? (
+        <div className="bg-background/90 pointer-events-none absolute right-3 bottom-3 z-20 rounded-lg border px-3 py-2 text-xs shadow-sm backdrop-blur">
+          <div className="mb-1 font-semibold">
+            Cut / fill (Δz, {project.displayUnit === 'METER' ? 'm' : 'ft'})
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[#dc2626] tabular-nums">
+              −{Math.abs(fromMeters(volumeRange.minDz, project.displayUnit)).toFixed(1)}
+            </span>
+            <span
+              className="h-2 w-24 rounded"
+              style={{
+                background: 'linear-gradient(to right, #dc2626 0%, #f5f5f5 50%, #2563eb 100%)',
+              }}
+            />
+            <span className="text-[#2563eb] tabular-nums">
+              +{Math.abs(fromMeters(volumeRange.maxDz, project.displayUnit)).toFixed(1)}
+            </span>
+          </div>
+        </div>
+      ) : null}
 
       {/* Setup prompt when the site has no geometry yet. */}
       {noPoints ? (

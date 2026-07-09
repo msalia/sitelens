@@ -212,3 +212,65 @@ pub struct BreaklineImportResult {
     pub created: i32,
     pub skipped: i32,
 }
+
+/// What a volume is measured against: another surface, or a flat reference elevation.
+#[derive(Enum, Copy, Clone, Eq, PartialEq, Debug)]
+pub enum VolumeComparison {
+    SurfaceToSurface,
+    SurfaceToElevation,
+}
+
+impl VolumeComparison {
+    pub fn as_db_str(self) -> &'static str {
+        match self {
+            VolumeComparison::SurfaceToSurface => "surface_to_surface",
+            VolumeComparison::SurfaceToElevation => "surface_to_elevation",
+        }
+    }
+    pub fn from_db_str(s: &str) -> VolumeComparison {
+        match s {
+            "surface_to_elevation" => VolumeComparison::SurfaceToElevation,
+            _ => VolumeComparison::SurfaceToSurface,
+        }
+    }
+}
+
+/// A reproducible cut/fill computation. Snapshots the surface **versions** and
+/// parameters used, so the result never silently changes after a rebuild. Results
+/// are in canonical meters (m³ volumes, m² area); the client converts for display.
+/// The per-cell Δz heatmap grid lives in Storage (unexposed); fetch via `volumeHeatmap`.
+#[derive(SimpleObject)]
+pub struct Volume {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub name: String,
+    pub comparison: VolumeComparison,
+    pub base_surface_id: Uuid,
+    pub base_version: i32,
+    pub compare_surface_id: Option<Uuid>,
+    pub compare_version: Option<i32>,
+    pub reference_elev: Option<f64>,
+    pub cell_size: f64,
+    pub cut_volume: f64,
+    pub fill_volume: f64,
+    pub net_volume: f64,
+    pub area: f64,
+    /// Whether a heatmap grid blob was stored (fetchable via `volumeHeatmap`).
+    pub has_heatmap: bool,
+    pub computed_at: DateTime<Utc>,
+}
+
+/// Parameters for computing a volume. Exactly one of `compare_surface_id`
+/// (surface↔surface) or `reference_elev` (surface↔elevation) applies, matching
+/// `comparison`. `cell_size` (meters) is the accuracy/perf knob.
+#[derive(InputObject, Clone)]
+pub struct VolumeInput {
+    pub name: String,
+    pub comparison: VolumeComparison,
+    pub base_surface_id: Uuid,
+    /// Compare surface (required when `comparison` is surface↔surface).
+    pub compare_surface_id: Option<Uuid>,
+    /// Reference elevation in meters (required when surface↔elevation).
+    pub reference_elev: Option<f64>,
+    pub cell_size: f64,
+}

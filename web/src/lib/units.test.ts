@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import type { LengthUnit } from '@/lib/types';
 
-import { formatInUnit, fromMeters, toMeters } from '@/lib/units';
+import {
+  formatArea,
+  formatInUnit,
+  formatVolume,
+  fromCubicMeters,
+  fromMeters,
+  toMeters,
+} from '@/lib/units';
 
 describe('units', () => {
   it('treats meters as the identity', () => {
@@ -42,5 +49,18 @@ describe('units', () => {
   it('mirrors the canonical server conversions for a known value', () => {
     // 100 m → US survey feet, matching api/src/units.rs.
     expect(fromMeters(100, 'US_SURVEY_FOOT')).toBeCloseTo((100 * 3937) / 1200, 9);
+  });
+
+  it('converts cubic meters to cubic yards (1 yd³ = 0.7645549 m³)', () => {
+    expect(fromCubicMeters(0.764554857984, 'CUBIC_YARD')).toBeCloseTo(1, 9);
+    expect(fromCubicMeters(42, 'CUBIC_METER')).toBe(42);
+    expect(formatVolume(0.764554857984, 'CUBIC_YARD')).toBe('1 yd³');
+    expect(formatVolume(5, 'CUBIC_METER')).toBe('5 m³');
+  });
+
+  it('converts area to the display unit squared', () => {
+    expect(formatArea(100, 'METER')).toBe('100 m²');
+    // 1 international ft = 0.3048 m ⇒ 1 ft² = 0.09290304 m².
+    expect(formatArea(0.09290304, 'INTERNATIONAL_FOOT')).toBe('1 ft²');
   });
 });

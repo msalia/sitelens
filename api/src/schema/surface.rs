@@ -12,9 +12,10 @@ use super::*;
 use crate::models::{
     BreaklineImportLayer, BreaklineImportPreview, BreaklineImportResult, BreaklineInput,
     BreaklineKind, BreaklineLayerMapping, BreaklineVertexInput, FileBlob, PointScope, Surface,
-    SurfaceBreakline, SurfaceInput, SurfaceKind, SurfaceStatus,
+    SurfaceBreakline, SurfaceInput, SurfaceKind, SurfaceStatus, Volume, VolumeComparison,
+    VolumeInput,
 };
-use crate::surface::{self, geom, tin};
+use crate::surface::{self, geom, tin, volume};
 
 /// Read columns for a `surfaces` row, in the order [`row_to_surface`] expects.
 const SURFACE_COLUMNS: &str =
@@ -329,6 +330,169 @@ fn decode_dxf(content_base64: &str) -> Result<String> {
     String::from_utf8(bytes).map_err(|e| async_graphql::Error::new(format!("invalid UTF-8: {e}")))
 }
 
+// --- Volumes ----------------------------------------------------------------
+
+const VOLUME_COLUMNS: &str = "id, project_id, name, comparison, base_surface_id, base_version, \
+     compare_surface_id, compare_version, reference_elev, cell_size, cut_volume, fill_volume, \
+     net_volume, area, heatmap_key, computed_at";
+
+type VolumeRow = (
+    Uuid,           // id
+    Uuid,           // project_id
+    String,         // name
+    String,         // comparison
+    Uuid,           // base_surface_id
+    i32,            // base_version
+    Option<Uuid>,   // compare_surface_id
+    Option<i32>,    // compare_version
+    Option<f64>,    // reference_elev
+    f64,            // cell_size
+    f64,            // cut_volume
+    f64,            // fill_volume
+    f64,            // net_volume
+    f64,            // area
+    Option<String>, // heatmap_key
+    DateTime<Utc>,  // computed_at
+);
+
+fn row_to_volume(r: VolumeRow) -> Volume {
+    Volume {
+        id: r.0,
+        project_id: r.1,
+        name: r.2,
+        comparison: VolumeComparison::from_db_str(&r.3),
+        base_surface_id: r.4,
+        base_version: r.5,
+        compare_surface_id: r.6,
+        compare_version: r.7,
+        reference_elev: r.8,
+        cell_size: r.9,
+        cut_volume: r.10,
+        fill_volume: r.11,
+        net_volume: r.12,
+        area: r.13,
+        has_heatmap: r.14.is_some(),
+        computed_at: r.15,
+    }
+}
+
+/// Resolves a surface (org-scoped) to its `(project_id, version, storage_key)`,
+/// erroring if it isn't in the org or hasn't been computed yet.
+async fn load_surface_for_volume(
+    pool: &PgPool,
+    id: Uuid,
+    org_id: Uuid,
+) -> Result<(Uuid, i32, String)> {
+    let row: Option<(Uuid, i32, Option<String>)> = sqlx::query_as(
+        "SELECT s.project_id, s.version, s.storage_key FROM surfaces s \
+         JOIN projects p ON p.id = s.project_id \
+         WHERE s.id = $1 AND p.org_id = $2",
+    )
+    .bind(id)
+    .bind(org_id)
+    .fetch_optional(pool)
+    .await?;
+    let (project_id, version, key) = found_in_org(row, "surface")?;
+    let key = key.ok_or_else(|| async_graphql::Error::new("surface has no computed mesh yet"))?;
+    Ok((project_id, version, key))
+}
+
+/// A local equirectangular metric frame anchored at a mesh centroid — turns the
+/// stored geographic mesh into planar meters for volume math (rigid, so areas /
+/// volumes are unaffected), and back to geographic for the heatmap blob.
+struct MetricFrame {
+    lat0: f64,
+    lon0: f64,
+    m_lat: f64,
+    m_lon: f64,
+}
+
+impl MetricFrame {
+    fn from_centroid(verts: &[[f64; 3]]) -> MetricFrame {
+        let n = verts.len().max(1) as f64;
+        let lat0 = verts.iter().map(|v| v[0]).sum::<f64>() / n;
+        let lon0 = verts.iter().map(|v| v[1]).sum::<f64>() / n;
+        MetricFrame {
+            lat0,
+            lon0,
+            m_lat: 111_320.0,
+            m_lon: 111_320.0 * lat0.to_radians().cos(),
+        }
+    }
+    /// Geographic `[lat, lon, z]` mesh → planar `[x, y, z]` meters.
+    fn mesh_to_metric(&self, geo: &[[f64; 3]]) -> Vec<[f64; 3]> {
+        geo.iter()
+            .map(|v| {
+                [
+                    (v[1] - self.lon0) * self.m_lon,
+                    (v[0] - self.lat0) * self.m_lat,
+                    v[2],
+                ]
+            })
+            .collect()
+    }
+    /// Planar `(x, y)` meters → geographic `(lat, lon)`.
+    fn to_geo(&self, x: f64, y: f64) -> (f64, f64) {
+        (self.lat0 + y / self.m_lat, self.lon0 + x / self.m_lon)
+    }
+}
+
+/// The stored numeric result of a volume compute, plus its heatmap blob.
+struct VolumeOut {
+    blob: Vec<u8>,
+    cut: f64,
+    fill: f64,
+    net: f64,
+    area: f64,
+}
+
+/// Deserializes the base (and optional compare) mesh, computes the earthwork on a
+/// shared metric frame, and serializes the SVOL heatmap blob. CPU-bound — run via
+/// `spawn_blocking`.
+fn compute_volume_blob(
+    base_bytes: &[u8],
+    compare_bytes: Option<&[u8]>,
+    reference_elev: Option<f64>,
+    cell_size: f64,
+) -> std::result::Result<VolumeOut, String> {
+    let (base_geo, base_tris) =
+        surface::deserialize_mesh(base_bytes).ok_or("base surface mesh is unreadable")?;
+    // One shared frame (from the base centroid) so both surfaces sample aligned.
+    let frame = MetricFrame::from_centroid(&base_geo);
+    let base = volume::SurfaceSampler::new(frame.mesh_to_metric(&base_geo), base_tris)
+        .ok_or("base surface mesh is unusable")?;
+
+    let compare = match compare_bytes {
+        Some(bytes) => {
+            let (geo, tris) =
+                surface::deserialize_mesh(bytes).ok_or("compare surface mesh is unreadable")?;
+            Some(
+                volume::SurfaceSampler::new(frame.mesh_to_metric(&geo), tris)
+                    .ok_or("compare surface mesh is unusable")?,
+            )
+        }
+        None => None,
+    };
+
+    let res = volume::compute_volume(&base, compare.as_ref(), reference_elev, cell_size)?;
+    let cells: Vec<[f64; 4]> = res
+        .cells
+        .iter()
+        .map(|c| {
+            let (lat, lon) = frame.to_geo(c.x, c.y);
+            [lat, lon, c.base_z, c.dz]
+        })
+        .collect();
+    let blob = surface::serialize_volume_grid(cell_size, res.min_dz, res.max_dz, &cells);
+    Ok(VolumeOut {
+        blob,
+        cut: res.cut,
+        fill: res.fill,
+        net: res.net,
+        area: res.area,
+    })
+}
+
 #[derive(Default)]
 pub struct SurfaceQuery;
 
@@ -512,6 +676,72 @@ impl SurfaceQuery {
             })
             .collect();
         Ok(BreaklineImportPreview { layers })
+    }
+
+    /// Every volume computation in a project (newest first).
+    async fn volumes(&self, ctx: &Context<'_>, project_id: Uuid) -> Result<Vec<Volume>> {
+        require_feature(ctx, Feature::Surfaces).await?;
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        let rows: Vec<VolumeRow> = sqlx::query_as(&format!(
+            "SELECT {VOLUME_COLUMNS} FROM volumes WHERE project_id = $1 ORDER BY computed_at DESC"
+        ))
+        .bind(project_id)
+        .fetch_all(pool)
+        .await?;
+        Ok(rows.into_iter().map(row_to_volume).collect())
+    }
+
+    /// A single volume by id (org-scoped).
+    async fn volume(&self, ctx: &Context<'_>, id: Uuid) -> Result<Volume> {
+        require_feature(ctx, Feature::Surfaces).await?;
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        let row: Option<VolumeRow> = sqlx::query_as(&format!(
+            "SELECT {} FROM volumes v JOIN projects p ON p.id = v.project_id \
+             WHERE v.id = $1 AND p.org_id = $2",
+            qualify_columns(VOLUME_COLUMNS, "v")
+        ))
+        .bind(id)
+        .bind(auth.org_id)
+        .fetch_optional(pool)
+        .await?;
+        Ok(row_to_volume(found_in_org(row, "volume")?))
+    }
+
+    /// The cut/fill heatmap grid (SVOL binary blob, base64-encoded).
+    async fn volume_heatmap(&self, ctx: &Context<'_>, id: Uuid) -> Result<FileBlob> {
+        require_feature(ctx, Feature::Surfaces).await?;
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        let row: Option<(String, Option<String>)> = sqlx::query_as(
+            "SELECT v.name, v.heatmap_key FROM volumes v \
+             JOIN projects p ON p.id = v.project_id \
+             WHERE v.id = $1 AND p.org_id = $2",
+        )
+        .bind(id)
+        .bind(auth.org_id)
+        .fetch_optional(pool)
+        .await?;
+        let (name, heatmap_key) = found_in_org(row, "volume")?;
+        let key =
+            heatmap_key.ok_or_else(|| async_graphql::Error::new("volume has no heatmap grid"))?;
+        let bytes = storage(ctx)?
+            .get(&key)
+            .await
+            .map_err(async_graphql::Error::new)?;
+        let content_base64 = tokio::task::spawn_blocking(move || {
+            use base64::Engine;
+            base64::engine::general_purpose::STANDARD.encode(bytes)
+        })
+        .await
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+        Ok(FileBlob {
+            filename: format!("{name}.svol"),
+            mime_type: "application/octet-stream".to_string(),
+            content_base64,
+        })
     }
 }
 
@@ -838,5 +1068,140 @@ impl SurfaceMutation {
         tx.commit().await?;
         publish_scene(ctx, project_id);
         Ok(BreaklineImportResult { created, skipped })
+    }
+
+    /// Computes a reproducible cut/fill volume between a base surface and either a
+    /// compare surface (surface↔surface) or a reference elevation (surface↔elevation),
+    /// snapshotting the surface versions + params so the result never changes.
+    async fn compute_volume(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        input: VolumeInput,
+    ) -> Result<Volume> {
+        require_feature(ctx, Feature::Surfaces).await?;
+        let auth = require_editor_active(ctx).await?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+
+        // The comparison target must match the requested comparison kind.
+        match input.comparison {
+            VolumeComparison::SurfaceToSurface if input.compare_surface_id.is_none() => {
+                return Err(async_graphql::Error::new(
+                    "a surface-to-surface volume needs a compare surface",
+                ));
+            }
+            VolumeComparison::SurfaceToElevation if input.reference_elev.is_none() => {
+                return Err(async_graphql::Error::new(
+                    "a surface-to-elevation volume needs a reference elevation",
+                ));
+            }
+            _ => {}
+        }
+
+        let (base_proj, base_version, base_key) =
+            load_surface_for_volume(pool, input.base_surface_id, auth.org_id).await?;
+        if base_proj != project_id {
+            return Err(async_graphql::Error::new(
+                "base surface is not in this project",
+            ));
+        }
+        let store = storage(ctx)?;
+        let base_bytes = store
+            .get(&base_key)
+            .await
+            .map_err(async_graphql::Error::new)?;
+
+        // Only load a compare surface for a surface-to-surface volume.
+        let (compare_version, compare_bytes) = match input.comparison {
+            VolumeComparison::SurfaceToSurface => {
+                let cid = input.compare_surface_id.unwrap();
+                let (c_proj, c_ver, c_key) =
+                    load_surface_for_volume(pool, cid, auth.org_id).await?;
+                if c_proj != project_id {
+                    return Err(async_graphql::Error::new(
+                        "compare surface is not in this project",
+                    ));
+                }
+                let bytes = store.get(&c_key).await.map_err(async_graphql::Error::new)?;
+                (Some(c_ver), Some(bytes))
+            }
+            VolumeComparison::SurfaceToElevation => (None, None),
+        };
+        // For a surface-to-elevation volume the reference is the target; for
+        // surface-to-surface there's no reference elevation.
+        let reference_elev = match input.comparison {
+            VolumeComparison::SurfaceToElevation => input.reference_elev,
+            VolumeComparison::SurfaceToSurface => None,
+        };
+
+        let cell_size = input.cell_size;
+        let out = tokio::task::spawn_blocking(move || {
+            compute_volume_blob(
+                &base_bytes,
+                compare_bytes.as_deref(),
+                reference_elev,
+                cell_size,
+            )
+        })
+        .await
+        .map_err(|e| async_graphql::Error::new(format!("volume task failed: {e}")))?
+        .map_err(async_graphql::Error::new)?;
+
+        let id = Uuid::new_v4();
+        let heatmap_key = format!("volume/{project_id}/{id}.bin");
+        store
+            .put(&heatmap_key, &out.blob)
+            .await
+            .map_err(async_graphql::Error::new)?;
+
+        let row: VolumeRow = sqlx::query_as(&format!(
+            "INSERT INTO volumes \
+               (id, project_id, name, method, comparison, base_surface_id, base_version, \
+                compare_surface_id, compare_version, reference_elev, cell_size, \
+                cut_volume, fill_volume, net_volume, area, heatmap_key, computed_by) \
+             VALUES ($1, $2, $3, 'grid', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) \
+             RETURNING {VOLUME_COLUMNS}"
+        ))
+        .bind(id)
+        .bind(project_id)
+        .bind(&input.name)
+        .bind(input.comparison.as_db_str())
+        .bind(input.base_surface_id)
+        .bind(base_version)
+        .bind(input.compare_surface_id)
+        .bind(compare_version)
+        .bind(reference_elev)
+        .bind(cell_size)
+        .bind(out.cut)
+        .bind(out.fill)
+        .bind(out.net)
+        .bind(out.area)
+        .bind(&heatmap_key)
+        .bind(auth.user_id)
+        .fetch_one(pool)
+        .await?;
+        Ok(row_to_volume(row))
+    }
+
+    /// Deletes a volume computation and its heatmap grid blob.
+    async fn delete_volume(&self, ctx: &Context<'_>, id: Uuid) -> Result<bool> {
+        require_feature(ctx, Feature::Surfaces).await?;
+        let auth = require_editor_active(ctx).await?;
+        let pool = pool(ctx)?;
+        let row: Option<(Option<String>,)> = sqlx::query_as(
+            "DELETE FROM volumes v USING projects p \
+             WHERE v.id = $1 AND p.id = v.project_id AND p.org_id = $2 \
+             RETURNING v.heatmap_key",
+        )
+        .bind(id)
+        .bind(auth.org_id)
+        .fetch_optional(pool)
+        .await?;
+        let (heatmap_key,) = found_in_org(row, "volume")?;
+        if let Some(key) = heatmap_key {
+            let _ = storage(ctx)?.delete(&key).await;
+        }
+        Ok(true)
     }
 }

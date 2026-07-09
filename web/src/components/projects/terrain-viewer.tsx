@@ -40,6 +40,7 @@ import {
   type SurfaceMode,
 } from './terrain/surface-mesh';
 import { Utilities, type UtilityPick } from './terrain/utilities';
+import { VolumeHeatmap } from './terrain/volume-heatmap';
 import { silenceThreeClockWarning } from './three-clock-warning';
 
 export type { UtilityPick } from './terrain/utilities';
@@ -111,6 +112,8 @@ export interface TerrainViewerProps {
   showTerrain?: boolean;
   /** Whether to draw the buried utility runs + structures. */
   showUtilities?: boolean;
+  /** Whether to draw the volume cut/fill heatmap. */
+  showVolume?: boolean;
   /** Active surface's STIN mesh blob (base64), or null when none is selected. */
   surface?: { contentBase64: string } | null;
   /** How to shade the TIN surface: elevation ramp, slope, or QC wireframe. */
@@ -127,6 +130,8 @@ export interface TerrainViewerProps {
   visibleIds?: Set<string> | null;
   /** Utility type keys to show; null shows all. */
   visibleUtilityTypes?: Set<string> | null;
+  /** Active volume's cut/fill heatmap grid (SVOL base64), or null when none. */
+  volumeHeatmap?: { contentBase64: string } | null;
 }
 
 export function TerrainViewer(props: TerrainViewerProps) {
@@ -157,6 +162,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
     showSurface = true,
     showTerrain = true,
     showUtilities = true,
+    showVolume = true,
     surface,
     surfaceMode = 'ramp',
     terrain,
@@ -166,6 +172,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
     visibleCategoryIds,
     visibleIds,
     visibleUtilityTypes = null,
+    volumeHeatmap,
   } = props;
   // Keep `frame` referentially stable while the geographic origin is unchanged,
   // so a live scene refetch (same project) doesn't churn frame-derived work — in
@@ -317,6 +324,14 @@ export function TerrainViewer(props: TerrainViewerProps) {
           displayUnit={displayUnit}
           showLabels={contourLabels}
           visible={showContours}
+        />
+      ) : null}
+
+      {volumeHeatmap ? (
+        <VolumeHeatmap
+          contentBase64={volumeHeatmap.contentBase64}
+          frame={frame}
+          visible={showVolume}
         />
       ) : null}
 
