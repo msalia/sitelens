@@ -12,12 +12,13 @@ import {
   IconVectorTriangle,
   IconX,
 } from '@tabler/icons-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { PointCategory, Project, ScenePoint } from '@/lib/types';
 
 import { ConfirmDialog } from '@/components/projects/confirm-dialog';
+import { ListRow, TooltipIconButton } from '@/components/projects/list-row';
 import { ImportBreaklinesDialog } from '@/components/projects/surfaces/import-breaklines-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -41,6 +42,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { gql, useMutation } from '@/lib/graphql';
 import { UNIT_LABELS } from '@/lib/types';
 import { formatArea, formatVolume, toMeters, type VolumeUnit } from '@/lib/units';
@@ -121,6 +123,45 @@ function downloadBase64(filename: string, mime: string, b64: string) {
   URL.revokeObjectURL(url);
 }
 
+/** A tooltip'd download-icon dropdown for a list row's export formats. */
+function ExportMenu({
+  children,
+  disabled,
+  label,
+}: {
+  label: string;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <DropdownMenu>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={label}
+                  disabled={disabled}
+                >
+                  <IconDownload className="size-4" />
+                </Button>
+              }
+            />
+          }
+        />
+        <TooltipContent>Export</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="end" className="min-w-44 *:whitespace-nowrap">
+        {children}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 /**
  * The Surfaces panel: build a survey-grade TIN from a scoped point selection with
  * optional breaklines / boundary / holes (digitized in-scene or imported from
@@ -180,6 +221,10 @@ export function SurfacesPanel({
   const [volRefElev, setVolRefElev] = useState('');
   const [volCell, setVolCell] = useState('1');
   const [volUnit, setVolUnit] = useState<VolumeUnit>('CUBIC_YARD');
+  // Rows open a shared confirm dialog by setting the pending item (like FieldPanel).
+  const [pendingBreakline, setPendingBreakline] = useState<BreaklineRow | null>(null);
+  const [pendingSurface, setPendingSurface] = useState<SurfaceRow | null>(null);
+  const [pendingVolume, setPendingVolume] = useState<VolumeRow | null>(null);
   const { busy, run } = useMutation();
 
   const load = useCallback(async () => {
@@ -665,31 +710,25 @@ export function SurfacesPanel({
           {breaklines.length > 0 ? (
             <div className="flex flex-col gap-2">
               {breaklines.map((b) => (
-                <div key={b.id} className="flex items-center gap-2 rounded-md border px-3 py-2">
-                  <Badge variant="outline" className="shrink-0">
-                    {KIND_LABEL[b.kind]}
-                  </Badge>
-                  <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs">
-                    {vertCount(b)} pts
-                    {b.sourceLayer ? ` · ${b.sourceLayer}` : ''}
-                    {b.source === 'dxf' ? ' · DXF' : ''}
-                  </span>
-                  <ConfirmDialog
-                    title={`Delete this ${KIND_LABEL[b.kind].toLowerCase()}?`}
-                    description="Rebuild any surface that used it to apply the change."
-                    onConfirm={() => removeBreakline(b.id)}
-                    trigger={
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Delete constraint"
-                      >
-                        <IconTrash className="size-4" />
-                      </Button>
-                    }
-                  />
-                </div>
+                <ListRow
+                  key={b.id}
+                  leading={
+                    <Badge variant="outline" className="shrink-0">
+                      {KIND_LABEL[b.kind]}
+                    </Badge>
+                  }
+                  title={`${vertCount(b)} pts${b.sourceLayer ? ` · ${b.sourceLayer}` : ''}${
+                    b.source === 'dxf' ? ' · DXF' : ''
+                  }`}
+                  actions={
+                    <TooltipIconButton
+                      label="Delete constraint"
+                      onClick={() => setPendingBreakline(b)}
+                    >
+                      <IconTrash className="size-4" />
+                    </TooltipIconButton>
+                  }
+                />
               ))}
             </div>
           ) : null}
@@ -711,86 +750,126 @@ export function SurfacesPanel({
             surfaces.map((s) => {
               const active = s.id === activeSurfaceId;
               return (
-                <div
+                <ListRow
                   key={s.id}
-                  className={`flex items-center gap-2 rounded-md border px-3 py-2 ${
-                    active ? 'border-primary bg-primary/5' : ''
-                  }`}
-                >
-                  <button
-                    type="button"
-                    className="min-w-0 flex-1 text-left"
-                    onClick={() => onSelect(active ? null : s.id)}
-                  >
-                    <div className="flex items-center gap-2">
-                      {active ? (
-                        <IconEye className="text-primary size-4 shrink-0" />
-                      ) : (
-                        <IconEyeOff className="text-muted-foreground size-4 shrink-0" />
-                      )}
-                      <span className="truncate text-sm font-medium">{s.name}</span>
-                      <span className="text-muted-foreground text-xs">v{s.version}</span>
-                    </div>
-                    <div className="text-muted-foreground mt-0.5 text-xs">
-                      {s.kind.toUpperCase()} · {s.triangleCount.toLocaleString()} triangles ·{' '}
-                      {s.vertexCount.toLocaleString()} pts
-                    </div>
-                  </button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      render={
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Export ${s.name}`}
-                          disabled={busy}
-                        >
-                          <IconDownload className="size-4" />
-                        </Button>
-                      }
-                    />
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => exportSurface(s.id, 'LANDXML')}>
-                        LandXML
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => exportSurface(s.id, 'DXF')}>
-                        DXF{contours.interval > 0 ? ' (+ contours)' : ''}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => exportSurface(s.id, 'GEOTIFF')}>
-                        GeoTIFF (DEM)
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Rebuild ${s.name}`}
-                    disabled={busy || !scopeValid}
-                    onClick={() => rebuild(s.id)}
-                  >
-                    <IconRefresh className="size-4" />
-                  </Button>
-                  <ConfirmDialog
-                    title={`Delete “${s.name}”?`}
-                    description="This removes the surface and its computed mesh."
-                    onConfirm={() => remove(s.id)}
-                    trigger={
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={`Delete ${s.name}`}
+                  selected={active}
+                  onClick={() => onSelect(active ? null : s.id)}
+                  leading={
+                    active ? (
+                      <IconEye className="text-primary size-4" />
+                    ) : (
+                      <IconEyeOff className="size-4" />
+                    )
+                  }
+                  title={s.name}
+                  subtitle={`${s.kind.toUpperCase()} · ${s.triangleCount.toLocaleString()} triangles · ${s.vertexCount.toLocaleString()} pts`}
+                  hint={<span className="text-muted-foreground text-xs">v{s.version}</span>}
+                  actions={
+                    <>
+                      <ExportMenu label={`Export ${s.name}`} disabled={busy}>
+                        <DropdownMenuItem onClick={() => exportSurface(s.id, 'LANDXML')}>
+                          LandXML
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => exportSurface(s.id, 'DXF')}>
+                          DXF{contours.interval > 0 ? ' (+ contours)' : ''}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => exportSurface(s.id, 'GEOTIFF')}>
+                          GeoTIFF (DEM)
+                        </DropdownMenuItem>
+                      </ExportMenu>
+                      <TooltipIconButton
+                        label="Rebuild surface"
+                        disabled={busy || !scopeValid}
+                        onClick={() => rebuild(s.id)}
+                      >
+                        <IconRefresh className="size-4" />
+                      </TooltipIconButton>
+                      <TooltipIconButton
+                        label="Delete surface"
+                        onClick={() => setPendingSurface(s)}
                       >
                         <IconTrash className="size-4" />
-                      </Button>
-                    }
-                  />
-                </div>
+                      </TooltipIconButton>
+                    </>
+                  }
+                />
               );
             })
           )}
+
+          {activeSurfaceId ? (
+            <div className="mt-1 flex flex-col gap-3 border-t pt-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold">Contours</span>
+                <Switch
+                  id="ctr-show"
+                  checked={contours.enabled}
+                  onCheckedChange={(v) => setContour('enabled', v)}
+                />
+              </div>
+
+              {contours.enabled ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field>
+                      <FieldLabel htmlFor="ctr-interval">Interval ({unit})</FieldLabel>
+                      <Input
+                        id="ctr-interval"
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={contours.interval}
+                        onChange={(e) => numField('interval')(e.target.value)}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="ctr-major">Major every ({unit})</FieldLabel>
+                      <Input
+                        id="ctr-major"
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={contours.majorInterval}
+                        onChange={(e) => numField('majorInterval')(e.target.value)}
+                      />
+                    </Field>
+                  </div>
+
+                  <Field>
+                    <FieldLabel htmlFor="ctr-smooth">Smoothing</FieldLabel>
+                    <Select
+                      value={String(contours.smoothing)}
+                      onValueChange={(v) => v && setContour('smoothing', Number(v))}
+                    >
+                      <SelectTrigger id="ctr-smooth" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectLabel>Smoothing passes</SelectLabel>
+                          <SelectItem value="0">None (follow triangles)</SelectItem>
+                          <SelectItem value="1">Light</SelectItem>
+                          <SelectItem value="2">Medium</SelectItem>
+                          <SelectItem value="3">Heavy</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+
+                  <div className="flex items-center justify-between">
+                    <FieldLabel htmlFor="ctr-labels" className="cursor-pointer">
+                      Elevation labels on majors
+                    </FieldLabel>
+                    <Switch
+                      id="ctr-labels"
+                      checked={contours.labels}
+                      onCheckedChange={(v) => setContour('labels', v)}
+                    />
+                  </div>
+                </>
+              ) : null}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -916,113 +995,96 @@ export function SurfacesPanel({
                 <>
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-semibold">Results</span>
-                    <Select value={volUnit} onValueChange={(v) => v && setVolUnit(v as VolumeUnit)}>
-                      <SelectTrigger className="h-7 w-28">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectLabel>Volume unit</SelectLabel>
-                          <SelectItem value="CUBIC_YARD">Cubic yards</SelectItem>
-                          <SelectItem value="CUBIC_METER">Cubic meters</SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
+                    <ButtonGroup>
+                      {(
+                        [
+                          ['CUBIC_YARD', 'yd³'],
+                          ['CUBIC_METER', 'm³'],
+                        ] as const
+                      ).map(([value, label]) => (
+                        <Button
+                          key={value}
+                          type="button"
+                          size="sm"
+                          variant={volUnit === value ? 'default' : 'outline'}
+                          aria-pressed={volUnit === value}
+                          onClick={() => setVolUnit(value)}
+                        >
+                          {label}
+                        </Button>
+                      ))}
+                    </ButtonGroup>
                   </div>
                   <div className="flex flex-col gap-2">
                     {volumes.map((v) => {
                       const active = v.id === activeVolumeId;
                       return (
-                        <div
+                        <ListRow
                           key={v.id}
-                          className={`flex flex-col gap-1 rounded-md border px-3 py-2 ${
-                            active ? 'border-primary bg-primary/5' : ''
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              className="min-w-0 flex-1 text-left"
-                              onClick={() => onSelectVolume(active ? null : v.id)}
-                            >
-                              <div className="flex items-center gap-2">
-                                {active ? (
-                                  <IconEye className="text-primary size-4 shrink-0" />
-                                ) : (
-                                  <IconEyeOff className="text-muted-foreground size-4 shrink-0" />
-                                )}
-                                <span className="truncate text-sm font-medium">{v.name}</span>
-                                <Badge variant="outline" className="shrink-0">
-                                  {VOL_COMPARISON_LABEL[v.comparison]}
-                                </Badge>
-                              </div>
-                            </button>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger
-                                render={
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    aria-label={`Export ${v.name}`}
-                                    disabled={busy}
-                                  >
-                                    <IconDownload className="size-4" />
-                                  </Button>
-                                }
-                              />
-                              <DropdownMenuContent align="end">
+                          selected={active}
+                          onClick={() => onSelectVolume(active ? null : v.id)}
+                          leading={
+                            active ? (
+                              <IconEye className="text-primary size-4" />
+                            ) : (
+                              <IconEyeOff className="size-4" />
+                            )
+                          }
+                          title={
+                            <span className="flex items-center gap-2">
+                              <span className="truncate">{v.name}</span>
+                              <Badge variant="outline" className="shrink-0">
+                                {VOL_COMPARISON_LABEL[v.comparison]}
+                              </Badge>
+                            </span>
+                          }
+                          meta={
+                            <div className="text-muted-foreground mt-0.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
+                              <span>
+                                Cut:{' '}
+                                <span className="text-foreground">
+                                  {formatVolume(v.cutVolume, volUnit)}
+                                </span>
+                              </span>
+                              <span>
+                                Fill:{' '}
+                                <span className="text-foreground">
+                                  {formatVolume(v.fillVolume, volUnit)}
+                                </span>
+                              </span>
+                              <span>
+                                Net:{' '}
+                                <span className="text-foreground">
+                                  {formatVolume(v.netVolume, volUnit)}
+                                </span>
+                              </span>
+                              <span>
+                                Area:{' '}
+                                <span className="text-foreground">
+                                  {formatArea(v.area, project.displayUnit)}
+                                </span>
+                              </span>
+                            </div>
+                          }
+                          actions={
+                            <>
+                              <ExportMenu label={`Export ${v.name}`} disabled={busy}>
                                 <DropdownMenuItem onClick={() => exportVolume(v.id, 'PDF')}>
                                   PDF report
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => exportVolume(v.id, 'CSV')}>
                                   CSV
                                 </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                            <ConfirmDialog
-                              title={`Delete “${v.name}”?`}
-                              description="This removes the volume and its heatmap grid."
-                              onConfirm={() => removeVolume(v.id)}
-                              trigger={
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  aria-label={`Delete ${v.name}`}
-                                >
-                                  <IconTrash className="size-4" />
-                                </Button>
-                              }
-                            />
-                          </div>
-                          <div className="text-muted-foreground grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
-                            <span>
-                              Cut:{' '}
-                              <span className="text-foreground">
-                                {formatVolume(v.cutVolume, volUnit)}
-                              </span>
-                            </span>
-                            <span>
-                              Fill:{' '}
-                              <span className="text-foreground">
-                                {formatVolume(v.fillVolume, volUnit)}
-                              </span>
-                            </span>
-                            <span>
-                              Net:{' '}
-                              <span className="text-foreground">
-                                {formatVolume(v.netVolume, volUnit)}
-                              </span>
-                            </span>
-                            <span>
-                              Area:{' '}
-                              <span className="text-foreground">
-                                {formatArea(v.area, project.displayUnit)}
-                              </span>
-                            </span>
-                          </div>
-                        </div>
+                              </ExportMenu>
+                              <TooltipIconButton
+                                label="Delete volume"
+                                onClick={() => setPendingVolume(v)}
+                              >
+                                <IconTrash className="size-4" />
+                              </TooltipIconButton>
+                            </>
+                          }
+                        />
                       );
                     })}
                   </div>
@@ -1033,96 +1095,41 @@ export function SurfacesPanel({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Contours</CardTitle>
-          <CardDescription>
-            Iso-lines generated from the active surface, drawn live in the 3D scene. Intervals are
-            in {unit}.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {activeSurfaceId ? (
-            <>
-              <div className="flex items-center justify-between">
-                <FieldLabel htmlFor="ctr-show" className="cursor-pointer">
-                  Show contours
-                </FieldLabel>
-                <Switch
-                  id="ctr-show"
-                  checked={contours.enabled}
-                  onCheckedChange={(v) => setContour('enabled', v)}
-                />
-              </div>
-
-              {contours.enabled ? (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field>
-                      <FieldLabel htmlFor="ctr-interval">Interval ({unit})</FieldLabel>
-                      <Input
-                        id="ctr-interval"
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={contours.interval}
-                        onChange={(e) => numField('interval')(e.target.value)}
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="ctr-major">Major every ({unit})</FieldLabel>
-                      <Input
-                        id="ctr-major"
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={contours.majorInterval}
-                        onChange={(e) => numField('majorInterval')(e.target.value)}
-                      />
-                    </Field>
-                  </div>
-
-                  <Field>
-                    <FieldLabel htmlFor="ctr-smooth">Smoothing</FieldLabel>
-                    <Select
-                      value={String(contours.smoothing)}
-                      onValueChange={(v) => v && setContour('smoothing', Number(v))}
-                    >
-                      <SelectTrigger id="ctr-smooth" className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectLabel>Smoothing passes</SelectLabel>
-                          <SelectItem value="0">None (follow triangles)</SelectItem>
-                          <SelectItem value="1">Light</SelectItem>
-                          <SelectItem value="2">Medium</SelectItem>
-                          <SelectItem value="3">Heavy</SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-
-                  <div className="flex items-center justify-between">
-                    <FieldLabel htmlFor="ctr-labels" className="cursor-pointer">
-                      Elevation labels on majors
-                    </FieldLabel>
-                    <Switch
-                      id="ctr-labels"
-                      checked={contours.labels}
-                      onCheckedChange={(v) => setContour('labels', v)}
-                    />
-                  </div>
-                </>
-              ) : null}
-            </>
-          ) : (
-            <p className="text-muted-foreground text-sm">
-              Select a surface above to generate contours.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      <ConfirmDialog
+        open={pendingBreakline !== null}
+        onOpenChange={(o) => !o && setPendingBreakline(null)}
+        title={
+          pendingBreakline ? `Delete this ${KIND_LABEL[pendingBreakline.kind].toLowerCase()}?` : ''
+        }
+        description="Rebuild any surface that used it to apply the change."
+        onConfirm={() => {
+          if (pendingBreakline) {
+            removeBreakline(pendingBreakline.id);
+          }
+        }}
+      />
+      <ConfirmDialog
+        open={pendingSurface !== null}
+        onOpenChange={(o) => !o && setPendingSurface(null)}
+        title={pendingSurface ? `Delete “${pendingSurface.name}”?` : ''}
+        description="This removes the surface and its computed mesh."
+        onConfirm={() => {
+          if (pendingSurface) {
+            remove(pendingSurface.id);
+          }
+        }}
+      />
+      <ConfirmDialog
+        open={pendingVolume !== null}
+        onOpenChange={(o) => !o && setPendingVolume(null)}
+        title={pendingVolume ? `Delete “${pendingVolume.name}”?` : ''}
+        description="This removes the volume and its heatmap grid."
+        onConfirm={() => {
+          if (pendingVolume) {
+            removeVolume(pendingVolume.id);
+          }
+        }}
+      />
     </div>
   );
 }

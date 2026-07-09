@@ -3,8 +3,43 @@
 import { IconChevronRight } from '@tabler/icons-react';
 import { type ComponentPropsWithoutRef, forwardRef, type ReactNode } from 'react';
 
+import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+
+/** A small ghost icon button with a hover tooltip + accessible label — the
+ *  standard trailing action for list rows. */
+export function TooltipIconButton({
+  children,
+  disabled,
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={label}
+            disabled={disabled}
+            onClick={onClick}
+          />
+        }
+      >
+        {children}
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 /** A truncating line that reveals its full text in a shadcn tooltip on hover
  *  (only when the content is a plain string we can echo). */

@@ -24,23 +24,22 @@ function divergingColor(dz: number, scale: number): [number, number, number] {
   ];
 }
 
-/** The Δz range + cell size from an SVOL blob header, for the legend. */
+/** The Δz range from an SVOL blob header, for the legend. */
 export interface HeatmapRange {
-  cellSize: number;
   maxDz: number;
   minDz: number;
 }
 
-/** Reads just the SVOL header (Δz range + cell size), for a legend without
- *  decoding every cell. Returns null for an empty/invalid blob. */
+/** Reads just the SVOL header (Δz range), for a legend without decoding the whole
+ *  mesh. Returns null for an empty/invalid blob. */
 export function readHeatmapRange(contentBase64: string): HeatmapRange | null {
   try {
     const bin = atob(contentBase64);
-    if (bin.length < 36) {
+    if (bin.length < 24) {
       return null;
     }
-    const bytes = new Uint8Array(36);
-    for (let i = 0; i < 36; i++) {
+    const bytes = new Uint8Array(24);
+    for (let i = 0; i < 24; i++) {
       bytes[i] = bin.charCodeAt(i);
     }
     const dv = new DataView(bytes.buffer);
@@ -50,9 +49,8 @@ export function readHeatmapRange(contentBase64: string): HeatmapRange | null {
       return null;
     }
     return {
-      cellSize: dv.getFloat64(8, true),
-      maxDz: dv.getFloat64(24, true),
-      minDz: dv.getFloat64(16, true),
+      maxDz: dv.getFloat64(16, true),
+      minDz: dv.getFloat64(8, true),
     };
   } catch {
     return null;
@@ -60,13 +58,13 @@ export function readHeatmapRange(contentBase64: string): HeatmapRange | null {
 }
 
 /**
- * Decodes the server's SVOL heatmap blob into a colored quad grid. Each cell is a
- * `cell_size` square placed at its geographic center + base elevation (via the
- * shared {@link toLocal}), colored by signed Δz (red cut → blue fill).
- * Layout (little-endian): see `api/src/surface/mod.rs`.
+ * Decodes the server's SVOL heatmap blob (the base surface mesh + a per-vertex
+ * Δz) into a colored `BufferGeometry`. Because it *is* the surface mesh, it
+ * follows the surface outline exactly and shades smoothly (red cut → blue fill),
+ * lifted slightly so it reads over the surface. Layout: see `api/src/surface/mod.rs`.
  */
 function buildHeatmapGeometry(buf: ArrayBuffer, frame: Frame): THREE.BufferGeometry | null {
-  if (buf.byteLength < 36) {
+  if (buf.byteLength < 32) {
     return null;
   }
   const dv = new DataView(buf);
@@ -74,52 +72,38 @@ function buildHeatmapGeometry(buf: ArrayBuffer, frame: Frame): THREE.BufferGeome
   if (magic !== 'SVOL') {
     return null;
   }
-  const cellSize = dv.getFloat64(8, true);
-  const minDz = dv.getFloat64(16, true);
-  const maxDz = dv.getFloat64(24, true);
-  const count = dv.getUint32(32, true);
-  if (count === 0) {
+  const minDz = dv.getFloat64(8, true);
+  const maxDz = dv.getFloat64(16, true);
+  const vCount = dv.getUint32(24, true);
+  const tCount = dv.getUint32(28, true);
+  if (vCount === 0 || tCount === 0) {
     return null;
   }
   const scale = Math.max(Math.abs(minDz), Math.abs(maxDz)) || 1;
-  const half = cellSize / 2;
 
-  const positions = new Float32Array(count * 4 * 3);
-  const colors = new Float32Array(count * 4 * 3);
-  const indices = new Uint32Array(count * 6);
-  let off = 36;
-  for (let c = 0; c < count; c++) {
+  const positions = new Float32Array(vCount * 3);
+  const colors = new Float32Array(vCount * 3);
+  let off = 32;
+  for (let i = 0; i < vCount; i++) {
     const lat = dv.getFloat64(off, true);
     const lon = dv.getFloat64(off + 8, true);
-    const baseZ = dv.getFloat64(off + 16, true);
+    const h = dv.getFloat64(off + 16, true);
     const dz = dv.getFloat64(off + 24, true);
     off += 32;
-    const [x, y, z] = toLocal(frame, lat, lon, baseZ + LIFT);
-    // Four corners of the cell (axis-aligned in the local ENU frame).
-    const corners = [
-      [x - half, y, z - half],
-      [x + half, y, z - half],
-      [x + half, y, z + half],
-      [x - half, y, z + half],
-    ];
+    const [x, y, z] = toLocal(frame, lat, lon, h + LIFT);
+    positions[i * 3] = x;
+    positions[i * 3 + 1] = y;
+    positions[i * 3 + 2] = z;
     const [r, g, b] = divergingColor(dz, scale);
-    const v0 = c * 4;
-    for (let k = 0; k < 4; k++) {
-      const p = (v0 + k) * 3;
-      positions[p] = corners[k][0];
-      positions[p + 1] = corners[k][1];
-      positions[p + 2] = corners[k][2];
-      colors[p] = r;
-      colors[p + 1] = g;
-      colors[p + 2] = b;
-    }
-    const i0 = c * 6;
-    indices[i0] = v0;
-    indices[i0 + 1] = v0 + 1;
-    indices[i0 + 2] = v0 + 2;
-    indices[i0 + 3] = v0;
-    indices[i0 + 4] = v0 + 2;
-    indices[i0 + 5] = v0 + 3;
+    colors[i * 3] = r;
+    colors[i * 3 + 1] = g;
+    colors[i * 3 + 2] = b;
+  }
+
+  const indices = new Uint32Array(tCount * 3);
+  for (let i = 0; i < tCount * 3; i++) {
+    indices[i] = dv.getUint32(off, true);
+    off += 4;
   }
 
   const geometry = new THREE.BufferGeometry();
