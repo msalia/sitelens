@@ -799,6 +799,16 @@ export type SurfaceMeshQueryVariables = Exact<{
 
 export type SurfaceMeshQuery = { surfaceMesh: { filename: string, mimeType: string, contentBase64: string } };
 
+export type SurfaceContoursQueryVariables = Exact<{
+  id: string;
+  interval: number;
+  majorInterval?: number | null | undefined;
+  smoothing?: number | null | undefined;
+}>;
+
+
+export type SurfaceContoursQuery = { surfaceContours: { filename: string, mimeType: string, contentBase64: string } };
+
 export type BuildSurfaceMutationVariables = Exact<{
   projectId: string;
   input: SurfaceInput;
@@ -1931,6 +1941,20 @@ export const SurfaceMeshDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SurfaceMeshQuery, SurfaceMeshQueryVariables>;
+export const SurfaceContoursDocument = new TypedDocumentString(`
+    query SurfaceContours($id: UUID!, $interval: Float!, $majorInterval: Float, $smoothing: Int) {
+  surfaceContours(
+    id: $id
+    interval: $interval
+    majorInterval: $majorInterval
+    smoothing: $smoothing
+  ) {
+    filename
+    mimeType
+    contentBase64
+  }
+}
+    `) as unknown as TypedDocumentString<SurfaceContoursQuery, SurfaceContoursQueryVariables>;
 export const BuildSurfaceDocument = new TypedDocumentString(`
     mutation BuildSurface($projectId: UUID!, $input: SurfaceInput!) {
   buildSurface(projectId: $projectId, input: $input) {

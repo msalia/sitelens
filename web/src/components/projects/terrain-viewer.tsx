@@ -5,7 +5,7 @@ import { Canvas } from '@react-three/fiber';
 import { useTheme } from 'next-themes';
 import { useEffect, useMemo, useState } from 'react';
 
-import type { PointCategory, SceneData } from '@/lib/types';
+import type { LengthUnit, PointCategory, SceneData } from '@/lib/types';
 
 import type {
   BuildingFootprint,
@@ -31,10 +31,8 @@ import {
   useBounds,
   useMarkers,
 } from './terrain-objects';
-import {
-  type SceneConstraint,
-  SurfaceConstraints,
-} from './terrain/surface-constraints';
+import { type SceneConstraint, SurfaceConstraints } from './terrain/surface-constraints';
+import { SurfaceContours } from './terrain/surface-contours';
 import {
   buildSurfaceGeometry,
   type SurfaceGeometry,
@@ -74,6 +72,12 @@ export interface TerrainViewerProps {
   comparison?: ComparisonMarker[] | null;
   /** Surface constraints (breaklines / boundary / holes) to overlay. */
   constraints?: SceneConstraint[];
+  /** Draw elevation labels on major contours. */
+  contourLabels?: boolean;
+  /** Active surface's contour blob (SCTR base64), or null when none is loaded. */
+  contours?: { contentBase64: string } | null;
+  /** Unit for contour elevation labels (the project's display unit). */
+  displayUnit: LengthUnit;
   /** Move the camera to a point. `nonce` re-triggers. */
   focus?: FocusTarget;
   /** Called with a survey point id when picked in 3D. */
@@ -91,6 +95,8 @@ export interface TerrainViewerProps {
   showBuildings?: boolean;
   /** Whether to draw the constraint overlay. */
   showConstraints?: boolean;
+  /** Whether to draw the surface contours. */
+  showContours?: boolean;
   /** Whether to draw the building-grid lines + labels. */
   showGrid?: boolean;
   /** DXF layer names to show (empty/undefined shows none). */
@@ -130,6 +136,9 @@ export function TerrainViewer(props: TerrainViewerProps) {
     categories,
     comparison,
     constraints,
+    contourLabels = true,
+    contours,
+    displayUnit,
     focus,
     onSelectPoint,
     onSelectUtility,
@@ -140,6 +149,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
     scene,
     showBuildings = true,
     showConstraints = true,
+    showContours = true,
     showGrid = true,
     shownLayers,
     showOverlays = true,
@@ -222,7 +232,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
     }
     try {
       const built = buildSurfaceGeometry(base64ToArrayBuffer(surface.contentBase64), frame);
-       
+
       setSurfaceGeom(built);
     } catch {
       /* a bad blob just renders nothing */
@@ -298,6 +308,16 @@ export function TerrainViewer(props: TerrainViewerProps) {
 
       {surfaceGeom && showSurface ? (
         <SurfaceMesh geometry={surfaceGeom.geometry} mode={surfaceMode} />
+      ) : null}
+
+      {contours ? (
+        <SurfaceContours
+          contentBase64={contours.contentBase64}
+          frame={frame}
+          displayUnit={displayUnit}
+          showLabels={contourLabels}
+          visible={showContours}
+        />
       ) : null}
 
       {constraints?.length &&

@@ -79,6 +79,7 @@ type Documents = {
     "\n  mutation RefreshBuildings(\n    $id: UUID!\n    $south: Float!\n    $north: Float!\n    $west: Float!\n    $east: Float!\n    $force: Boolean\n  ) {\n    refreshBuildings(\n      projectId: $id\n      south: $south\n      north: $north\n      west: $west\n      east: $east\n      force: $force\n    ) {\n      count\n      fetchedAt\n    }\n  }\n": typeof types.RefreshBuildingsDocument,
     "\n  query Surfaces($projectId: UUID!) {\n    surfaces(projectId: $projectId) {\n      id\n      name\n      version\n      kind\n      status\n      failureReason\n      vertexCount\n      triangleCount\n      createdAt\n    }\n  }\n": typeof types.SurfacesDocument,
     "\n  query SurfaceMesh($id: UUID!) {\n    surfaceMesh(id: $id) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n": typeof types.SurfaceMeshDocument,
+    "\n  query SurfaceContours($id: UUID!, $interval: Float!, $majorInterval: Float, $smoothing: Int) {\n    surfaceContours(\n      id: $id\n      interval: $interval\n      majorInterval: $majorInterval\n      smoothing: $smoothing\n    ) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n": typeof types.SurfaceContoursDocument,
     "\n  mutation BuildSurface($projectId: UUID!, $input: SurfaceInput!) {\n    buildSurface(projectId: $projectId, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n": typeof types.BuildSurfaceDocument,
     "\n  mutation RebuildSurface($id: UUID!, $input: SurfaceInput!) {\n    rebuildSurface(id: $id, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n": typeof types.RebuildSurfaceDocument,
     "\n  mutation DeleteSurface($id: UUID!) {\n    deleteSurface(id: $id)\n  }\n": typeof types.DeleteSurfaceDocument,
@@ -180,6 +181,7 @@ const documents: Documents = {
     "\n  mutation RefreshBuildings(\n    $id: UUID!\n    $south: Float!\n    $north: Float!\n    $west: Float!\n    $east: Float!\n    $force: Boolean\n  ) {\n    refreshBuildings(\n      projectId: $id\n      south: $south\n      north: $north\n      west: $west\n      east: $east\n      force: $force\n    ) {\n      count\n      fetchedAt\n    }\n  }\n": types.RefreshBuildingsDocument,
     "\n  query Surfaces($projectId: UUID!) {\n    surfaces(projectId: $projectId) {\n      id\n      name\n      version\n      kind\n      status\n      failureReason\n      vertexCount\n      triangleCount\n      createdAt\n    }\n  }\n": types.SurfacesDocument,
     "\n  query SurfaceMesh($id: UUID!) {\n    surfaceMesh(id: $id) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n": types.SurfaceMeshDocument,
+    "\n  query SurfaceContours($id: UUID!, $interval: Float!, $majorInterval: Float, $smoothing: Int) {\n    surfaceContours(\n      id: $id\n      interval: $interval\n      majorInterval: $majorInterval\n      smoothing: $smoothing\n    ) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n": types.SurfaceContoursDocument,
     "\n  mutation BuildSurface($projectId: UUID!, $input: SurfaceInput!) {\n    buildSurface(projectId: $projectId, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n": types.BuildSurfaceDocument,
     "\n  mutation RebuildSurface($id: UUID!, $input: SurfaceInput!) {\n    rebuildSurface(id: $id, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n": types.RebuildSurfaceDocument,
     "\n  mutation DeleteSurface($id: UUID!) {\n    deleteSurface(id: $id)\n  }\n": types.DeleteSurfaceDocument,
@@ -473,6 +475,10 @@ export function graphql(source: "\n  query Surfaces($projectId: UUID!) {\n    su
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query SurfaceMesh($id: UUID!) {\n    surfaceMesh(id: $id) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n"): typeof import('./graphql').SurfaceMeshDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query SurfaceContours($id: UUID!, $interval: Float!, $majorInterval: Float, $smoothing: Int) {\n    surfaceContours(\n      id: $id\n      interval: $interval\n      majorInterval: $majorInterval\n      smoothing: $smoothing\n    ) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n"): typeof import('./graphql').SurfaceContoursDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

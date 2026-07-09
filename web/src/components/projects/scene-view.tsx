@@ -24,6 +24,7 @@ import { SceneToolbar } from '@/components/projects/scene-view/scene-toolbar';
 import { Card } from '@/components/ui/card';
 import { gql } from '@/lib/graphql';
 import { subscribeProjectChanged } from '@/lib/scene-subscription';
+import { toMeters } from '@/lib/units';
 
 import {
   BUILDINGS_CONTENT,
@@ -36,7 +37,13 @@ import {
   SPAM_COOLDOWN_MS,
   TERRAIN_CONTENT,
 } from './scene-view-data';
-import { BREAKLINES, SURFACE_MESH } from './surfaces-data';
+import {
+  BREAKLINES,
+  type ContourSettings,
+  DEFAULT_CONTOURS,
+  SURFACE_CONTOURS,
+  SURFACE_MESH,
+} from './surfaces-data';
 
 // The WebGL viewer is browser-only; load it lazily and never on the server.
 const TerrainViewer = dynamic(
@@ -51,6 +58,7 @@ export function SceneView({
   activeSurfaceId,
   categories,
   comparison,
+  contours = DEFAULT_CONTOURS,
   digitizing,
   focus,
   onCancelDigitize,
@@ -68,6 +76,8 @@ export function SceneView({
   categories: PointCategory[];
   /** As-built QC comparison markers to overlay (from the Field panel). */
   comparison?: ComparisonMarker[] | null;
+  /** Contour-generation settings (from the Surfaces panel). */
+  contours?: ContourSettings;
   /** When true, the scene is in "digitize" mode: clicking a survey-point marker
    *  feeds it to `pickRef` (snapping a utility vertex/structure) instead of
    *  opening the coordinate inspector. Drives the on-scene hint banner. */
@@ -116,6 +126,7 @@ export function SceneView({
   const [showSurface, setShowSurface] = useState(true);
   const [surfaceMode, setSurfaceMode] = useState<SurfaceMode>('ramp');
   const [surface, setSurface] = useState<{ contentBase64: string } | null>(null);
+  const [contourBlob, setContourBlob] = useState<{ contentBase64: string } | null>(null);
   const [constraints, setConstraints] = useState<SceneConstraint[]>([]);
   const [showConstraints, setShowConstraints] = useState(true);
   const [underground, setUnderground] = useState(false);
@@ -186,6 +197,33 @@ export function SceneView({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadSurfaceMesh();
   }, [loadSurfaceMesh, surfaceReload]);
+
+  // Loads contours for the active surface at the panel's settings. Intervals are
+  // entered in the display unit, converted to canonical meters for the API.
+  const { enabled: contoursOn, interval, majorInterval, smoothing } = contours;
+  const loadContours = useCallback(async () => {
+    if (!activeSurfaceId || !contoursOn || !(interval > 0)) {
+      setContourBlob(null);
+      return;
+    }
+    try {
+      const { surfaceContours } = await gql(SURFACE_CONTOURS, {
+        id: activeSurfaceId,
+        interval: toMeters(interval, project.displayUnit),
+        majorInterval: majorInterval > 0 ? toMeters(majorInterval, project.displayUnit) : null,
+        smoothing,
+      });
+      setContourBlob({ contentBase64: surfaceContours.contentBase64 });
+    } catch {
+      setContourBlob(null);
+    }
+  }, [activeSurfaceId, contoursOn, interval, majorInterval, smoothing, project.displayUnit]);
+
+  // Refetch contours when the surface, settings, or reload nonce change.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadContours();
+  }, [loadContours, surfaceReload]);
 
   // Loads the project's surface constraints for the overlay (parsing the stored
   // `[{n,e,z}]` JSON into projected-meter vertices).
@@ -468,6 +506,10 @@ export function SceneView({
             surface={surface}
             showSurface={showSurface}
             surfaceMode={surfaceMode}
+            contours={contourBlob}
+            showContours={contours.enabled}
+            contourLabels={contours.labels}
+            displayUnit={project.displayUnit}
             constraints={constraints}
             showConstraints={showConstraints}
             terrain={terrain}

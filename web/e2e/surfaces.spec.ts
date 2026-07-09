@@ -92,6 +92,41 @@ test('auto boundary → rebuild bumps the version, and slope shading is offered'
   await page.getByRole('menuitemradio', { name: 'Slope' }).click();
 });
 
+test('enable contours → the API returns iso-lines and the controls appear', async ({ page }) => {
+  const email = await signUpAndLogin(page, 'surf-contour');
+  upgradeOrg(email);
+  await createProjectAndOpen(page, 'Surface Contours');
+
+  await importCsv(
+    page,
+    ['P,N,E,Z,D', 'P1,0,0,10,GRD', 'P2,0,100,12,GRD', 'P3,100,100,15,GRD', 'P4,100,0,11,GRD'].join(
+      '\n',
+    ),
+  );
+
+  await gotoTab(page, 'Surfaces');
+  await page.getByLabel('Name').fill('Grade');
+  await page.getByRole('button', { name: 'Build surface' }).click();
+  await expect(page.getByText('Grade')).toBeVisible();
+
+  // Enabling contours fetches them from the API; assert the response carries a
+  // non-empty SCTR blob, and that the interval/label controls appear.
+  const contourResp = page.waitForResponse(
+    (r) =>
+      r.url().includes('/api/graphql') &&
+      (r.request().postData()?.includes('SurfaceContours') ?? false) &&
+      r.ok(),
+  );
+  await page.getByLabel('Show contours').click();
+  await expect(page.getByLabel(/Interval/)).toBeVisible();
+  await expect(page.getByLabel('Elevation labels on majors')).toBeVisible();
+
+  const body = (await (await contourResp).json()) as {
+    data: { surfaceContours: { contentBase64: string } };
+  };
+  expect(body.data.surfaceContours.contentBase64.length).toBeGreaterThan(0);
+});
+
 test('Solo plan gates the Surfaces tab behind the upgrade dialog', async ({ page }) => {
   await signUpAndLogin(page, 'surf-gate'); // no upgrade → Solo
   await createProjectAndOpen(page, 'Surface Gate');

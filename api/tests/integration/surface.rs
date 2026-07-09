@@ -462,3 +462,78 @@ async fn free_tier_blocks_breakline_creation(pool: PgPool) {
     .await;
     assert!(msg.contains("Crew feature"), "breaklines not gated: {msg}");
 }
+
+// --- Phase 3: contours ------------------------------------------------------
+
+#[sqlx::test(migrations = "./migrations")]
+async fn surface_contours_serves_an_sctr_blob(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (auth, pid) = seed_square(&schema, &pool).await; // z spans 10..15
+
+    let built = exec_ok_vars(
+        &schema,
+        BUILD,
+        serde_json::json!({ "pid": pid, "input": { "name": "Grade", "scope": "ALL" } }),
+        auth.clone(),
+    )
+    .await;
+    let sid = uuid_at(&built, &["buildSurface", "id"]);
+
+    // A 1 m interval over a 10..15 surface yields several iso-lines. The blob is
+    // base64 and starts with the "SCTR" magic ("SCT" → base64 "U0NU").
+    let res = exec_ok(
+        &schema,
+        &format!(
+            r#"{{ surfaceContours(id: "{sid}", interval: 1.0, majorInterval: 5.0, smoothing: 1) {{ filename contentBase64 }} }}"#
+        ),
+        Some(auth.clone()),
+    )
+    .await;
+    let b64 = res["surfaceContours"]["contentBase64"].as_str().unwrap();
+    assert!(
+        b64.starts_with("U0NU"),
+        "contour blob should start with SCTR magic; got {b64:.8}"
+    );
+    assert_eq!(
+        res["surfaceContours"]["filename"],
+        serde_json::json!("Grade.sctr")
+    );
+
+    // A non-positive interval is a user error surfaced from the compute stage.
+    let msg = exec_err(
+        &schema,
+        &format!(r#"{{ surfaceContours(id: "{sid}", interval: 0.0) {{ filename }} }}"#),
+        Some(auth),
+    )
+    .await;
+    assert!(msg.contains("positive"), "expected interval error: {msg}");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn surface_contours_are_tenant_isolated(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (owner, pid) = seed_square(&schema, &pool).await;
+    let built = exec_ok_vars(
+        &schema,
+        BUILD,
+        serde_json::json!({ "pid": pid, "input": { "name": "Grade", "scope": "ALL" } }),
+        owner.clone(),
+    )
+    .await;
+    let sid = uuid_at(&built, &["buildSurface", "id"]);
+
+    // A different paid org cannot read another org's surface contours.
+    let (intruder, org2, _) = signup(&schema, "intruder@example.com", "Other Co").await;
+    set_paid(&pool, org2).await;
+    let other = admin_ctx(intruder, org2);
+    let msg = exec_err(
+        &schema,
+        &format!(r#"{{ surfaceContours(id: "{sid}", interval: 1.0) {{ filename }} }}"#),
+        Some(other),
+    )
+    .await;
+    assert!(
+        msg.contains("surface"),
+        "expected not-found for other org: {msg}"
+    );
+}

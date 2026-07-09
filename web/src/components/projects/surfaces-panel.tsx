@@ -33,12 +33,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { gql, useMutation } from '@/lib/graphql';
+import { UNIT_LABELS } from '@/lib/types';
 
 import {
   AUTO_BOUNDARY,
   BREAKLINES,
   BUILD_SURFACE,
+  type ContourSettings,
   CREATE_BREAKLINE,
   DELETE_BREAKLINE,
   DELETE_SURFACE,
@@ -90,7 +93,9 @@ function minVerts(kind: BreaklineKind): number {
 export function SurfacesPanel({
   activeSurfaceId,
   categories,
+  contours,
   onChanged,
+  onContoursChange,
   onDigitizingChange,
   onSelect,
   pickRef,
@@ -104,6 +109,10 @@ export function SurfacesPanel({
   onSelect: (id: string | null) => void;
   /** Bumped after a build/rebuild/constraint change so the scene refetches. */
   onChanged: () => void;
+  /** Current contour-generation settings (rendered live in the scene). */
+  contours: ContourSettings;
+  /** Updates the contour settings. */
+  onContoursChange: (next: ContourSettings) => void;
   /** Scene digitize bridge: snapped survey points feed the active capture. */
   pickRef: React.MutableRefObject<((point: ScenePoint) => void) | null>;
   /** Toggles the scene's "click points to snap" hint. */
@@ -275,6 +284,15 @@ export function SurfacesPanel({
     } catch {
       return 0;
     }
+  };
+
+  const unit = UNIT_LABELS[project.displayUnit];
+  const setContour = <K extends keyof ContourSettings>(key: K, value: ContourSettings[K]) =>
+    onContoursChange({ ...contours, [key]: value });
+  // Number field → non-negative number (blank/invalid ⇒ 0).
+  const numField = (key: 'interval' | 'majorInterval') => (raw: string) => {
+    const n = Number(raw);
+    setContour(key, Number.isFinite(n) && n >= 0 ? n : 0);
   };
 
   return (
@@ -450,7 +468,10 @@ export function SurfacesPanel({
             </div>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
-              <Select value={captureKind} onValueChange={(v) => v && setCaptureKind(v as BreaklineKind)}>
+              <Select
+                value={captureKind}
+                onValueChange={(v) => v && setCaptureKind(v as BreaklineKind)}
+              >
                 <SelectTrigger className="w-36 shrink-0">
                   <SelectValue />
                 </SelectTrigger>
@@ -467,7 +488,13 @@ export function SurfacesPanel({
                 <IconPencil className="mr-1 size-4" /> Digitize
               </Button>
               <ButtonGroup>
-                <Button type="button" size="sm" variant="outline" onClick={autoBoundary} disabled={busy}>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={autoBoundary}
+                  disabled={busy}
+                >
                   <IconVectorTriangle className="mr-1 size-4" /> Auto boundary
                 </Button>
                 <ImportBreaklinesDialog project={project} onImported={loadBreaklines} />
@@ -492,7 +519,12 @@ export function SurfacesPanel({
                     description="Rebuild any surface that used it to apply the change."
                     onConfirm={() => removeBreakline(b.id)}
                     trigger={
-                      <Button type="button" variant="ghost" size="icon-sm" aria-label="Delete constraint">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Delete constraint"
+                      >
                         <IconTrash className="size-4" />
                       </Button>
                     }
@@ -572,6 +604,97 @@ export function SurfacesPanel({
                 </div>
               );
             })
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Contours</CardTitle>
+          <CardDescription>
+            Iso-lines generated from the active surface, drawn live in the 3D scene. Intervals are
+            in {unit}.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          {activeSurfaceId ? (
+            <>
+              <div className="flex items-center justify-between">
+                <FieldLabel htmlFor="ctr-show" className="cursor-pointer">
+                  Show contours
+                </FieldLabel>
+                <Switch
+                  id="ctr-show"
+                  checked={contours.enabled}
+                  onCheckedChange={(v) => setContour('enabled', v)}
+                />
+              </div>
+
+              {contours.enabled ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field>
+                      <FieldLabel htmlFor="ctr-interval">Interval ({unit})</FieldLabel>
+                      <Input
+                        id="ctr-interval"
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={contours.interval}
+                        onChange={(e) => numField('interval')(e.target.value)}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="ctr-major">Major every ({unit})</FieldLabel>
+                      <Input
+                        id="ctr-major"
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={contours.majorInterval}
+                        onChange={(e) => numField('majorInterval')(e.target.value)}
+                      />
+                    </Field>
+                  </div>
+
+                  <Field>
+                    <FieldLabel htmlFor="ctr-smooth">Smoothing</FieldLabel>
+                    <Select
+                      value={String(contours.smoothing)}
+                      onValueChange={(v) => v && setContour('smoothing', Number(v))}
+                    >
+                      <SelectTrigger id="ctr-smooth" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectLabel>Smoothing passes</SelectLabel>
+                          <SelectItem value="0">None (follow triangles)</SelectItem>
+                          <SelectItem value="1">Light</SelectItem>
+                          <SelectItem value="2">Medium</SelectItem>
+                          <SelectItem value="3">Heavy</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+
+                  <div className="flex items-center justify-between">
+                    <FieldLabel htmlFor="ctr-labels" className="cursor-pointer">
+                      Elevation labels on majors
+                    </FieldLabel>
+                    <Switch
+                      id="ctr-labels"
+                      checked={contours.labels}
+                      onCheckedChange={(v) => setContour('labels', v)}
+                    />
+                  </div>
+                </>
+              ) : null}
+            </>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              Select a surface above to generate contours.
+            </p>
           )}
         </CardContent>
       </Card>

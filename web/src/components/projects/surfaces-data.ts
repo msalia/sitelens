@@ -1,5 +1,28 @@
 import { graphql } from '@/lib/gql';
 
+/** Contour-generation settings, shared between the Surfaces panel (which edits
+ *  them) and the scene (which fetches + renders). Intervals are in the project's
+ *  display unit; the scene converts to meters for the API call. */
+export interface ContourSettings {
+  enabled: boolean;
+  /** Minor interval, in the project's display unit. */
+  interval: number;
+  /** Draw elevation labels on major contours. */
+  labels: boolean;
+  /** Major (labeled) interval, in the project's display unit. */
+  majorInterval: number;
+  /** Chaikin smoothing passes (0–3). */
+  smoothing: number;
+}
+
+export const DEFAULT_CONTOURS: ContourSettings = {
+  enabled: false,
+  interval: 1,
+  labels: true,
+  majorInterval: 5,
+  smoothing: 1,
+};
+
 /** Every surface in a project (newest first). */
 export const SURFACES = graphql(`
   query Surfaces($projectId: UUID!) {
@@ -21,6 +44,22 @@ export const SURFACES = graphql(`
 export const SURFACE_MESH = graphql(`
   query SurfaceMesh($id: UUID!) {
     surfaceMesh(id: $id) {
+      filename
+      mimeType
+      contentBase64
+    }
+  }
+`);
+
+/** Iso-line contours computed from a surface (SCTR binary blob, base64-encoded). */
+export const SURFACE_CONTOURS = graphql(`
+  query SurfaceContours($id: UUID!, $interval: Float!, $majorInterval: Float, $smoothing: Int) {
+    surfaceContours(
+      id: $id
+      interval: $interval
+      majorInterval: $majorInterval
+      smoothing: $smoothing
+    ) {
       filename
       mimeType
       contentBase64

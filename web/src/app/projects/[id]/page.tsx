@@ -18,6 +18,7 @@ import { FieldPanel } from '@/components/projects/field-panel';
 import { GridEditor } from '@/components/projects/grid-editor';
 import { SceneView } from '@/components/projects/scene-view';
 import { SetupChecklist } from '@/components/projects/setup-checklist';
+import { type ContourSettings, DEFAULT_CONTOURS } from '@/components/projects/surfaces-data';
 import { SurfacesPanel } from '@/components/projects/surfaces-panel';
 import { SurveyPointsPanel } from '@/components/projects/survey-points-panel';
 import { TransformPanel } from '@/components/projects/transform-panel';
@@ -157,6 +158,7 @@ export default function ProjectWorkspace() {
   // The surface shown in the scene + a nonce the panel bumps after a build/rebuild.
   const [activeSurfaceId, setActiveSurfaceId] = useState<string | null>(null);
   const [surfaceReload, setSurfaceReload] = useState(0);
+  const [contours, setContours] = useState<ContourSettings>(DEFAULT_CONTOURS);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('setup');
   // On the very first load, land on Points when the site is already set up
@@ -386,6 +388,8 @@ export default function ProjectWorkspace() {
                   setSurfaceReload((n) => n + 1);
                   setSceneReload((n) => n + 1);
                 }}
+                contours={contours}
+                onContoursChange={setContours}
                 pickRef={pickRef}
                 onDigitizingChange={setDigitizing}
               />
@@ -422,6 +426,7 @@ export default function ProjectWorkspace() {
           reloadNonce={sceneReload}
           activeSurfaceId={activeSurfaceId}
           surfaceReload={surfaceReload}
+          contours={contours}
           stats={[
             { label: 'Control', value: points.length },
             { label: 'Points', value: pointCount },

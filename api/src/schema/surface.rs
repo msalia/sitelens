@@ -401,6 +401,68 @@ impl SurfaceQuery {
         })
     }
 
+    /// Iso-line contours computed from a surface's stored mesh at the given
+    /// `interval` (meters). `major_interval` (meters) flags heavier, labeled
+    /// contours (defaults to 5× the minor interval); `smoothing` applies Chaikin
+    /// corner-cutting (0–3 passes). Returned as an SCTR binary blob (base64).
+    async fn surface_contours(
+        &self,
+        ctx: &Context<'_>,
+        id: Uuid,
+        interval: f64,
+        major_interval: Option<f64>,
+        #[graphql(default)] smoothing: i32,
+    ) -> Result<FileBlob> {
+        require_feature(ctx, Feature::Surfaces).await?;
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        let row: Option<(String, Option<String>)> = sqlx::query_as(
+            "SELECT s.name, s.storage_key FROM surfaces s \
+             JOIN projects p ON p.id = s.project_id \
+             WHERE s.id = $1 AND p.org_id = $2",
+        )
+        .bind(id)
+        .bind(auth.org_id)
+        .fetch_optional(pool)
+        .await?;
+        let (name, storage_key) = found_in_org(row, "surface")?;
+        let key = storage_key
+            .ok_or_else(|| async_graphql::Error::new("surface has no computed mesh yet"))?;
+        let bytes = storage(ctx)?
+            .get(&key)
+            .await
+            .map_err(async_graphql::Error::new)?;
+
+        // Deserialize → contour → serialize → base64, all off the async runtime.
+        let smoothing = smoothing.max(0) as u32;
+        let content_base64 =
+            tokio::task::spawn_blocking(move || -> std::result::Result<String, String> {
+                let (vertices, indices) = surface::deserialize_mesh(&bytes)
+                    .ok_or_else(|| "stored surface mesh is unreadable".to_string())?;
+                let levels = surface::contour::contours(
+                    &vertices,
+                    &indices,
+                    &surface::contour::ContourOptions {
+                        interval,
+                        major_interval,
+                        smoothing,
+                    },
+                )?;
+                let blob = surface::serialize_contours(&levels);
+                use base64::Engine;
+                Ok(base64::engine::general_purpose::STANDARD.encode(blob))
+            })
+            .await
+            .map_err(|e| async_graphql::Error::new(format!("contour task failed: {e}")))?
+            .map_err(async_graphql::Error::new)?;
+
+        Ok(FileBlob {
+            filename: format!("{name}.sctr"),
+            mime_type: "application/octet-stream".to_string(),
+            content_base64,
+        })
+    }
+
     /// Every constraint (breakline / boundary / hole) in a project.
     async fn breaklines(
         &self,

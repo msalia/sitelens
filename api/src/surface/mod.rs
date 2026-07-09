@@ -1,6 +1,6 @@
-//! Surface modeling: server-side geometry for TIN surfaces (contours + volumes
-//! land in later phases). `tin` holds the pure triangulation; this module owns
-//! the render-blob wire format the client decodes into a `BufferGeometry`.
+//! Surface modeling: server-side geometry for TIN surfaces (volumes land in a
+//! later phase). `tin` holds the pure triangulation, `contour` extracts iso-lines;
+//! this module owns the render-blob wire formats the client decodes.
 //!
 //! ## STIN mesh blob (little-endian)
 //!
@@ -19,6 +19,7 @@
 //! ...     T*12   triangles: [a, b, c] (3 x u32) each, indices into vertices
 //! ```
 
+pub mod contour;
 pub mod geom;
 pub mod tin;
 
@@ -26,6 +27,14 @@ pub mod tin;
 pub const STIN_MAGIC: &[u8; 4] = b"STIN";
 /// Current blob format version.
 pub const STIN_VERSION: u32 = 1;
+
+/// Magic prefix identifying a SiteLens contour blob.
+pub const SCTR_MAGIC: &[u8; 4] = b"SCTR";
+/// Current contour-blob format version.
+pub const SCTR_VERSION: u32 = 1;
+
+/// An indexed mesh decoded from a blob: `(vertices [x/lat, y/lon, z], triangles)`.
+pub type MeshData = (Vec<[f64; 3]>, Vec<[u32; 3]>);
 
 /// Serializes a geographic indexed mesh into the STIN blob. `vertices` are
 /// `[lat, lon, height]` (degrees, degrees, meters); `indices` are triangles.
@@ -60,6 +69,75 @@ pub fn serialize_mesh(vertices: &[[f64; 3]], indices: &[[u32; 3]]) -> Vec<u8> {
     for tri in indices {
         for i in tri {
             buf.extend_from_slice(&i.to_le_bytes());
+        }
+    }
+    buf
+}
+
+/// Reads a STIN blob back into `(vertices, indices)` — the inverse of
+/// [`serialize_mesh`]. Returns `None` if the blob is truncated or lacks the magic.
+/// Vertices come back in the frame they were written in (geographic in
+/// production).
+pub fn deserialize_mesh(blob: &[u8]) -> Option<MeshData> {
+    if blob.len() < 64 || &blob[0..4] != STIN_MAGIC {
+        return None;
+    }
+    let rd_u32 = |o: usize| u32::from_le_bytes(blob[o..o + 4].try_into().unwrap());
+    let rd_f64 = |o: usize| f64::from_le_bytes(blob[o..o + 8].try_into().unwrap());
+    let v_count = rd_u32(8) as usize;
+    let t_count = rd_u32(12) as usize;
+    let vert_start = 64;
+    let idx_start = vert_start + v_count * 24;
+    if blob.len() < idx_start + t_count * 12 {
+        return None;
+    }
+    let vertices = (0..v_count)
+        .map(|i| {
+            let o = vert_start + i * 24;
+            [rd_f64(o), rd_f64(o + 8), rd_f64(o + 16)]
+        })
+        .collect();
+    let indices = (0..t_count)
+        .map(|i| {
+            let o = idx_start + i * 12;
+            [rd_u32(o), rd_u32(o + 4), rd_u32(o + 8)]
+        })
+        .collect();
+    Some((vertices, indices))
+}
+
+/// Serializes extracted contours into the **SCTR** blob (little-endian). Points
+/// are horizontal `[x, y]` (geographic `[lat, lon]` in production); each point's
+/// elevation is its level's `level` field.
+///
+/// ```text
+/// offset  bytes  field
+/// 0       4      magic "SCTR"
+/// 4       4      version (u32)
+/// 8       4      level_count L (u32)
+/// then per level:
+///   8      level (f64)
+///   4      is_major (u32; 0 or 1)
+///   4      polyline_count P (u32)
+///   then per polyline:
+///     4    point_count N (u32)
+///     N*16 points: [x, y] (2 x f64) each
+/// ```
+pub fn serialize_contours(levels: &[contour::ContourLevel]) -> Vec<u8> {
+    let mut buf = Vec::new();
+    buf.extend_from_slice(SCTR_MAGIC);
+    buf.extend_from_slice(&SCTR_VERSION.to_le_bytes());
+    buf.extend_from_slice(&(levels.len() as u32).to_le_bytes());
+    for lv in levels {
+        buf.extend_from_slice(&lv.level.to_le_bytes());
+        buf.extend_from_slice(&u32::from(lv.is_major).to_le_bytes());
+        buf.extend_from_slice(&(lv.polylines.len() as u32).to_le_bytes());
+        for pl in &lv.polylines {
+            buf.extend_from_slice(&(pl.len() as u32).to_le_bytes());
+            for p in pl {
+                buf.extend_from_slice(&p[0].to_le_bytes());
+                buf.extend_from_slice(&p[1].to_le_bytes());
+            }
         }
     }
     buf
@@ -106,5 +184,58 @@ mod tests {
                 0.0
             );
         }
+    }
+
+    #[test]
+    fn mesh_roundtrips_through_deserialize() {
+        let verts = vec![
+            [40.0, -74.0, 10.0],
+            [40.1, -74.0, 20.0],
+            [40.0, -74.1, 30.0],
+            [40.1, -74.1, 25.0],
+        ];
+        let tris = vec![[0u32, 1, 2], [1, 3, 2]];
+        let blob = serialize_mesh(&verts, &tris);
+        let (v, t) = deserialize_mesh(&blob).unwrap();
+        assert_eq!(v, verts);
+        assert_eq!(t, tris);
+    }
+
+    #[test]
+    fn deserialize_rejects_bad_magic_and_truncation() {
+        assert!(deserialize_mesh(b"not a mesh blob at all!!").is_none());
+        let blob = serialize_mesh(&[[1.0, 2.0, 3.0]], &[]);
+        assert!(deserialize_mesh(&blob[..blob.len() - 4]).is_none());
+    }
+
+    #[test]
+    fn contour_blob_has_expected_header_and_geometry() {
+        let levels = vec![
+            contour::ContourLevel {
+                level: 10.0,
+                is_major: true,
+                polylines: vec![vec![[1.0, 2.0], [3.0, 4.0]]],
+            },
+            contour::ContourLevel {
+                level: 11.0,
+                is_major: false,
+                polylines: vec![],
+            },
+        ];
+        let blob = serialize_contours(&levels);
+        assert_eq!(&blob[0..4], SCTR_MAGIC);
+        assert_eq!(
+            u32::from_le_bytes(blob[4..8].try_into().unwrap()),
+            SCTR_VERSION
+        );
+        assert_eq!(u32::from_le_bytes(blob[8..12].try_into().unwrap()), 2);
+        // First level header: level=10.0, is_major=1, polyline_count=1.
+        assert_eq!(f64::from_le_bytes(blob[12..20].try_into().unwrap()), 10.0);
+        assert_eq!(u32::from_le_bytes(blob[20..24].try_into().unwrap()), 1);
+        assert_eq!(u32::from_le_bytes(blob[24..28].try_into().unwrap()), 1);
+        // Its polyline: point_count=2, then [1,2],[3,4].
+        assert_eq!(u32::from_le_bytes(blob[28..32].try_into().unwrap()), 2);
+        assert_eq!(f64::from_le_bytes(blob[32..40].try_into().unwrap()), 1.0);
+        assert_eq!(f64::from_le_bytes(blob[40..48].try_into().unwrap()), 2.0);
     }
 }

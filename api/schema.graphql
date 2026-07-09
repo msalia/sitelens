@@ -1183,6 +1183,13 @@ type QueryRoot {
 	"""
 	surfaceMesh(id: UUID!): FileBlob!
 	"""
+	Iso-line contours computed from a surface's stored mesh at the given
+	`interval` (meters). `major_interval` (meters) flags heavier, labeled
+	contours (defaults to 5× the minor interval); `smoothing` applies Chaikin
+	corner-cutting (0–3 passes). Returned as an SCTR binary blob (base64).
+	"""
+	surfaceContours(id: UUID!, interval: Float!, majorInterval: Float, smoothing: Int! = 0): FileBlob!
+	"""
 	Every constraint (breakline / boundary / hole) in a project.
 	"""
 	breaklines(projectId: UUID!): [SurfaceBreakline!]!

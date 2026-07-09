@@ -92,15 +92,34 @@ Surfaces honor breaklines and boundaries — professionally usable terrain model
 
 The classic topo deliverable.
 
+> **Build notes (as shipped):**
+> - **Marching-triangles** in `api/src/surface/contour.rs`: each crossing is keyed
+>   by the mesh **edge** it lies on, so adjacent triangles interpolate the *same*
+>   crossing point and segments chain into polylines with no float endpoint
+>   matching. Vertices on a level are treated as below (consistent classification),
+>   so no coordinate perturbation is needed. Smoothing is **Chaikin** corner-cutting
+>   (0–3 passes; the spec's "spline" — Chaikin preserves open ends + closed loops).
+> - Contours are computed **on demand** from the stored STIN mesh (new
+>   `surface::deserialize_mesh`), not persisted — so interval/smoothing changes need
+>   no rebuild. Returned as a new **SCTR** binary blob (base64), decoded client-side
+>   like STIN. No migration, no model change (reuses `FileBlob`).
+> - Geographic-space extraction: crossings interpolate on the stored `[lat, lon, h]`
+>   mesh, so contour points land exactly on rendered mesh edges (client `toLocal`s
+>   them, same as the surface + constraints).
+> - Panel intervals are entered in the **project display unit** (converted to meters
+>   for the API); labels are formatted back to the display unit. Contour settings
+>   are lifted to the project page and shared by the panel (edit) + scene (fetch).
+
 ### Deliverables
 
-- [ ] `api/src/surface/contour.rs` — per-triangle iso-line interpolation at minor/major intervals; optional spline **smoothing**; **elevation labels** on majors.
-- [ ] `surfaceContours` query; contour polylines + labels rendered as Three.js line geometry, draped on the surface; panel controls (interval/smooth/labels) with live preview.
+- [x] `api/src/surface/contour.rs` — per-triangle iso-line interpolation at minor/major intervals; optional spline **smoothing** (Chaikin); **elevation labels** on majors (client-placed at major polyline midpoints).
+- [x] `surfaceContours` query (SCTR blob); contour polylines + labels rendered as Three.js line geometry (`terrain/surface-contours.tsx`), draped on the surface; panel controls (interval/major/smooth/labels + show toggle) with live preview.
 
 ### Tests
 
-- [ ] Iso-lines on a known tilted plane (straight, correctly spaced); smoothing preserves topology; major-label placement.
-- [ ] Playwright: set intervals → contours render + labels appear.
+- [x] Iso-lines on a known tilted plane (straight, correctly spaced); smoothing preserves topology + endpoints; closed loop stays closed; major-flag placement; flat/degenerate + bad-interval errors (unit tests in `contour.rs` + STIN roundtrip / SCTR blob tests in `surface/mod.rs`).
+- [x] Integration (`tests/integration/surface.rs`): `surfaceContours` serves an SCTR blob, bad interval errors, tenant isolation. All green (170 lib + 101 integration).
+- [x] Playwright (`web/e2e/surfaces.spec.ts`): enable contours → the API returns a non-empty SCTR blob + the interval/label controls appear. (Authored + lint-clean; run locally — sandbox can't launch Chromium.)
 
 ### Validates
 
