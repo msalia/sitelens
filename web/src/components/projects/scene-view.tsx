@@ -14,6 +14,7 @@ import type {
   UtilityPick,
 } from '@/components/projects/terrain-viewer';
 import type { AnalysisPath } from '@/components/projects/terrain/analysis-overlay';
+import type { AnalysisResult } from '@/components/projects/terrain/analysis-result-overlay';
 import type { SceneConstraint } from '@/components/projects/terrain/surface-constraints';
 import type { SurfaceMode } from '@/components/projects/terrain/surface-mesh';
 import type { InspectablePoint, PointCategory, Project, SceneData, ScenePoint } from '@/lib/types';
@@ -61,6 +62,7 @@ export function SceneView({
   activeSurfaceId,
   activeVolumeId,
   analysisPaths,
+  analysisResult,
   categories,
   comparison,
   contours = DEFAULT_CONTOURS,
@@ -80,6 +82,8 @@ export function SceneView({
   activeVolumeId?: string | null;
   /** Analysis plan paths to overlay (from the Analysis panel). */
   analysisPaths?: AnalysisPath[];
+  /** A turning analysis's computed result geometry to overlay. */
+  analysisResult?: AnalysisResult | null;
   /** Bumped by the Surfaces panel after a build/rebuild to refetch the mesh. */
   surfaceReload?: number;
   categories: PointCategory[];
@@ -551,6 +555,7 @@ export function SceneView({
             constraints={constraints}
             showConstraints={showConstraints}
             analysisPaths={analysisPaths}
+            analysisResult={analysisResult}
             terrain={terrain}
             buildings={buildings}
             showBuildings={showBuildings}

@@ -9,6 +9,33 @@ export const ANALYSES = graphql(`
       name
       status
       inputGeometry
+      result
+      resultGeometry
+    }
+  }
+`);
+
+/** The vehicle library (global presets + the org's custom vehicles). */
+export const VEHICLE_TEMPLATES = graphql(`
+  query VehicleTemplates {
+    vehicleTemplates {
+      id
+      name
+      vehicleClass
+      wheelbase
+      width
+      isPreset
+    }
+  }
+`);
+
+/** Run a turning-radius analysis (tractrix swept path + clearance verdict). */
+export const RUN_TURNING_ANALYSIS = graphql(`
+  mutation RunTurningAnalysis($projectId: UUID!, $input: TurningInput!) {
+    runTurningAnalysis(projectId: $projectId, input: $input) {
+      id
+      name
+      result
     }
   }
 `);

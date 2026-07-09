@@ -9,6 +9,10 @@ import type { Project, ScenePoint } from '@/lib/types';
 
 import { ConfirmDialog } from '@/components/projects/confirm-dialog';
 import { ListRow, TooltipIconButton } from '@/components/projects/list-row';
+import {
+  type AnalysisResult,
+  parseAnalysisResult,
+} from '@/components/projects/terrain/analysis-result-overlay';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ButtonGroup } from '@/components/ui/button-group';
@@ -26,7 +30,14 @@ import {
 } from '@/components/ui/select';
 import { gql, useMutation } from '@/lib/graphql';
 
-import { ANALYSES, CREATE_ANALYSIS, DELETE_ANALYSIS, DUPLICATE_ANALYSIS } from './analysis-data';
+import {
+  ANALYSES,
+  CREATE_ANALYSIS,
+  DELETE_ANALYSIS,
+  DUPLICATE_ANALYSIS,
+  RUN_TURNING_ANALYSIS,
+  VEHICLE_TEMPLATES,
+} from './analysis-data';
 
 type AnalysisType = 'TURNING' | 'PARKING' | 'HYDROLOGY' | 'TRAFFIC';
 
@@ -34,8 +45,29 @@ interface AnalysisRow {
   id: string;
   inputGeometry: string | null;
   name: string;
+  result: string | null;
+  resultGeometry: string | null;
   status: string;
   type: AnalysisType;
+}
+
+interface Vehicle {
+  id: string;
+  isPreset: boolean;
+  name: string;
+}
+
+/** Reads the pass/fail verdict from a turning analysis's `result` JSON. */
+function verdict(result: string | null): 'pass' | 'fail' | null {
+  if (!result) {
+    return null;
+  }
+  try {
+    const r = JSON.parse(result) as { pass?: boolean };
+    return r.pass === undefined ? null : r.pass ? 'pass' : 'fail';
+  } catch {
+    return null;
+  }
 }
 
 const TYPE_LABEL: Record<AnalysisType, string> = {
@@ -68,6 +100,7 @@ export function AnalysisPanel({
   onChanged,
   onDigitizingChange,
   onPathsChange,
+  onResult,
   onSelect,
   pickRef,
   project,
@@ -81,14 +114,19 @@ export function AnalysisPanel({
   onChanged: () => void;
   /** Publishes the paths to overlay in the scene (drawing + selected). */
   onPathsChange: (paths: AnalysisPath[]) => void;
+  /** Publishes the selected analysis's computed result geometry (null = none). */
+  onResult: (result: AnalysisResult | null) => void;
   /** Scene digitize bridge: snapped survey points feed the active drawing. */
   pickRef: React.MutableRefObject<((point: ScenePoint) => void) | null>;
   /** Toggles the scene's "click points to snap" hint. */
   onDigitizingChange: (on: boolean) => void;
 }) {
   const [analyses, setAnalyses] = useState<AnalysisRow[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [name, setName] = useState('Analysis 1');
   const [type, setType] = useState<AnalysisType>('TURNING');
+  const [vehicleId, setVehicleId] = useState('');
+  const [step, setStep] = useState('0.5');
   const [capturing, setCapturing] = useState(false);
   const [verts, setVerts] = useState<{ e: number; n: number }[]>([]);
   const [eIn, setEIn] = useState('');
@@ -105,10 +143,21 @@ export function AnalysisPanel({
     }
   }, [project.id]);
 
+  const loadVehicles = useCallback(async () => {
+    try {
+      const { vehicleTemplates } = await gql(VEHICLE_TEMPLATES);
+      setVehicles(vehicleTemplates as Vehicle[]);
+      setVehicleId((cur) => cur || vehicleTemplates[0]?.id || '');
+    } catch {
+      setVehicles([]);
+    }
+  }, []);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-  }, [load]);
+    void loadVehicles();
+  }, [load, loadVehicles]);
 
   // Route snapped survey points into the active drawing while capturing.
   useEffect(() => {
@@ -147,6 +196,12 @@ export function AnalysisPanel({
     onPathsChange(paths);
   }, [paths, onPathsChange]);
 
+  // Publish the selected analysis's computed result geometry (turning envelope).
+  useEffect(() => {
+    const sel = analyses.find((a) => a.id === activeAnalysisId);
+    onResult(sel ? parseAnalysisResult(sel.resultGeometry) : null);
+  }, [analyses, activeAnalysisId, onResult]);
+
   const addNumeric = () => {
     const e = Number(eIn);
     const n = Number(nIn);
@@ -183,6 +238,39 @@ export function AnalysisPanel({
           onChanged();
         },
         success: 'Analysis created',
+      },
+    );
+
+  const runTurning = () =>
+    run(
+      () =>
+        gql(RUN_TURNING_ANALYSIS, {
+          input: {
+            name: name.trim() || 'Turning analysis',
+            path: JSON.stringify(verts.map((v) => [v.e, v.n])),
+            stepResolution: Number(step) || 0.5,
+            vehicleTemplateId: vehicleId,
+          },
+          projectId: project.id,
+        }),
+      {
+        error: 'Could not run the turning analysis',
+        onDone: async (res) => {
+          setCapturing(false);
+          setVerts([]);
+          await load();
+          if (res?.runTurningAnalysis.id) {
+            onSelect(res.runTurningAnalysis.id);
+          }
+          onChanged();
+          const v = verdict(res?.runTurningAnalysis.result ?? null);
+          if (v) {
+            (v === 'pass' ? toast.success : toast.error)(
+              v === 'pass' ? 'Clears all obstacles' : 'Clips an obstacle',
+            );
+          }
+        },
+        success: 'Turning analysis complete',
       },
     );
 
@@ -274,10 +362,52 @@ export function AnalysisPanel({
                   Add
                 </Button>
               </div>
+
+              {/* Turning: pick a vehicle + step, then compute the swept path. */}
+              {type === 'TURNING' ? (
+                <div className="grid grid-cols-[1fr_auto] gap-2">
+                  <Select value={vehicleId} onValueChange={(v) => v && setVehicleId(v)}>
+                    <SelectTrigger className="w-full" aria-label="Vehicle">
+                      <SelectValue placeholder="Vehicle…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectLabel>Vehicle</SelectLabel>
+                        {vehicles.map((veh) => (
+                          <SelectItem key={veh.id} value={veh.id}>
+                            {veh.name}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    aria-label="Step (m)"
+                    type="number"
+                    min="0"
+                    step="any"
+                    className="w-20"
+                    value={step}
+                    onChange={(e) => setStep(e.target.value)}
+                  />
+                </div>
+              ) : null}
+
               <div className="flex gap-2">
-                <Button type="button" size="sm" onClick={save} disabled={busy}>
-                  <IconPlus className="mr-1 size-4" /> Save
-                </Button>
+                {type === 'TURNING' ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={runTurning}
+                    disabled={busy || verts.length < 2 || !vehicleId}
+                  >
+                    <IconPlus className="mr-1 size-4" /> Run
+                  </Button>
+                ) : (
+                  <Button type="button" size="sm" onClick={save} disabled={busy}>
+                    <IconPlus className="mr-1 size-4" /> Save
+                  </Button>
+                )}
                 <Button
                   type="button"
                   size="sm"
@@ -323,6 +453,7 @@ export function AnalysisPanel({
             analyses.map((a) => {
               const active = a.id === activeAnalysisId;
               const count = parsePath(a.inputGeometry).length;
+              const v = verdict(a.result);
               return (
                 <ListRow
                   key={a.id}
@@ -333,7 +464,19 @@ export function AnalysisPanel({
                       {TYPE_LABEL[a.type]}
                     </Badge>
                   }
-                  title={a.name}
+                  title={
+                    <span className="flex items-center gap-2">
+                      <span className="truncate">{a.name}</span>
+                      {v ? (
+                        <Badge
+                          variant={v === 'pass' ? 'default' : 'destructive'}
+                          className="shrink-0"
+                        >
+                          {v === 'pass' ? 'Pass' : 'Fail'}
+                        </Badge>
+                      ) : null}
+                    </span>
+                  }
                   subtitle={`${a.status.toLowerCase()} · ${count} pt${count === 1 ? '' : 's'}`}
                   actions={
                     <ButtonGroup>

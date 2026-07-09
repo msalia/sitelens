@@ -38,6 +38,40 @@ test('create an analysis by drawing geometry with numeric entry', async ({ page 
   await expect(page.getByText('Driveway path (copy)')).toBeVisible();
 });
 
+test('run a turning-radius analysis → swept path + pass verdict', async ({ page }) => {
+  const email = await signUpAndLogin(page, 'analysis-turning');
+  upgradeOrg(email);
+  await createProjectAndOpen(page, 'Turning P2');
+
+  await gotoTab(page, 'Analysis');
+  await page.getByLabel('Name').fill('Driveway swept path');
+  // Type defaults to Turning. Draw a two-point path via numeric entry.
+  await page.getByRole('button', { name: 'Draw geometry' }).click();
+  await page.getByLabel('Easting').fill('0');
+  await page.getByLabel('Northing').fill('0');
+  await page.getByRole('button', { exact: true, name: 'Add' }).click();
+  await page.getByLabel('Easting').fill('30');
+  await page.getByLabel('Northing').fill('0');
+  await page.getByRole('button', { exact: true, name: 'Add' }).click();
+
+  // A preset vehicle is preselected; Run computes the tractrix swept path.
+  const runResp = page.waitForResponse(
+    (r) =>
+      r.url().includes('/api/graphql') &&
+      (r.request().postData()?.includes('RunTurningAnalysis') ?? false) &&
+      r.ok(),
+  );
+  await page.getByRole('button', { exact: true, name: 'Run' }).click();
+  const body = (await (await runResp).json()) as {
+    data: { runTurningAnalysis: { result: string } };
+  };
+  expect(body.data.runTurningAnalysis.result).toContain('"pass":true');
+
+  // The completed analysis shows a Pass badge in the list.
+  await expect(page.getByText('Driveway swept path')).toBeVisible();
+  await expect(page.getByText('Pass', { exact: true })).toBeVisible();
+});
+
 test('Solo plan gates the Analysis tab behind the upgrade dialog', async ({ page }) => {
   await signUpAndLogin(page, 'analysis-gate'); // no upgrade → Solo
   await createProjectAndOpen(page, 'Analysis Gate');

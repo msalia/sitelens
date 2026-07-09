@@ -206,6 +206,18 @@ export type SurfaceKind = 'DEM' | 'TIN';
  */
 export type SurfaceStatus = 'BUILDING' | 'FAILED' | 'READY';
 
+/** Parameters for a turning run: the vehicle + drawn path + optional obstacles. */
+export type TurningInput = {
+  name: string;
+  /** Obstacle polylines as a JSON `[[[e,n],…],…]` string (projected meters). */
+  obstacles?: string;
+  /** Front-axle centerline path as a JSON `[[e,n],…]` string (projected meters). */
+  path: string;
+  /** Sampling step in meters (default 0.5). */
+  stepResolution?: number;
+  vehicleTemplateId: string;
+};
+
 /** A user-confirmed layer→type mapping. `type_key` null/empty = skip the layer. */
 export type UtilityLayerMapping = {
   /** Matches the preview `kind` ("line" | "point"). */
@@ -506,7 +518,31 @@ export type AnalysesQuery = {
     name: string;
     status: AnalysisStatus;
     inputGeometry: string | null;
+    result: string;
+    resultGeometry: string | null;
   }>;
+};
+
+export type VehicleTemplatesQueryVariables = Exact<{ [key: string]: never }>;
+
+export type VehicleTemplatesQuery = {
+  vehicleTemplates: Array<{
+    id: string;
+    name: string;
+    vehicleClass: string;
+    wheelbase: number;
+    width: number;
+    isPreset: boolean;
+  }>;
+};
+
+export type RunTurningAnalysisMutationVariables = Exact<{
+  projectId: string;
+  input: TurningInput;
+}>;
+
+export type RunTurningAnalysisMutation = {
+  runTurningAnalysis: { id: string; name: string; result: string };
 };
 
 export type CreateAnalysisMutationVariables = Exact<{
@@ -1813,9 +1849,35 @@ export const AnalysesDocument = new TypedDocumentString(`
     name
     status
     inputGeometry
+    result
+    resultGeometry
   }
 }
     `) as unknown as TypedDocumentString<AnalysesQuery, AnalysesQueryVariables>;
+export const VehicleTemplatesDocument = new TypedDocumentString(`
+    query VehicleTemplates {
+  vehicleTemplates {
+    id
+    name
+    vehicleClass
+    wheelbase
+    width
+    isPreset
+  }
+}
+    `) as unknown as TypedDocumentString<VehicleTemplatesQuery, VehicleTemplatesQueryVariables>;
+export const RunTurningAnalysisDocument = new TypedDocumentString(`
+    mutation RunTurningAnalysis($projectId: UUID!, $input: TurningInput!) {
+  runTurningAnalysis(projectId: $projectId, input: $input) {
+    id
+    name
+    result
+  }
+}
+    `) as unknown as TypedDocumentString<
+  RunTurningAnalysisMutation,
+  RunTurningAnalysisMutationVariables
+>;
 export const CreateAnalysisDocument = new TypedDocumentString(`
     mutation CreateAnalysis($projectId: UUID!, $input: AnalysisInput!) {
   createAnalysis(projectId: $projectId, input: $input) {

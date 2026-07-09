@@ -32,7 +32,9 @@ type Documents = {
   '\n  mutation Login($e: String!, $p: String!) {\n    login(email: $e, password: $p) {\n      id\n    }\n  }\n': typeof types.LoginDocument;
   '\n  mutation ResendVerification($e: String!) {\n    resendVerification(email: $e)\n  }\n': typeof types.ResendVerificationDocument;
   '\n  mutation AddSurveyPoint(\n    $projectId: UUID!\n    $label: String!\n    $space: CoordinateSpace!\n    $x: Float!\n    $y: Float!\n    $elevation: Float\n    $description: String\n    $categoryId: UUID\n    $unit: LengthUnit!\n  ) {\n    addSurveyPoint(\n      projectId: $projectId\n      label: $label\n      space: $space\n      x: $x\n      y: $y\n      elevation: $elevation\n      description: $description\n      categoryId: $categoryId\n      unit: $unit\n    ) {\n      id\n    }\n  }\n': typeof types.AddSurveyPointDocument;
-  '\n  query Analyses($projectId: UUID!) {\n    analyses(projectId: $projectId) {\n      id\n      type\n      name\n      status\n      inputGeometry\n    }\n  }\n': typeof types.AnalysesDocument;
+  '\n  query Analyses($projectId: UUID!) {\n    analyses(projectId: $projectId) {\n      id\n      type\n      name\n      status\n      inputGeometry\n      result\n      resultGeometry\n    }\n  }\n': typeof types.AnalysesDocument;
+  '\n  query VehicleTemplates {\n    vehicleTemplates {\n      id\n      name\n      vehicleClass\n      wheelbase\n      width\n      isPreset\n    }\n  }\n': typeof types.VehicleTemplatesDocument;
+  '\n  mutation RunTurningAnalysis($projectId: UUID!, $input: TurningInput!) {\n    runTurningAnalysis(projectId: $projectId, input: $input) {\n      id\n      name\n      result\n    }\n  }\n': typeof types.RunTurningAnalysisDocument;
   '\n  mutation CreateAnalysis($projectId: UUID!, $input: AnalysisInput!) {\n    createAnalysis(projectId: $projectId, input: $input) {\n      id\n      type\n      name\n    }\n  }\n': typeof types.CreateAnalysisDocument;
   '\n  mutation UpdateAnalysis($id: UUID!, $input: AnalysisInput!) {\n    updateAnalysis(id: $id, input: $input) {\n      id\n    }\n  }\n': typeof types.UpdateAnalysisDocument;
   '\n  mutation DeleteAnalysis($id: UUID!) {\n    deleteAnalysis(id: $id)\n  }\n': typeof types.DeleteAnalysisDocument;
@@ -164,8 +166,12 @@ const documents: Documents = {
     types.ResendVerificationDocument,
   '\n  mutation AddSurveyPoint(\n    $projectId: UUID!\n    $label: String!\n    $space: CoordinateSpace!\n    $x: Float!\n    $y: Float!\n    $elevation: Float\n    $description: String\n    $categoryId: UUID\n    $unit: LengthUnit!\n  ) {\n    addSurveyPoint(\n      projectId: $projectId\n      label: $label\n      space: $space\n      x: $x\n      y: $y\n      elevation: $elevation\n      description: $description\n      categoryId: $categoryId\n      unit: $unit\n    ) {\n      id\n    }\n  }\n':
     types.AddSurveyPointDocument,
-  '\n  query Analyses($projectId: UUID!) {\n    analyses(projectId: $projectId) {\n      id\n      type\n      name\n      status\n      inputGeometry\n    }\n  }\n':
+  '\n  query Analyses($projectId: UUID!) {\n    analyses(projectId: $projectId) {\n      id\n      type\n      name\n      status\n      inputGeometry\n      result\n      resultGeometry\n    }\n  }\n':
     types.AnalysesDocument,
+  '\n  query VehicleTemplates {\n    vehicleTemplates {\n      id\n      name\n      vehicleClass\n      wheelbase\n      width\n      isPreset\n    }\n  }\n':
+    types.VehicleTemplatesDocument,
+  '\n  mutation RunTurningAnalysis($projectId: UUID!, $input: TurningInput!) {\n    runTurningAnalysis(projectId: $projectId, input: $input) {\n      id\n      name\n      result\n    }\n  }\n':
+    types.RunTurningAnalysisDocument,
   '\n  mutation CreateAnalysis($projectId: UUID!, $input: AnalysisInput!) {\n    createAnalysis(projectId: $projectId, input: $input) {\n      id\n      type\n      name\n    }\n  }\n':
     types.CreateAnalysisDocument,
   '\n  mutation UpdateAnalysis($id: UUID!, $input: AnalysisInput!) {\n    updateAnalysis(id: $id, input: $input) {\n      id\n    }\n  }\n':
@@ -470,8 +476,20 @@ export function graphql(
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
-  source: '\n  query Analyses($projectId: UUID!) {\n    analyses(projectId: $projectId) {\n      id\n      type\n      name\n      status\n      inputGeometry\n    }\n  }\n',
+  source: '\n  query Analyses($projectId: UUID!) {\n    analyses(projectId: $projectId) {\n      id\n      type\n      name\n      status\n      inputGeometry\n      result\n      resultGeometry\n    }\n  }\n',
 ): typeof import('./graphql').AnalysesDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  query VehicleTemplates {\n    vehicleTemplates {\n      id\n      name\n      vehicleClass\n      wheelbase\n      width\n      isPreset\n    }\n  }\n',
+): typeof import('./graphql').VehicleTemplatesDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  mutation RunTurningAnalysis($projectId: UUID!, $input: TurningInput!) {\n    runTurningAnalysis(projectId: $projectId, input: $input) {\n      id\n      name\n      result\n    }\n  }\n',
+): typeof import('./graphql').RunTurningAnalysisDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

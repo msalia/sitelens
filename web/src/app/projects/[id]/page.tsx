@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 
 import type { ComparisonMarker } from '@/components/projects/terrain-viewer';
 import type { AnalysisPath } from '@/components/projects/terrain/analysis-overlay';
+import type { AnalysisResult } from '@/components/projects/terrain/analysis-result-overlay';
 
 import { UpgradeDialog } from '@/components/billing/upgrade-dialog';
 import { AnalysisPanel } from '@/components/projects/analysis-panel';
@@ -186,6 +187,7 @@ export default function ProjectWorkspace() {
   const [activeVolumeId, setActiveVolumeId] = useState<string | null>(null);
   const [activeAnalysisId, setActiveAnalysisId] = useState<string | null>(null);
   const [analysisPaths, setAnalysisPaths] = useState<AnalysisPath[]>([]);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [surfaceReload, setSurfaceReload] = useState(0);
   const [contours, setContours] = useState<ContourSettings>(DEFAULT_CONTOURS);
   const [loading, setLoading] = useState(true);
@@ -465,6 +467,7 @@ export default function ProjectWorkspace() {
                 onSelect={setActiveAnalysisId}
                 onChanged={() => setSceneReload((n) => n + 1)}
                 onPathsChange={setAnalysisPaths}
+                onResult={setAnalysisResult}
                 pickRef={pickRef}
                 onDigitizingChange={setDigitizing}
               />
@@ -502,6 +505,7 @@ export default function ProjectWorkspace() {
           activeSurfaceId={activeSurfaceId}
           activeVolumeId={activeVolumeId}
           analysisPaths={activeTab === 'analysis' ? analysisPaths : undefined}
+          analysisResult={activeTab === 'analysis' ? analysisResult : null}
           surfaceReload={surfaceReload}
           contours={contours}
           stats={[
