@@ -7,8 +7,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { ComparisonMarker } from '@/components/projects/terrain-viewer';
+import type { AnalysisPath } from '@/components/projects/terrain/analysis-overlay';
 
 import { UpgradeDialog } from '@/components/billing/upgrade-dialog';
+import { AnalysisPanel } from '@/components/projects/analysis-panel';
 import { CadOverlayPanel } from '@/components/projects/cad-overlay-panel';
 import { ControlPointsEditor } from '@/components/projects/control-points-editor';
 import { ConverterPanel } from '@/components/projects/converter-panel';
@@ -121,10 +123,19 @@ const WORKSPACE_QUERY = graphql(`
   }
 `);
 
-type Tab = 'setup' | 'control' | 'points' | 'overlays' | 'utilities' | 'surfaces' | 'field';
+type Tab =
+  | 'setup'
+  | 'control'
+  | 'points'
+  | 'overlays'
+  | 'utilities'
+  | 'surfaces'
+  | 'analysis'
+  | 'field';
 
 /** Crew-gated tabs → the plan `Feature` key their upsell dialog uses. */
 const CREW_TABS: Partial<Record<Tab, string>> = {
+  analysis: 'site_analysis',
   field: 'field_exchange',
   overlays: 'dxf_overlays',
   surfaces: 'surfaces',
@@ -158,6 +169,8 @@ export default function ProjectWorkspace() {
   // The surface shown in the scene + a nonce the panel bumps after a build/rebuild.
   const [activeSurfaceId, setActiveSurfaceId] = useState<string | null>(null);
   const [activeVolumeId, setActiveVolumeId] = useState<string | null>(null);
+  const [activeAnalysisId, setActiveAnalysisId] = useState<string | null>(null);
+  const [analysisPaths, setAnalysisPaths] = useState<AnalysisPath[]>([]);
   const [surfaceReload, setSurfaceReload] = useState(0);
   const [contours, setContours] = useState<ContourSettings>(DEFAULT_CONTOURS);
   const [loading, setLoading] = useState(true);
@@ -290,6 +303,7 @@ export default function ProjectWorkspace() {
               ['overlays', 'Overlays'],
               ['utilities', 'Utilities'],
               ['surfaces', 'Surfaces'],
+              ['analysis', 'Analysis'],
               ['field', 'Field'],
             ] as const
           )
@@ -398,6 +412,19 @@ export default function ProjectWorkspace() {
               />
             </section>
           )}
+          {activeTab === 'analysis' && !crewGated && (
+            <section id="panel-analysis">
+              <AnalysisPanel
+                project={project}
+                activeAnalysisId={activeAnalysisId}
+                onSelect={setActiveAnalysisId}
+                onChanged={() => setSceneReload((n) => n + 1)}
+                onPathsChange={setAnalysisPaths}
+                pickRef={pickRef}
+                onDigitizingChange={setDigitizing}
+              />
+            </section>
+          )}
           {activeTab === 'field' && !crewGated && (
             <section id="panel-field">
               <FieldPanel
@@ -429,6 +456,7 @@ export default function ProjectWorkspace() {
           reloadNonce={sceneReload}
           activeSurfaceId={activeSurfaceId}
           activeVolumeId={activeVolumeId}
+          analysisPaths={activeTab === 'analysis' ? analysisPaths : undefined}
           surfaceReload={surfaceReload}
           contours={contours}
           stats={[

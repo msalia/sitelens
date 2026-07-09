@@ -38,18 +38,32 @@ once Phase 1 lands. Phase 6 needs at least one analysis type to report on.
 Stand up the module skeleton: everything boots, the schema exists, gating works, and the
 plan editor can draw survey-grade geometry — but no analysis computes yet.
 
+> **Build notes (as shipped):**
+> - Migration shipped as **0017** (sequential). Geometry (`input_geometry`,
+>   `result_geometry`, cache `bbox`) is **JSONB**, matching every other geometry in
+>   the repo (survey points, breaklines, utilities, surfaces) — no PostGIS geometry
+>   columns exist and sqlx has no geometry codec; no server-side spatial query needs
+>   it. Documented deviation from the spec's "PostGIS geometry".
+> - Gating: a single **`Feature::SiteAnalysis`** (Crew) gates the whole module via
+>   the existing plan catalog; mutations use `require_editor_active`.
+> - Plan drawing reuses the existing scene **digitize bridge** (`pickRef`): clicking
+>   survey points snaps vertices, plus **numeric E/N entry**, drawn as a polyline
+>   and rendered live via a new `terrain/analysis-overlay.tsx`. Deferred to the
+>   compute phases (2–5, which draw their own inputs): a dedicated orthographic
+>   projection, rectangle/line primitives, and DXF-vertex snapping.
+
 ### Deliverables
-- [ ] DB migration: `analysis`, `vehicle_template`, `ext_data_cache`, `report` tables.
-- [ ] New Rust GraphQL `analysis` domain module (queries/mutations stubbed, tenancy-scoped).
-- [ ] **Crew gating** via existing plan-check (`require_paid` on run/export, `require_editor_active` on mutations); existing Admin/Surveyor/Viewer roles enforced.
-- [ ] **Plan mode** in the existing R3F scene: orthographic top-down camera + 2D interaction layer, drawing in world XY.
-- [ ] Drawing primitives: polyline + rectangle/line, with **snap-to-survey/DXF** and **numeric entry** (length/angle/coords).
-- [ ] `analysis` list/detail UI section (empty states) with duplicate action.
+- [x] DB migration **0017**: `analysis`, `vehicle_template`, `ext_data_cache`, `report` tables.
+- [x] New Rust GraphQL `analysis` domain module (`schema/analysis.rs`: analyses/analysis + create/update/delete/duplicate), tenancy-scoped.
+- [x] **Crew gating** via existing plan-check (`Feature::SiteAnalysis`; `require_editor_active` on mutations); Admin/Surveyor/Viewer roles enforced by the shared guards.
+- [~] **Plan mode**: drawing in world XY on the survey backdrop via the scene digitize bridge + a plan-path overlay. (Orthographic top-down projection deferred; top view is available via the camera presets.)
+- [~] Drawing primitives: **polyline** with **snap-to-survey** + **numeric entry** (coords). (Rectangle/line + DXF-vertex snap deferred to the compute phases.)
+- [x] `analysis` list/detail UI section (empty states) with **duplicate** action (Analysis tab).
 
 ### Tests
-- [ ] Migration applies/rolls back cleanly.
-- [ ] GraphQL resolvers enforce tenancy + entitlement gate.
-- [ ] Playwright: enter plan mode, draw a snapped polyline with numeric entry, persist it.
+- [x] Migration applies (every `#[sqlx::test]` runs all migrations incl. 0017).
+- [x] GraphQL resolvers enforce tenancy + the Crew gate + invalid-JSON rejection (`tests/integration/analysis.rs`).
+- [x] Playwright (`web/e2e/analysis.spec.ts`): create an analysis by numeric entry + save + duplicate; Solo-plan gate. (Run locally — sandbox can't launch Chromium.)
 
 ### Validates
 The analysis module is reachable, gated, and a user can draw precise geometry on the

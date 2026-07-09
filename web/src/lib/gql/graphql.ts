@@ -6,6 +6,28 @@ export type Incremental<T> =
   | T
   | { [P in keyof T]?: P extends ' $fragmentName' | '__typename' ? T[P] : never };
 import { DocumentTypeDecoration } from '@graphql-typed-document-node/core';
+/**
+ * Create/update an analysis. Phase 1 persists the drawn input + params as a
+ * `draft`; the per-type run mutations (later phases) compute the result.
+ */
+export type AnalysisInput = {
+  /** Drawn input geometry as a JSON string (nullable). */
+  inputGeometry?: string | null | undefined;
+  name: string;
+  /** Per-type parameters as a JSON object string (defaults to `{}`). */
+  params?: string;
+  type: AnalysisType;
+};
+
+/**
+ * Analysis lifecycle. Interactive analyses (turning/parking) go straight to
+ * `complete`; external-data ones (hydrology/traffic) pass through `running`.
+ */
+export type AnalysisStatus = 'COMPLETE' | 'DRAFT' | 'FAILED' | 'RUNNING';
+
+/** The kind of civil analysis. */
+export type AnalysisType = 'HYDROLOGY' | 'PARKING' | 'TRAFFIC' | 'TURNING';
+
 /** The design-point set an as-built import is compared against. */
 export type BaselineScope = 'ALL' | 'CATEGORY' | 'GROUP';
 
@@ -472,6 +494,48 @@ export type AddSurveyPointMutationVariables = Exact<{
 }>;
 
 export type AddSurveyPointMutation = { addSurveyPoint: { id: string } };
+
+export type AnalysesQueryVariables = Exact<{
+  projectId: string;
+}>;
+
+export type AnalysesQuery = {
+  analyses: Array<{
+    id: string;
+    type: AnalysisType;
+    name: string;
+    status: AnalysisStatus;
+    inputGeometry: string | null;
+  }>;
+};
+
+export type CreateAnalysisMutationVariables = Exact<{
+  projectId: string;
+  input: AnalysisInput;
+}>;
+
+export type CreateAnalysisMutation = {
+  createAnalysis: { id: string; type: AnalysisType; name: string };
+};
+
+export type UpdateAnalysisMutationVariables = Exact<{
+  id: string;
+  input: AnalysisInput;
+}>;
+
+export type UpdateAnalysisMutation = { updateAnalysis: { id: string } };
+
+export type DeleteAnalysisMutationVariables = Exact<{
+  id: string;
+}>;
+
+export type DeleteAnalysisMutation = { deleteAnalysis: boolean };
+
+export type DuplicateAnalysisMutationVariables = Exact<{
+  id: string;
+}>;
+
+export type DuplicateAnalysisMutation = { duplicateAnalysis: { id: string } };
 
 export type UploadDxfMutationVariables = Exact<{
   id: string;
@@ -1741,6 +1805,48 @@ export const AddSurveyPointDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<AddSurveyPointMutation, AddSurveyPointMutationVariables>;
+export const AnalysesDocument = new TypedDocumentString(`
+    query Analyses($projectId: UUID!) {
+  analyses(projectId: $projectId) {
+    id
+    type
+    name
+    status
+    inputGeometry
+  }
+}
+    `) as unknown as TypedDocumentString<AnalysesQuery, AnalysesQueryVariables>;
+export const CreateAnalysisDocument = new TypedDocumentString(`
+    mutation CreateAnalysis($projectId: UUID!, $input: AnalysisInput!) {
+  createAnalysis(projectId: $projectId, input: $input) {
+    id
+    type
+    name
+  }
+}
+    `) as unknown as TypedDocumentString<CreateAnalysisMutation, CreateAnalysisMutationVariables>;
+export const UpdateAnalysisDocument = new TypedDocumentString(`
+    mutation UpdateAnalysis($id: UUID!, $input: AnalysisInput!) {
+  updateAnalysis(id: $id, input: $input) {
+    id
+  }
+}
+    `) as unknown as TypedDocumentString<UpdateAnalysisMutation, UpdateAnalysisMutationVariables>;
+export const DeleteAnalysisDocument = new TypedDocumentString(`
+    mutation DeleteAnalysis($id: UUID!) {
+  deleteAnalysis(id: $id)
+}
+    `) as unknown as TypedDocumentString<DeleteAnalysisMutation, DeleteAnalysisMutationVariables>;
+export const DuplicateAnalysisDocument = new TypedDocumentString(`
+    mutation DuplicateAnalysis($id: UUID!) {
+  duplicateAnalysis(id: $id) {
+    id
+  }
+}
+    `) as unknown as TypedDocumentString<
+  DuplicateAnalysisMutation,
+  DuplicateAnalysisMutationVariables
+>;
 export const UploadDxfDocument = new TypedDocumentString(`
     mutation UploadDxf($id: UUID!, $f: String!, $c: String!) {
   uploadDxf(projectId: $id, filename: $f, content: $c) {

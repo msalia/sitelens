@@ -31,6 +31,7 @@ import {
   useBounds,
   useMarkers,
 } from './terrain-objects';
+import { AnalysisOverlay, type AnalysisPath } from './terrain/analysis-overlay';
 import { type SceneConstraint, SurfaceConstraints } from './terrain/surface-constraints';
 import { SurfaceContours } from './terrain/surface-contours';
 import {
@@ -64,6 +65,8 @@ const PALETTE = {
   light: { bg: '#eef1f5', clay: '#e7eaee' },
 };
 export interface TerrainViewerProps {
+  /** Analysis input paths (site-analysis plan geometry) to overlay. */
+  analysisPaths?: AnalysisPath[];
   /** OSM building footprints to extrude (visual context only). */
   buildings?: BuildingFootprint[];
   /** When set, the viewer assigns a function that downloads the canvas as a PNG. */
@@ -136,6 +139,7 @@ export interface TerrainViewerProps {
 
 export function TerrainViewer(props: TerrainViewerProps) {
   const {
+    analysisPaths,
     buildings,
     captureRef,
     categories,
@@ -345,6 +349,18 @@ export function TerrainViewer(props: TerrainViewerProps) {
           originE={originProjectedE}
           originN={originProjectedN}
           visible={showConstraints}
+        />
+      ) : null}
+
+      {analysisPaths?.length &&
+      originProjectedE !== null &&
+      originProjectedE !== undefined &&
+      originProjectedN !== null &&
+      originProjectedN !== undefined ? (
+        <AnalysisOverlay
+          paths={analysisPaths}
+          originE={originProjectedE}
+          originN={originProjectedN}
         />
       ) : null}
 

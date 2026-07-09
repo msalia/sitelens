@@ -13,6 +13,7 @@ import type {
   TerrainData,
   UtilityPick,
 } from '@/components/projects/terrain-viewer';
+import type { AnalysisPath } from '@/components/projects/terrain/analysis-overlay';
 import type { SceneConstraint } from '@/components/projects/terrain/surface-constraints';
 import type { SurfaceMode } from '@/components/projects/terrain/surface-mesh';
 import type { InspectablePoint, PointCategory, Project, SceneData, ScenePoint } from '@/lib/types';
@@ -59,6 +60,7 @@ const TerrainViewer = dynamic(
 export function SceneView({
   activeSurfaceId,
   activeVolumeId,
+  analysisPaths,
   categories,
   comparison,
   contours = DEFAULT_CONTOURS,
@@ -76,6 +78,8 @@ export function SceneView({
   activeSurfaceId?: string | null;
   /** The volume whose cut/fill heatmap is rendered (from the Surfaces panel). */
   activeVolumeId?: string | null;
+  /** Analysis plan paths to overlay (from the Analysis panel). */
+  analysisPaths?: AnalysisPath[];
   /** Bumped by the Surfaces panel after a build/rebuild to refetch the mesh. */
   surfaceReload?: number;
   categories: PointCategory[];
@@ -546,6 +550,7 @@ export function SceneView({
             displayUnit={project.displayUnit}
             constraints={constraints}
             showConstraints={showConstraints}
+            analysisPaths={analysisPaths}
             terrain={terrain}
             buildings={buildings}
             showBuildings={showBuildings}
