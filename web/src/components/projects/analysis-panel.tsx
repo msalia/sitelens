@@ -187,7 +187,14 @@ export function AnalysisPanel({
     if (sel) {
       const pv = parsePath(sel.inputGeometry);
       if (pv.length >= 2) {
-        out.push({ active: !capturing, id: sel.id, vertices: pv });
+        // Once computed, drop the connecting polyline (the result visualization
+        // is the linework) and keep just the point markers to declutter.
+        out.push({
+          active: !capturing,
+          id: sel.id,
+          markersOnly: !!sel.resultGeometry,
+          vertices: pv,
+        });
       }
     }
     return out;
@@ -342,59 +349,121 @@ export function AnalysisPanel({
                 <span className="text-sm font-medium">Drawing — {verts.length} point(s)</span>
                 <span className="text-muted-foreground text-xs">Click survey points to snap</span>
               </div>
-              <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                <Input
-                  aria-label="Easting"
-                  type="number"
-                  step="any"
-                  placeholder="Easting"
-                  value={eIn}
-                  onChange={(e) => setEIn(e.target.value)}
-                />
-                <Input
-                  aria-label="Northing"
-                  type="number"
-                  step="any"
-                  placeholder="Northing"
-                  value={nIn}
-                  onChange={(e) => setNIn(e.target.value)}
-                />
-                <Button type="button" size="sm" variant="outline" onClick={addNumeric}>
+
+              {/* Selected points — numbered, removable (mirrors the utility-run list). */}
+              <div className="flex flex-col gap-1">
+                {verts.length === 0 ? (
+                  <p className="text-muted-foreground text-xs">
+                    No points yet — click points in the 3D scene or add by coordinates below.
+                  </p>
+                ) : (
+                  verts.map((v, i) => (
+                    <div
+                      key={i}
+                      className="bg-muted/40 flex items-center gap-2 rounded px-2 py-1 text-xs"
+                    >
+                      <span className="text-muted-foreground w-5 tabular-nums">{i + 1}.</span>
+                      <span className="min-w-0 flex-1 truncate">
+                        E {v.e.toFixed(2)} · N {v.n.toFixed(2)}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={`Remove point ${i + 1}`}
+                        className="text-muted-foreground hover:text-foreground"
+                        onClick={() => setVerts((vs) => vs.filter((_, j) => j !== i))}
+                      >
+                        <IconX className="size-3.5" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Numeric coordinate entry — Add aligned with the inputs. */}
+              <div className="flex items-end gap-1.5">
+                <Field className="flex-1">
+                  <FieldLabel htmlFor="an-easting">Easting (m)</FieldLabel>
+                  <Input
+                    id="an-easting"
+                    title="Easting (projected meters)"
+                    type="number"
+                    step="any"
+                    placeholder="Easting"
+                    value={eIn}
+                    onChange={(e) => setEIn(e.target.value)}
+                  />
+                </Field>
+                <Field className="flex-1">
+                  <FieldLabel htmlFor="an-northing">Northing (m)</FieldLabel>
+                  <Input
+                    id="an-northing"
+                    title="Northing (projected meters)"
+                    type="number"
+                    step="any"
+                    placeholder="Northing"
+                    value={nIn}
+                    onChange={(e) => setNIn(e.target.value)}
+                  />
+                </Field>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={addNumeric}
+                  title="Add the typed Easting/Northing as a point"
+                >
                   Add
                 </Button>
               </div>
 
               {/* Turning: pick a vehicle + step, then compute the swept path. */}
               {type === 'TURNING' ? (
-                <div className="grid grid-cols-[1fr_auto] gap-2">
-                  <Select value={vehicleId} onValueChange={(v) => v && setVehicleId(v)}>
-                    <SelectTrigger className="w-full" aria-label="Vehicle">
-                      <SelectValue placeholder="Vehicle…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectLabel>Vehicle</SelectLabel>
-                        {vehicles.map((veh) => (
-                          <SelectItem key={veh.id} value={veh.id}>
-                            {veh.name}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    aria-label="Step (m)"
-                    type="number"
-                    min="0"
-                    step="any"
-                    className="w-20"
-                    value={step}
-                    onChange={(e) => setStep(e.target.value)}
-                  />
+                <div className="grid grid-cols-[1fr_auto] items-end gap-2">
+                  <Field>
+                    <FieldLabel htmlFor="an-vehicle">Vehicle</FieldLabel>
+                    <Select value={vehicleId} onValueChange={(v) => v && setVehicleId(v)}>
+                      <SelectTrigger id="an-vehicle" className="w-full" title="Design vehicle">
+                        <SelectValue placeholder="Vehicle…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectLabel>Vehicle</SelectLabel>
+                          {vehicles.map((veh) => (
+                            <SelectItem key={veh.id} value={veh.id}>
+                              {veh.name}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="an-step">Step (m)</FieldLabel>
+                    <Input
+                      id="an-step"
+                      title="Swept-path sample spacing in meters — smaller is more precise"
+                      type="number"
+                      min="0"
+                      step="any"
+                      className="w-24"
+                      value={step}
+                      onChange={(e) => setStep(e.target.value)}
+                    />
+                  </Field>
                 </div>
               ) : null}
 
-              <div className="flex gap-2">
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setCapturing(false);
+                    setVerts([]);
+                  }}
+                >
+                  <IconX className="mr-1 size-4" /> Cancel
+                </Button>
                 {type === 'TURNING' ? (
                   <Button
                     type="button"
@@ -409,26 +478,6 @@ export function AnalysisPanel({
                     <IconPlus className="mr-1 size-4" /> Save
                   </Button>
                 )}
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setVerts((v) => v.slice(0, -1))}
-                  disabled={verts.length === 0}
-                >
-                  Undo
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setCapturing(false);
-                    setVerts([]);
-                  }}
-                >
-                  <IconX className="mr-1 size-4" /> Cancel
-                </Button>
               </div>
             </div>
           ) : (

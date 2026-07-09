@@ -118,11 +118,9 @@ function buildHeatmapGeometry(buf: ArrayBuffer, frame: Frame): THREE.BufferGeome
 export function VolumeHeatmap({
   contentBase64,
   frame,
-  visible = true,
 }: {
   contentBase64: string | null;
   frame: Frame;
-  visible?: boolean;
 }) {
   const geometry = useMemo(() => {
     if (!contentBase64) {
@@ -140,7 +138,7 @@ export function VolumeHeatmap({
     }
   }, [contentBase64, frame]);
 
-  if (!visible || !geometry) {
+  if (!geometry) {
     return null;
   }
   return (

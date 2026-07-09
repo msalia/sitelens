@@ -83,14 +83,12 @@ export function SurfaceContours({
   displayUnit,
   frame,
   showLabels = true,
-  visible = true,
 }: {
   /** The SCTR contour blob (base64), or null when none is loaded. */
   contentBase64: string | null;
   frame: Frame;
   displayUnit: LengthUnit;
   showLabels?: boolean;
-  visible?: boolean;
 }) {
   const levels = useMemo(() => {
     if (!contentBase64) {
@@ -132,7 +130,7 @@ export function SurfaceContours({
     return out;
   }, [levels, showLabels, displayUnit]);
 
-  if (!visible || levels.length === 0) {
+  if (levels.length === 0) {
     return null;
   }
 

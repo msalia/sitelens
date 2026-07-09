@@ -83,10 +83,16 @@ export interface TerrainViewerProps {
   contourLabels?: boolean;
   /** Active surface's contour blob (SCTR base64), or null when none is loaded. */
   contours?: { contentBase64: string } | null;
+  /** True while a tool is collecting points — enables grid/DXF snap targets. */
+  digitizing?: boolean;
   /** Unit for contour elevation labels (the project's display unit). */
   displayUnit: LengthUnit;
   /** Move the camera to a point. `nonce` re-triggers. */
   focus?: FocusTarget;
+  /** Generic snap sink: grid intersections + DXF vertices call this with
+   *  projected coords so ANY digitizing tool (analysis, utilities, surfaces)
+   *  snaps to them via the shared pick bridge. */
+  onDigitizePick?: (easting: number, northing: number, height: number, label: string) => void;
   /** Called with a survey point id when picked in 3D. */
   onSelectPoint?: (id: string) => void;
   /** Called with a run/structure when picked in 3D. */
@@ -100,6 +106,8 @@ export interface TerrainViewerProps {
   scene: SceneData;
   /** Whether to render the extruded OSM buildings. */
   showBuildings?: boolean;
+  /** Whether to draw the as-built QC comparison overlay (fades when off). */
+  showComparison?: boolean;
   /** Whether to draw the constraint overlay. */
   showConstraints?: boolean;
   /** Whether to draw the surface contours. */
@@ -151,8 +159,10 @@ export function TerrainViewer(props: TerrainViewerProps) {
     constraints,
     contourLabels = true,
     contours,
+    digitizing,
     displayUnit,
     focus,
+    onDigitizePick,
     onSelectPoint,
     onSelectUtility,
     originProjectedE,
@@ -161,6 +171,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
     projectOnTerrain = true,
     scene,
     showBuildings = true,
+    showComparison = true,
     showConstraints = true,
     showContours = true,
     showGrid = true,
@@ -260,6 +271,23 @@ export function TerrainViewer(props: TerrainViewerProps) {
   // The terrain elevation sampler, only when projecting is enabled + loaded.
   const sampler: Sampler = projectOnTerrain ? (terrainMesh?.sample ?? null) : null;
 
+  // Retain the last analysis geometry so the overlays stay mounted and can fade
+  // OUT (driven by `visible`) instead of unmounting and snapping away.
+  const [shownResult, setShownResult] = useState<AnalysisResult | null>(analysisResult ?? null);
+  useEffect(() => {
+    if (analysisResult) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setShownResult(analysisResult);
+    }
+  }, [analysisResult]);
+  const [shownPaths, setShownPaths] = useState<AnalysisPath[] | undefined>(analysisPaths);
+  useEffect(() => {
+    if (analysisPaths && analysisPaths.length) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setShownPaths(analysisPaths);
+    }
+  }, [analysisPaths]);
+
   const markers = useMarkers(
     scene,
     frame,
@@ -321,26 +349,27 @@ export function TerrainViewer(props: TerrainViewerProps) {
         </Fade>
       ) : null}
 
-      {surfaceGeom && showSurface ? (
-        <SurfaceMesh geometry={surfaceGeom.geometry} mode={surfaceMode} />
+      {surfaceGeom ? (
+        <Fade visible={showSurface} cull>
+          <SurfaceMesh geometry={surfaceGeom.geometry} mode={surfaceMode} />
+        </Fade>
       ) : null}
 
       {contours ? (
-        <SurfaceContours
-          contentBase64={contours.contentBase64}
-          frame={frame}
-          displayUnit={displayUnit}
-          showLabels={contourLabels}
-          visible={showContours}
-        />
+        <Fade visible={showContours}>
+          <SurfaceContours
+            contentBase64={contours.contentBase64}
+            frame={frame}
+            displayUnit={displayUnit}
+            showLabels={contourLabels}
+          />
+        </Fade>
       ) : null}
 
       {volumeHeatmap ? (
-        <VolumeHeatmap
-          contentBase64={volumeHeatmap.contentBase64}
-          frame={frame}
-          visible={showVolume}
-        />
+        <Fade visible={showVolume}>
+          <VolumeHeatmap contentBase64={volumeHeatmap.contentBase64} frame={frame} />
+        </Fade>
       ) : null}
 
       {constraints?.length &&
@@ -356,31 +385,33 @@ export function TerrainViewer(props: TerrainViewerProps) {
         />
       ) : null}
 
-      {analysisPaths?.length &&
+      {shownPaths?.length &&
       originProjectedE !== null &&
       originProjectedE !== undefined &&
       originProjectedN !== null &&
       originProjectedN !== undefined ? (
         <AnalysisOverlay
-          paths={analysisPaths}
+          paths={shownPaths}
           originE={originProjectedE}
           originN={originProjectedN}
           frame={frame}
-          sample={terrainMesh?.sample ?? null}
+          sample={sampler}
+          visible={!!analysisPaths?.length}
         />
       ) : null}
 
-      {analysisResult &&
+      {shownResult &&
       originProjectedE !== null &&
       originProjectedE !== undefined &&
       originProjectedN !== null &&
       originProjectedN !== undefined ? (
         <AnalysisResultOverlay
-          result={analysisResult}
+          result={shownResult}
           originE={originProjectedE}
           originN={originProjectedN}
           frame={frame}
-          sample={terrainMesh?.sample ?? null}
+          sample={sampler}
+          visible={!!analysisResult}
         />
       ) : null}
 
@@ -399,7 +430,16 @@ export function TerrainViewer(props: TerrainViewerProps) {
         </Fade>
       ) : null}
 
-      <GridLines scene={scene} frame={frame} sample={sampler} visible={showGrid} />
+      <GridLines
+        scene={scene}
+        frame={frame}
+        sample={sampler}
+        visible={showGrid}
+        digitizing={digitizing}
+        originE={originProjectedE ?? null}
+        originN={originProjectedN ?? null}
+        onPick={onDigitizePick}
+      />
       {overlays?.length &&
       originProjectedE !== null &&
       originProjectedE !== undefined &&
@@ -413,11 +453,18 @@ export function TerrainViewer(props: TerrainViewerProps) {
           originN={originProjectedN}
           shownLayers={shownLayers}
           visible={showOverlays}
+          digitizing={digitizing}
+          onPick={onDigitizePick}
         />
       ) : null}
       <Markers markers={showPins ? markers : []} onSelectPoint={onSelectPoint} />
       {comparison?.length ? (
-        <ComparisonOverlay comparison={comparison} frame={frame} sample={sampler} />
+        <ComparisonOverlay
+          comparison={comparison}
+          frame={frame}
+          sample={sampler}
+          visible={showComparison}
+        />
       ) : null}
       {scene.utilityRuns.length || scene.utilityStructures.length ? (
         <Fade visible={showUtilities}>

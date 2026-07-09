@@ -491,6 +491,25 @@ export function SceneView({
     [scene, pickRef],
   );
 
+  // Generic snap sink for non-survey-point targets (grid intersections, DXF
+  // vertices). Routes through the same pick bridge, so every digitizing tool
+  // (analysis, utilities, surfaces) can snap to them with no extra wiring.
+  const onDigitizePick = useCallback(
+    (easting: number, northing: number, height: number, label: string) => {
+      pickRef?.current?.({
+        categoryId: null,
+        easting,
+        height,
+        id: null,
+        label,
+        latitude: 0,
+        longitude: 0,
+        northing,
+      });
+    },
+    [pickRef],
+  );
+
   function setView2(v: CameraView) {
     setView(v);
     setViewNonce((n) => n + 1);
@@ -563,6 +582,8 @@ export function SceneView({
             visibleCategoryIds={visibleCategoryIds}
             visibleIds={visibleIds}
             onSelectPoint={onSelectPoint}
+            digitizing={scene ? digitizing : false}
+            onDigitizePick={onDigitizePick}
             focus={viewerFocus}
             captureRef={captureRef}
             showGrid={showGrid}
@@ -570,7 +591,8 @@ export function SceneView({
             showTerrain={showTerrain}
             showOverlays={showOverlays}
             overlays={overlays}
-            comparison={showComparison ? comparison : null}
+            comparison={comparison}
+            showComparison={showComparison}
             originProjectedE={scene.originProjectedE}
             originProjectedN={scene.originProjectedN}
             shownLayers={shownLayers}
@@ -586,6 +608,9 @@ export function SceneView({
 
       <SceneToolbar
         hasScene={!!scene}
+        digitizing={scene ? digitizing : false}
+        onCancelDigitize={onCancelDigitize}
+        hint={scene && analysisResult ? 'Click a swept-path line to show its label' : undefined}
         categories={categories}
         hidden={hidden}
         setHidden={setHidden}
@@ -674,25 +699,6 @@ export function SceneView({
               Add control and survey points, set the building grid, and configure the site origin to
               populate the 3D view. Use the tabs on the left to get started.
             </p>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Digitize hint — shown while the Utilities panel is collecting points. */}
-      {scene && digitizing ? (
-        <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-3">
-          <div className="bg-primary/10 text-primary ring-primary/20 pointer-events-auto flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium shadow-sm ring-1 backdrop-blur">
-            <span className="bg-primary size-1.5 animate-pulse rounded-full" />
-            Click survey points to snap them
-            {onCancelDigitize ? (
-              <button
-                type="button"
-                onClick={onCancelDigitize}
-                className="hover:bg-primary/15 -mr-1 ml-1 rounded px-1.5 py-0.5"
-              >
-                Done
-              </button>
-            ) : null}
           </div>
         </div>
       ) : null}

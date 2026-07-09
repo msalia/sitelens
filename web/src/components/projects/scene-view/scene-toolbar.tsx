@@ -37,6 +37,7 @@ export function SceneToolbar({
   buildingsCount,
   categories,
   comparisonCount,
+  digitizing,
   groupFilter,
   groups,
   hasConstraints,
@@ -45,6 +46,8 @@ export function SceneToolbar({
   hasSurface,
   hasVolume,
   hidden,
+  hint,
+  onCancelDigitize,
   onRefreshSite,
   onReload,
   overlayLayers,
@@ -133,6 +136,13 @@ export function SceneToolbar({
   siteReason: string;
   onRefreshSite: () => void;
   onReload: () => void;
+  /** When true, show the inline "click to snap" digitize hint by the toolbar. */
+  digitizing?: boolean;
+  /** Dismisses the digitize hint (renders a "Done" affordance when provided). */
+  onCancelDigitize?: () => void;
+  /** A context hint shown in the same inline slot (when not digitizing) — set it
+   *  from the current selection/action, e.g. "Click a line to show its label". */
+  hint?: string;
 }) {
   const hiddenCount = categories.filter((c) => hidden.has(c.id)).length;
   const hiddenLayerCount = overlayLayers.filter((l) => !shownLayers.has(l)).length;
@@ -412,6 +422,28 @@ export function SceneToolbar({
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
+        {/* Inline hint next to Display — plain text (no chrome). Digitizing takes
+            precedence (with a Done action); otherwise show any passed hint. */}
+        {digitizing ? (
+          <div className="text-primary flex items-center gap-2 pl-1 text-xs font-medium">
+            <span className="bg-primary size-1.5 animate-pulse rounded-full" />
+            Click survey points to snap them
+            {onCancelDigitize ? (
+              <button
+                type="button"
+                onClick={onCancelDigitize}
+                className="underline underline-offset-2 hover:no-underline"
+              >
+                Done
+              </button>
+            ) : null}
+          </div>
+        ) : hint ? (
+          <div className="text-primary flex items-center gap-2 pl-1 text-xs font-medium">
+            <span className="bg-primary size-1.5 rounded-full" />
+            {hint}
+          </div>
+        ) : null}
       </div>
 
       <div className="pointer-events-auto flex shrink-0 items-center gap-2">

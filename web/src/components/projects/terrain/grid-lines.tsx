@@ -30,7 +30,11 @@ const _tmpCol = new THREE.Color();
  * little past both ends with a dashed lead-out, so the labels sit clear of the
  * point pins. When `sample` is set, lines are subdivided + draped onto terrain. */
 export function GridLines({
+  digitizing = false,
   frame,
+  onPick,
+  originE = null,
+  originN = null,
   sample,
   scene,
   visible = true,
@@ -41,6 +45,12 @@ export function GridLines({
   /** Soft fade in/out (the Display "Grid lines" toggle). Grid is lightweight, so
    *  it stays mounted and fades rather than unmounting. */
   visible?: boolean;
+  /** While digitizing, clicking an intersection snaps it via `onPick`. */
+  digitizing?: boolean;
+  /** Projected-meter origin, to convert an intersection's local XZ back to E/N. */
+  originE?: number | null;
+  originN?: number | null;
+  onPick?: (easting: number, northing: number, height: number, label: string) => void;
 }) {
   const { intersections, lines } = useMemo(() => {
     // Always subdivide, even when flat, so a line keeps the same point count
@@ -166,19 +176,26 @@ export function GridLines({
           }
         />
       ))}
-      {/* Intersection hit targets are only active while the grid is shown. */}
-      {visible &&
+      {/* Intersection hit targets — shown while the grid is visible, or while a
+          tool is digitizing (so any tool can snap to grid intersections). */}
+      {(visible || digitizing) &&
         intersections.map((it) => (
           <GridIntersectionMarker
             key={it.id}
             p={it.p}
-            onSelect={() =>
+            onSelect={() => {
+              // While digitizing, snap the intersection into the active tool via
+              // the shared pick bridge instead of toggling the visual highlight.
+              if (digitizing && onPick && originE !== null && originN !== null) {
+                onPick(it.p[0] + originE, originN - it.p[2], 0, 'Grid intersection');
+                return;
+              }
               setSel((s) =>
                 s?.kind === 'intersection' && s.id === it.id
                   ? null
                   : { id: it.id, keys: it.keys, kind: 'intersection' },
-              )
-            }
+              );
+            }}
           />
         ))}
     </group>

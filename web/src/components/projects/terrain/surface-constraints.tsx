@@ -1,9 +1,10 @@
 'use client';
 
-import { Line } from '@react-three/drei';
 import { useMemo } from 'react';
 
 import type { Vec3 } from '../terrain-frame';
+
+import { AnimatedLine } from './animated-line';
 
 /** A surface constraint for the scene: projected-meter vertices + its kind. */
 export interface SceneConstraint {
@@ -20,7 +21,8 @@ const COLOR: Record<SceneConstraint['kind'], string> = {
 
 /** Draws surface constraints as linework, placed in the local frame via the
  *  project's projected origin (matches the DXF-overlay mapping). Boundary/hole
- *  rings are closed; holes are dashed. */
+ *  rings are closed; holes are dashed. Uses the animated scene primitive so the
+ *  layer fades on/off with its toggle instead of snapping. */
 export function SurfaceConstraints({
   constraints,
   originE,
@@ -50,13 +52,10 @@ export function SurfaceConstraints({
     [constraints, originE, originN],
   );
 
-  if (!visible) {
-    return null;
-  }
   return (
     <>
       {lines.map((l) => (
-        <Line
+        <AnimatedLine
           key={l.id}
           points={l.points}
           color={COLOR[l.kind]}
@@ -64,8 +63,8 @@ export function SurfaceConstraints({
           dashed={l.kind === 'HOLE'}
           dashSize={1}
           gapSize={0.5}
-          transparent
           opacity={0.95}
+          visible={visible}
         />
       ))}
     </>
