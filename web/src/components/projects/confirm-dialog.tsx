@@ -48,7 +48,16 @@ export function ConfirmDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction variant={confirmVariant} onClick={onConfirm}>
+          <AlertDialogAction
+            variant={confirmVariant}
+            onClick={() => {
+              onConfirm();
+              // Close after confirming — in controlled mode the action doesn't
+              // dismiss on its own, so every call site closes without having to
+              // clear its own open-state in onConfirm.
+              onOpenChange?.(false);
+            }}
+          >
             {confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
