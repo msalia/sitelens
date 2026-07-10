@@ -80,6 +80,52 @@ where
     Ok(Refresh::Proceed)
 }
 
+/// Fetches a GeoTIFF from the free, keyless **USGS 3DEP ImageServer** for a
+/// geographic bbox at the given output pixel size (`nx`×`ny`). The service is
+/// seamless bare-earth 3DEP (~1 m native where available, coarser elsewhere), so
+/// the caller picks `nx`/`ny` to set the effective resolution. US-only. Returns
+/// the tiff bytes, or an error carrying the service's HTTP status + message.
+async fn fetch_3dep_geotiff(
+    client: &reqwest::Client,
+    west: f64,
+    south: f64,
+    east: f64,
+    north: f64,
+    nx: i64,
+    ny: i64,
+) -> std::result::Result<Vec<u8>, String> {
+    let url = format!(
+        "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage\
+         ?bbox={west},{south},{east},{north}&bboxSR=4326&imageSR=4326&size={nx},{ny}\
+         &format=tiff&pixelType=F32&interpolation=RSP_BilinearInterpolation&f=image"
+    );
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("3DEP request failed: {e}"))?;
+    let status = resp.status();
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| format!("3DEP read failed: {e}"))?;
+    // A GeoTIFF starts with II* / MM; an error comes back as JSON/text.
+    let is_tiff = bytes.len() > 4 && (&bytes[..2] == b"II" || &bytes[..2] == b"MM");
+    if !status.is_success() || !is_tiff {
+        let body = String::from_utf8_lossy(&bytes);
+        let snippet: String = body.trim().chars().take(300).collect();
+        return Err(format!(
+            "USGS 3DEP fetch failed (HTTP {status}): {}",
+            if snippet.is_empty() {
+                "no 3DEP elevation for this area (US-only coverage)".to_string()
+            } else {
+                snippet
+            }
+        ));
+    }
+    Ok(bytes.to_vec())
+}
+
 #[derive(Default)]
 pub struct TerrainQuery;
 
@@ -126,6 +172,54 @@ impl TerrainQuery {
         tokio::task::spawn_blocking(move || base64::engine::general_purpose::STANDARD.encode(bytes))
             .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))
+    }
+
+    /// Cached detailed (1 m 3DEP) terrain metadata for a project (null until first
+    /// fetched). Present only when a boundary was defined at refresh time.
+    async fn project_detailed_terrain(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+    ) -> Result<Option<ProjectTerrain>> {
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        let row = sqlx::query_as(&format!(
+            "SELECT {TERRAIN_COLUMNS} FROM project_detailed_terrain WHERE project_id = $1"
+        ))
+        .bind(project_id)
+        .fetch_optional(pool)
+        .await?;
+        Ok(row)
+    }
+
+    /// Base64 detailed-terrain GeoTIFF, or null when none is cached (so the client
+    /// can fall back to the coarse terrain).
+    async fn project_detailed_terrain_content(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+    ) -> Result<Option<String>> {
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        let key: Option<(String,)> = sqlx::query_as(
+            "SELECT storage_key FROM project_detailed_terrain WHERE project_id = $1",
+        )
+        .bind(project_id)
+        .fetch_optional(pool)
+        .await?;
+        let Some((key,)) = key else {
+            return Ok(None);
+        };
+        let storage = storage(ctx)?;
+        let bytes = storage.get(&key).await.map_err(async_graphql::Error::new)?;
+        let b64 = tokio::task::spawn_blocking(move || {
+            base64::engine::general_purpose::STANDARD.encode(bytes)
+        })
+        .await
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+        Ok(Some(b64))
     }
 
     /// Cached OSM buildings metadata for a project (null when none fetched yet).
@@ -213,55 +307,20 @@ impl TerrainMutation {
             return Ok(row);
         }
 
-        let api_key = std::env::var("OPENTOPO_API_KEY")
-            .map_err(|_| async_graphql::Error::new("OPENTOPO_API_KEY is not configured"))?;
+        // Coarse context backdrop from the keyless USGS 3DEP ImageServer (US-only),
+        // sized at ~10 m/px over the bbox. `demtype` is accepted for API
+        // compatibility but no longer selects a provider.
+        let _ = explicit_demtype;
         let client = reqwest::Client::new();
-
-        // Fetch a GeoTIFF DEM from a URL; None on any non-success/empty response.
-        async fn fetch_dem(client: &reqwest::Client, url: &str) -> Option<Vec<u8>> {
-            let resp = client.get(url).send().await.ok()?;
-            if !resp.status().is_success() {
-                return None;
-            }
-            let b = resp.bytes().await.ok()?;
-            if b.is_empty() {
-                None
-            } else {
-                Some(b.to_vec())
-            }
-        }
-        let bbox = format!("south={south}&north={north}&west={west}&east={east}");
-
-        let (bytes, used_demtype): (Vec<u8>, String) = if let Some(dt) = explicit_demtype {
-            // Caller asked for a specific global DEM type.
-            let url = format!(
-                "https://portal.opentopography.org/API/globaldem?demtype={dt}&{bbox}\
-                 &outputFormat=GTiff&API_Key={api_key}"
-            );
-            match fetch_dem(&client, &url).await {
-                Some(b) => (b, dt),
-                None => return Err(async_graphql::Error::new("OpenTopography returned no data")),
-            }
-        } else {
-            // Auto: USGS 3DEP 10 m (US), else global SRTM 30 m.
-            let usgs = format!(
-                "https://portal.opentopography.org/API/usgsdem?datasetName=USGS10m&{bbox}\
-                 &outputFormat=GTiff&API_Key={api_key}"
-            );
-            let srtm = format!(
-                "https://portal.opentopography.org/API/globaldem?demtype=SRTMGL1&{bbox}\
-                 &outputFormat=GTiff&API_Key={api_key}"
-            );
-            if let Some(b) = fetch_dem(&client, &usgs).await {
-                (b, "USGS10m".to_string())
-            } else if let Some(b) = fetch_dem(&client, &srtm).await {
-                (b, "SRTMGL1".to_string())
-            } else {
-                return Err(async_graphql::Error::new(
-                    "OpenTopography returned no terrain for this area",
-                ));
-            }
-        };
+        let mid_lat = (south + north) / 2.0;
+        let w_m = (east - west) * 111_320.0 * mid_lat.to_radians().cos().abs();
+        let h_m = (north - south) * 111_320.0;
+        let nx = ((w_m / 10.0).round() as i64).clamp(2, 800);
+        let ny = ((h_m / 10.0).round() as i64).clamp(2, 800);
+        let bytes = fetch_3dep_geotiff(&client, west, south, east, north, nx, ny)
+            .await
+            .map_err(async_graphql::Error::new)?;
+        let used_demtype = "USGS3DEP";
 
         let storage = storage(ctx)?;
         let key = format!("terrain/{project_id}.tif");
@@ -289,6 +348,129 @@ impl TerrainMutation {
         .fetch_one(pool)
         .await?;
         publish_scene(ctx, project_id);
+        Ok(row)
+    }
+
+    /// Fetches (if needed) the **~1 m USGS 3DEP** DEM for the project's
+    /// property-boundary AOI — the accurate base for cut/fill volumes (and future
+    /// hydrology), distinct from the coarse context terrain. Requires a boundary;
+    /// the client calls this alongside `refreshTerrain` when one is defined. Same
+    /// 7-day cooldown. Uses the free, keyless USGS 3DEP ImageServer.
+    async fn refresh_detailed_terrain(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        force: Option<bool>,
+    ) -> Result<ProjectTerrain> {
+        let auth = require_editor_active(ctx).await?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+        let force = force.unwrap_or(false);
+
+        // The boundary (projected meters) + CRS define the AOI to fetch at 1 m.
+        let row: Option<(Option<serde_json::Value>, i32)> = sqlx::query_as(
+            "SELECT boundary, epsg_code FROM projects WHERE id = $1 AND org_id = $2",
+        )
+        .bind(project_id)
+        .bind(auth.org_id)
+        .fetch_optional(pool)
+        .await?;
+        let (boundary, epsg) = found_in_org(row, "project")?;
+        let Some(boundary) = boundary else {
+            return Err(async_graphql::Error::new(
+                "define a property boundary first — the 1 m fetch is bounded to it",
+            ));
+        };
+        let pts: Vec<[f64; 2]> = serde_json::from_value(boundary)
+            .map_err(|e| async_graphql::Error::new(format!("invalid boundary geometry: {e}")))?;
+        // Projected extent (meters) — for the ~1 m output pixel sizing.
+        let (mut min_e, mut max_e, mut min_n, mut max_n) = (
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+        );
+        // Geographic bbox (degrees) — for the request + stored metadata.
+        let (mut south, mut north, mut west, mut east) = (
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+        );
+        for [e, n] in &pts {
+            min_e = min_e.min(*e);
+            max_e = max_e.max(*e);
+            min_n = min_n.min(*n);
+            max_n = max_n.max(*n);
+            if let Some((lat, lon)) = crate::crs::projected_to_geographic(epsg, *e, *n) {
+                south = south.min(lat);
+                north = north.max(lat);
+                west = west.min(lon);
+                east = east.max(lon);
+            }
+        }
+        if !south.is_finite() || !west.is_finite() {
+            return Err(async_graphql::Error::new(
+                "could not derive a lat/lon bbox from the boundary",
+            ));
+        }
+        // Small pad so the AOI edge isn't clipped.
+        let pad_lat = ((north - south) * 0.05).max(0.0005);
+        let pad_lon = ((east - west) * 0.05).max(0.0005);
+        south -= pad_lat;
+        north += pad_lat;
+        west -= pad_lon;
+        east += pad_lon;
+        // Output size ≈ 1 px/m over the padded projected extent, clamped to the
+        // ImageServer's export limits.
+        let width_m = (max_e - min_e).max(1.0) * 1.1;
+        let height_m = (max_n - min_n).max(1.0) * 1.1;
+        let nx = (width_m.round() as i64).clamp(2, 4000);
+        let ny = (height_m.round() as i64).clamp(2, 4000);
+
+        if let Refresh::Cached(row) = refresh_cooldown::<ProjectTerrain>(
+            pool,
+            "project_detailed_terrain",
+            TERRAIN_COLUMNS,
+            "Detailed terrain was",
+            project_id,
+            force,
+        )
+        .await?
+        {
+            return Ok(row);
+        }
+
+        // Keyless USGS 3DEP ImageServer at ~1 m over the boundary AOI.
+        let client = reqwest::Client::new();
+        let bytes = fetch_3dep_geotiff(&client, west, south, east, north, nx, ny)
+            .await
+            .map_err(async_graphql::Error::new)?;
+
+        let storage = storage(ctx)?;
+        let key = format!("terrain-detailed/{project_id}.tif");
+        storage
+            .put(&key, &bytes)
+            .await
+            .map_err(async_graphql::Error::new)?;
+        let row: ProjectTerrain = sqlx::query_as(&format!(
+            "INSERT INTO project_detailed_terrain \
+             (project_id, demtype, south, north, west, east, storage_key, fetched_at) \
+             VALUES ($1, 'USGS3DEP1m', $2, $3, $4, $5, $6, now()) \
+             ON CONFLICT (project_id) DO UPDATE SET \
+               demtype = EXCLUDED.demtype, south = EXCLUDED.south, north = EXCLUDED.north, \
+               west = EXCLUDED.west, east = EXCLUDED.east, storage_key = EXCLUDED.storage_key, \
+               fetched_at = now() \
+             RETURNING {TERRAIN_COLUMNS}"
+        ))
+        .bind(project_id)
+        .bind(south)
+        .bind(north)
+        .bind(west)
+        .bind(east)
+        .bind(&key)
+        .fetch_one(pool)
+        .await?;
         Ok(row)
     }
 

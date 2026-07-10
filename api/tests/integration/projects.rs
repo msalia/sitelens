@@ -240,3 +240,22 @@ async fn set_and_clear_project_boundary(pool: PgPool) {
         "expected min-points error: {msg}"
     );
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn detailed_terrain_requires_a_boundary(pool: PgPool) {
+    // The 1 m fetch is bounded to the property boundary, so it errors without one
+    // (guards before any network — also asserts migration 0020 applied).
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "dt@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+    let msg = exec_err(
+        &schema,
+        &format!(r#"mutation {{ refreshDetailedTerrain(projectId: "{pid}") {{ demtype }} }}"#),
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    assert!(
+        msg.contains("boundary"),
+        "expected boundary-required error: {msg}"
+    );
+}

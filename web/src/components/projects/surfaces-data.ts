@@ -79,6 +79,28 @@ export const BUILD_SURFACE = graphql(`
   }
 `);
 
+/** Build a TIN surface from digitized points (a drawn design pad / graded points). */
+export const BUILD_SURFACE_FROM_POINTS = graphql(`
+  mutation BuildSurfaceFromPoints(
+    $projectId: UUID!
+    $name: String!
+    $points: [SurfacePointInput!]!
+    $maxEdgeLength: Float
+  ) {
+    buildSurfaceFromPoints(
+      projectId: $projectId
+      name: $name
+      points: $points
+      maxEdgeLength: $maxEdgeLength
+    ) {
+      id
+      version
+      vertexCount
+      triangleCount
+    }
+  }
+`);
+
 /** Build a DEM surface from an uploaded GeoTIFF (client-parsed into a grid). */
 export const BUILD_DEM_SURFACE = graphql(`
   mutation BuildDemSurface(

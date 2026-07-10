@@ -41,6 +41,7 @@ type Documents = {
   '\n  mutation DeleteAnalysis($id: UUID!) {\n    deleteAnalysis(id: $id)\n  }\n': typeof types.DeleteAnalysisDocument;
   '\n  mutation DuplicateAnalysis($id: UUID!) {\n    duplicateAnalysis(id: $id) {\n      id\n    }\n  }\n': typeof types.DuplicateAnalysisDocument;
   '\n  mutation SetProjectBoundary($projectId: UUID!, $boundary: String) {\n    setProjectBoundary(projectId: $projectId, boundary: $boundary) {\n      id\n      boundary\n    }\n  }\n': typeof types.SetProjectBoundaryDocument;
+  '\n  query ParcelAtSite($projectId: UUID!, $serviceUrl: String!) {\n    parcelAtSite(projectId: $projectId, serviceUrl: $serviceUrl)\n  }\n': typeof types.ParcelAtSiteDocument;
   '\n  mutation UploadDxf($id: UUID!, $f: String!, $c: String!) {\n    uploadDxf(projectId: $id, filename: $f, content: $c) {\n      id\n    }\n  }\n': typeof types.UploadDxfDocument;
   '\n  mutation AlignCadOverlay($id: UUID!, $src: [AlignPoint!]!, $dst: [AlignPoint!]!) {\n    alignCadOverlay(id: $id, src: $src, dst: $dst) {\n      id\n      offsetE\n      offsetN\n      rotationDeg\n      scale\n    }\n  }\n': typeof types.AlignCadOverlayDocument;
   '\n  mutation SetCadGeoreference(\n    $id: UUID!\n    $oe: Float\n    $on: Float\n    $rot: Float\n    $sc: Float\n    $el: Float\n    $vis: Boolean\n  ) {\n    setCadGeoreference(\n      id: $id\n      offsetE: $oe\n      offsetN: $on\n      rotationDeg: $rot\n      scale: $sc\n      elevation: $el\n      visible: $vis\n    ) {\n      id\n    }\n  }\n': typeof types.SetCadGeoreferenceDocument;
@@ -81,6 +82,8 @@ type Documents = {
   '\n  mutation ImportProject($content: String!) {\n    importProject(content: $content) {\n      id\n      name\n    }\n  }\n': typeof types.ImportProjectDocument;
   '\n  query Scene($id: UUID!) {\n    sceneData(projectId: $id) {\n      origin {\n        latitude\n        longitude\n        height\n      }\n      originProjectedE\n      originProjectedN\n      controlPoints {\n        id\n        label\n        latitude\n        longitude\n        height\n        easting\n        northing\n        categoryId\n      }\n      surveyPoints {\n        id\n        label\n        latitude\n        longitude\n        height\n        easting\n        northing\n        categoryId\n      }\n      gridLines {\n        label\n        coordinates {\n          latitude\n          longitude\n          height\n        }\n      }\n      utilityRuns {\n        id\n        typeKey\n        label\n        apwaColor\n        diameter\n        vertices {\n          latitude\n          longitude\n          height\n        }\n      }\n      utilityStructures {\n        id\n        typeKey\n        label\n        apwaColor\n        latitude\n        longitude\n        rimElev\n        easting\n        northing\n      }\n    }\n    projectTerrain(projectId: $id) {\n      demtype\n      fetchedAt\n    }\n    projectBuildings(projectId: $id) {\n      count\n      fetchedAt\n    }\n    cadOverlays(projectId: $id) {\n      id\n      offsetE\n      offsetN\n      rotationDeg\n      scale\n      elevation\n      visible\n    }\n    pointGroups(projectId: $id) {\n      id\n      name\n      memberIds\n    }\n  }\n': typeof types.SceneDocument;
   '\n  query TerrainContent($id: UUID!) {\n    projectTerrainContent(projectId: $id)\n  }\n': typeof types.TerrainContentDocument;
+  '\n  query DetailedTerrainContent($id: UUID!) {\n    projectDetailedTerrainContent(projectId: $id)\n  }\n': typeof types.DetailedTerrainContentDocument;
+  '\n  mutation RefreshDetailedTerrain($id: UUID!, $force: Boolean) {\n    refreshDetailedTerrain(projectId: $id, force: $force) {\n      demtype\n      fetchedAt\n    }\n  }\n': typeof types.RefreshDetailedTerrainDocument;
   '\n  query BuildingsContent($id: UUID!) {\n    projectBuildingsContent(projectId: $id)\n  }\n': typeof types.BuildingsContentDocument;
   '\n  query OverlayGeometry($id: UUID!) {\n    cadOverlayGeometry(id: $id) {\n      layers\n      polylines {\n        layer\n        points {\n          x\n          y\n        }\n      }\n    }\n  }\n': typeof types.OverlayGeometryDocument;
   '\n  mutation RefreshTerrain(\n    $id: UUID!\n    $south: Float!\n    $north: Float!\n    $west: Float!\n    $east: Float!\n    $force: Boolean\n  ) {\n    refreshTerrain(\n      projectId: $id\n      south: $south\n      north: $north\n      west: $west\n      east: $east\n      force: $force\n    ) {\n      demtype\n      fetchedAt\n    }\n  }\n': typeof types.RefreshTerrainDocument;
@@ -89,6 +92,7 @@ type Documents = {
   '\n  query SurfaceMesh($id: UUID!) {\n    surfaceMesh(id: $id) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n': typeof types.SurfaceMeshDocument;
   '\n  query SurfaceContours($id: UUID!, $interval: Float!, $majorInterval: Float, $smoothing: Int) {\n    surfaceContours(\n      id: $id\n      interval: $interval\n      majorInterval: $majorInterval\n      smoothing: $smoothing\n    ) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n': typeof types.SurfaceContoursDocument;
   '\n  mutation BuildSurface($projectId: UUID!, $input: SurfaceInput!) {\n    buildSurface(projectId: $projectId, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n': typeof types.BuildSurfaceDocument;
+  '\n  mutation BuildSurfaceFromPoints(\n    $projectId: UUID!\n    $name: String!\n    $points: [SurfacePointInput!]!\n    $maxEdgeLength: Float\n  ) {\n    buildSurfaceFromPoints(\n      projectId: $projectId\n      name: $name\n      points: $points\n      maxEdgeLength: $maxEdgeLength\n    ) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n': typeof types.BuildSurfaceFromPointsDocument;
   '\n  mutation BuildDemSurface(\n    $projectId: UUID!\n    $name: String!\n    $filename: String!\n    $contentBase64: String!\n    $grid: DemGridInput!\n  ) {\n    buildDemSurface(\n      projectId: $projectId\n      name: $name\n      filename: $filename\n      contentBase64: $contentBase64\n      grid: $grid\n    ) {\n      id\n      vertexCount\n      triangleCount\n    }\n  }\n': typeof types.BuildDemSurfaceDocument;
   '\n  mutation RebuildSurface($id: UUID!, $input: SurfaceInput!) {\n    rebuildSurface(id: $id, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n': typeof types.RebuildSurfaceDocument;
   '\n  query ExportSurface(\n    $id: UUID!\n    $format: SurfaceExportFormat!\n    $contourInterval: Float\n    $cellSize: Float\n  ) {\n    exportSurface(\n      id: $id\n      format: $format\n      contourInterval: $contourInterval\n      cellSize: $cellSize\n    ) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n': typeof types.ExportSurfaceDocument;
@@ -187,6 +191,8 @@ const documents: Documents = {
     types.DuplicateAnalysisDocument,
   '\n  mutation SetProjectBoundary($projectId: UUID!, $boundary: String) {\n    setProjectBoundary(projectId: $projectId, boundary: $boundary) {\n      id\n      boundary\n    }\n  }\n':
     types.SetProjectBoundaryDocument,
+  '\n  query ParcelAtSite($projectId: UUID!, $serviceUrl: String!) {\n    parcelAtSite(projectId: $projectId, serviceUrl: $serviceUrl)\n  }\n':
+    types.ParcelAtSiteDocument,
   '\n  mutation UploadDxf($id: UUID!, $f: String!, $c: String!) {\n    uploadDxf(projectId: $id, filename: $f, content: $c) {\n      id\n    }\n  }\n':
     types.UploadDxfDocument,
   '\n  mutation AlignCadOverlay($id: UUID!, $src: [AlignPoint!]!, $dst: [AlignPoint!]!) {\n    alignCadOverlay(id: $id, src: $src, dst: $dst) {\n      id\n      offsetE\n      offsetN\n      rotationDeg\n      scale\n    }\n  }\n':
@@ -267,6 +273,10 @@ const documents: Documents = {
     types.SceneDocument,
   '\n  query TerrainContent($id: UUID!) {\n    projectTerrainContent(projectId: $id)\n  }\n':
     types.TerrainContentDocument,
+  '\n  query DetailedTerrainContent($id: UUID!) {\n    projectDetailedTerrainContent(projectId: $id)\n  }\n':
+    types.DetailedTerrainContentDocument,
+  '\n  mutation RefreshDetailedTerrain($id: UUID!, $force: Boolean) {\n    refreshDetailedTerrain(projectId: $id, force: $force) {\n      demtype\n      fetchedAt\n    }\n  }\n':
+    types.RefreshDetailedTerrainDocument,
   '\n  query BuildingsContent($id: UUID!) {\n    projectBuildingsContent(projectId: $id)\n  }\n':
     types.BuildingsContentDocument,
   '\n  query OverlayGeometry($id: UUID!) {\n    cadOverlayGeometry(id: $id) {\n      layers\n      polylines {\n        layer\n        points {\n          x\n          y\n        }\n      }\n    }\n  }\n':
@@ -283,6 +293,8 @@ const documents: Documents = {
     types.SurfaceContoursDocument,
   '\n  mutation BuildSurface($projectId: UUID!, $input: SurfaceInput!) {\n    buildSurface(projectId: $projectId, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n':
     types.BuildSurfaceDocument,
+  '\n  mutation BuildSurfaceFromPoints(\n    $projectId: UUID!\n    $name: String!\n    $points: [SurfacePointInput!]!\n    $maxEdgeLength: Float\n  ) {\n    buildSurfaceFromPoints(\n      projectId: $projectId\n      name: $name\n      points: $points\n      maxEdgeLength: $maxEdgeLength\n    ) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n':
+    types.BuildSurfaceFromPointsDocument,
   '\n  mutation BuildDemSurface(\n    $projectId: UUID!\n    $name: String!\n    $filename: String!\n    $contentBase64: String!\n    $grid: DemGridInput!\n  ) {\n    buildDemSurface(\n      projectId: $projectId\n      name: $name\n      filename: $filename\n      contentBase64: $contentBase64\n      grid: $grid\n    ) {\n      id\n      vertexCount\n      triangleCount\n    }\n  }\n':
     types.BuildDemSurfaceDocument,
   '\n  mutation RebuildSurface($id: UUID!, $input: SurfaceInput!) {\n    rebuildSurface(id: $id, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n':
@@ -539,6 +551,12 @@ export function graphql(
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
+  source: '\n  query ParcelAtSite($projectId: UUID!, $serviceUrl: String!) {\n    parcelAtSite(projectId: $projectId, serviceUrl: $serviceUrl)\n  }\n',
+): typeof import('./graphql').ParcelAtSiteDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
   source: '\n  mutation UploadDxf($id: UUID!, $f: String!, $c: String!) {\n    uploadDxf(projectId: $id, filename: $f, content: $c) {\n      id\n    }\n  }\n',
 ): typeof import('./graphql').UploadDxfDocument;
 /**
@@ -779,6 +797,18 @@ export function graphql(
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
+  source: '\n  query DetailedTerrainContent($id: UUID!) {\n    projectDetailedTerrainContent(projectId: $id)\n  }\n',
+): typeof import('./graphql').DetailedTerrainContentDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  mutation RefreshDetailedTerrain($id: UUID!, $force: Boolean) {\n    refreshDetailedTerrain(projectId: $id, force: $force) {\n      demtype\n      fetchedAt\n    }\n  }\n',
+): typeof import('./graphql').RefreshDetailedTerrainDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
   source: '\n  query BuildingsContent($id: UUID!) {\n    projectBuildingsContent(projectId: $id)\n  }\n',
 ): typeof import('./graphql').BuildingsContentDocument;
 /**
@@ -823,6 +853,12 @@ export function graphql(
 export function graphql(
   source: '\n  mutation BuildSurface($projectId: UUID!, $input: SurfaceInput!) {\n    buildSurface(projectId: $projectId, input: $input) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n',
 ): typeof import('./graphql').BuildSurfaceDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  mutation BuildSurfaceFromPoints(\n    $projectId: UUID!\n    $name: String!\n    $points: [SurfacePointInput!]!\n    $maxEdgeLength: Float\n  ) {\n    buildSurfaceFromPoints(\n      projectId: $projectId\n      name: $name\n      points: $points\n      maxEdgeLength: $maxEdgeLength\n    ) {\n      id\n      version\n      vertexCount\n      triangleCount\n    }\n  }\n',
+): typeof import('./graphql').BuildSurfaceFromPointsDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

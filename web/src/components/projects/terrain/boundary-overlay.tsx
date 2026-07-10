@@ -6,6 +6,9 @@ import { drapeLocalY, type Frame, type Sampler, type Vec3 } from '../terrain-fra
 import { AnimatedLine, AnimatedMarker } from './animated-line';
 
 const COLOR = '#10b981'; // emerald — the property boundary
+const LIFT = 0.25; // float just above the surface to avoid z-fighting
+// Subdivisions per edge so a draped edge follows the terrain (as grid lines do).
+const SEG = 24;
 
 /** Draws the project's property boundary as a closed emerald ring draped on the
  *  terrain, with a marker at each vertex. `draft` styles the in-progress edit
@@ -27,18 +30,40 @@ export function BoundaryOverlay({
   visible?: boolean;
   draft?: boolean;
 }) {
-  const pts = useMemo(
-    () =>
-      points.map((p): Vec3 => {
-        const x = p.e - originE;
-        const z = -(p.n - originN);
-        const y = frame ? drapeLocalY(frame, sample, x, z, 0, 0.25) : 0.25;
-        return [x, y, z];
-      }),
-    [points, originE, originN, frame, sample],
-  );
-  // Close the ring once there are enough vertices to form a polygon.
-  const ring = useMemo(() => (pts.length >= 3 ? [...pts, pts[0]] : pts), [pts]);
+  // Drape a projected E/N point onto the terrain in the local frame.
+  const drape = useMemo(() => {
+    return (e: number, n: number): Vec3 => {
+      const x = e - originE;
+      const z = -(n - originN);
+      const y = frame ? drapeLocalY(frame, sample, x, z, 0, LIFT) : LIFT;
+      return [x, y, z];
+    };
+  }, [originE, originN, frame, sample]);
+
+  // Draped vertex positions (for the markers).
+  const vertexPts = useMemo(() => points.map((p) => drape(p.e, p.n)), [points, drape]);
+
+  // Densified + draped ring: subdivide each edge so the line hugs the terrain
+  // between vertices instead of cutting straight through it (like grid lines).
+  const ring = useMemo(() => {
+    if (points.length < 2) {
+      return [];
+    }
+    const closed = points.length >= 3;
+    const seq = closed ? [...points, points[0]] : points;
+    const out: Vec3[] = [];
+    for (let i = 0; i < seq.length - 1; i++) {
+      const a = seq[i];
+      const b = seq[i + 1];
+      for (let s = 0; s < SEG; s++) {
+        const t = s / SEG;
+        out.push(drape(a.e + (b.e - a.e) * t, a.n + (b.n - a.n) * t));
+      }
+    }
+    const last = seq[seq.length - 1];
+    out.push(drape(last.e, last.n));
+    return out;
+  }, [points, drape]);
 
   if (points.length === 0) {
     return null;
@@ -56,7 +81,7 @@ export function BoundaryOverlay({
           visible={visible}
         />
       ) : null}
-      {pts.map((p, i) => (
+      {vertexPts.map((p, i) => (
         <AnimatedMarker
           key={i}
           position={p}

@@ -877,3 +877,52 @@ async fn build_dem_surface_from_a_grid(pool: PgPool) {
         .unwrap()
         .starts_with("U1RJ"));
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn build_surface_from_digitized_points(pool: PgPool) {
+    // A flat design pad from four digitized corners (constant z) → a TIN with
+    // 4 vertices / 2 triangles, usable in volume analysis.
+    let schema = schema(pool.clone());
+    let (admin, org, _) = signup(&schema, "pad@example.com", "Pad Co").await;
+    set_paid(&pool, org).await;
+    let auth = admin_ctx(admin, org);
+    let pid = create_project(&schema, auth.clone(), "Pad").await;
+
+    let q = r#"mutation ($pid: UUID!, $pts: [SurfacePointInput!]!) {
+        buildSurfaceFromPoints(projectId: $pid, name: "Design pad", points: $pts) {
+            id kind status vertexCount triangleCount
+        }
+    }"#;
+    let r = exec_ok_vars(
+        &schema,
+        q,
+        serde_json::json!({ "pid": pid, "pts": [
+            { "e": 0.0, "n": 0.0, "z": 20.0 },
+            { "e": 100.0, "n": 0.0, "z": 20.0 },
+            { "e": 100.0, "n": 100.0, "z": 20.0 },
+            { "e": 0.0, "n": 100.0, "z": 20.0 },
+        ] }),
+        auth.clone(),
+    )
+    .await;
+    let s = &r["buildSurfaceFromPoints"];
+    assert_eq!(s["kind"], serde_json::json!("TIN"));
+    assert_eq!(s["status"], serde_json::json!("READY"));
+    assert_eq!(s["vertexCount"].as_i64().unwrap(), 4);
+    assert_eq!(s["triangleCount"].as_i64().unwrap(), 2);
+
+    // Fewer than three points is rejected.
+    let msg = exec_err_vars(
+        &schema,
+        q,
+        serde_json::json!({ "pid": pid, "pts": [
+            { "e": 0.0, "n": 0.0, "z": 20.0 }, { "e": 1.0, "n": 0.0, "z": 20.0 },
+        ] }),
+        auth,
+    )
+    .await;
+    assert!(
+        msg.contains("at least three"),
+        "expected min-points error: {msg}"
+    );
+}

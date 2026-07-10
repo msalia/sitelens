@@ -47,6 +47,97 @@ impl ProjectQuery {
         Ok(row.map(Project::from))
     }
 
+    /// Looks up the property parcel containing the project's site origin from an
+    /// **ArcGIS parcel Feature Service** (a county/state GIS layer REST URL). Returns
+    /// the parcel's outer ring as a JSON `[[e,n],…]` string in the site's projected
+    /// meters — ready to drop into the boundary editor — or null when the service
+    /// covers no parcel at that point. Assessor/GIS parcels are approximate reference
+    /// data, **not** a legal survey; the user refines against monuments.
+    async fn parcel_at_site(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        service_url: String,
+    ) -> Result<Option<String>> {
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        let row: Option<(Option<f64>, Option<f64>, i32)> = sqlx::query_as(
+            "SELECT site_origin_lat, site_origin_lon, epsg_code FROM projects \
+             WHERE id = $1 AND org_id = $2",
+        )
+        .bind(project_id)
+        .bind(auth.org_id)
+        .fetch_optional(pool)
+        .await?;
+        let (lat, lon, epsg) = match found_in_org(row, "project")? {
+            (Some(la), Some(lo), e) => (la, lo, e),
+            _ => return Err(async_graphql::Error::new("set the site origin first")),
+        };
+
+        // Basic SSRF guard: only public ArcGIS REST layer URLs over https.
+        let url = service_url.trim().trim_end_matches('/');
+        if !url.starts_with("https://") || !url.contains("/rest/services") {
+            return Err(async_graphql::Error::new(
+                "provide an https ArcGIS REST layer URL (…/rest/services/…/FeatureServer/0)",
+            ));
+        }
+        let query = format!(
+            "{url}/query?f=geojson&geometryType=esriGeometryPoint&inSR=4326&outSR=4326\
+             &spatialRel=esriSpatialRelIntersects&returnGeometry=true&outFields=\
+             &geometry={lon}%2C{lat}"
+        );
+        let client = reqwest::Client::new();
+        let resp = client
+            .get(&query)
+            .timeout(std::time::Duration::from_secs(20))
+            .send()
+            .await
+            .map_err(|e| {
+                async_graphql::Error::new(format!("parcel service request failed: {e}"))
+            })?;
+        if !resp.status().is_success() {
+            return Err(async_graphql::Error::new(format!(
+                "parcel service returned HTTP {}",
+                resp.status()
+            )));
+        }
+        let body = resp
+            .text()
+            .await
+            .map_err(|e| async_graphql::Error::new(format!("parcel service read failed: {e}")))?;
+        let gj: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
+            async_graphql::Error::new(format!("parcel service returned invalid GeoJSON: {e}"))
+        })?;
+
+        // First feature's outer ring: Polygon → coords[0]; MultiPolygon → coords[0][0].
+        let geom = &gj["features"][0]["geometry"];
+        let ring = match geom["type"].as_str() {
+            Some("Polygon") => geom["coordinates"].get(0usize),
+            Some("MultiPolygon") => geom["coordinates"].get(0usize).and_then(|p| p.get(0usize)),
+            _ => None,
+        };
+        let Some(ring) = ring.and_then(|r| r.as_array()) else {
+            return Ok(None); // no parcel at this point
+        };
+        // Reproject [lon,lat] → site projected meters; drop the closed-ring duplicate.
+        let mut out: Vec<[f64; 2]> = Vec::with_capacity(ring.len());
+        for pt in ring {
+            let (Some(lo), Some(la)) = (pt[0].as_f64(), pt[1].as_f64()) else {
+                continue;
+            };
+            if let Some((e, n)) = crate::crs::geographic_to_projected(epsg, la, lo) {
+                out.push([e, n]);
+            }
+        }
+        if out.len() > 1 && out.first() == out.last() {
+            out.pop();
+        }
+        if out.len() < 3 {
+            return Ok(None);
+        }
+        Ok(Some(serde_json::to_string(&out).unwrap()))
+    }
+
     /// Exports a project as a self-contained `.slx` archive (JSON text) with all
     /// of its authored data. Re-import with `importProject`.
     async fn project_export(&self, ctx: &Context<'_>, project_id: Uuid) -> Result<String> {
@@ -277,6 +368,7 @@ impl ProjectMutation {
 pub(crate) async fn purge_project_files(storage: &dyn Storage, project_id: Uuid) {
     let dxf_dir = format!("dxf/{project_id}");
     let terrain = format!("terrain/{project_id}.tif");
+    let detailed = format!("terrain-detailed/{project_id}.tif");
     let buildings = format!("buildings/{project_id}.json");
     if let Err(e) = storage.delete_prefix(&dxf_dir).await {
         eprintln!("purge_project_files: {dxf_dir}: {e}");
@@ -285,6 +377,11 @@ pub(crate) async fn purge_project_files(storage: &dyn Storage, project_id: Uuid)
         // Ignore not-found; only log unexpected errors.
         if storage.exists(&terrain).await {
             eprintln!("purge_project_files: {terrain}: {e}");
+        }
+    }
+    if let Err(e) = storage.delete(&detailed).await {
+        if storage.exists(&detailed).await {
+            eprintln!("purge_project_files: {detailed}: {e}");
         }
     }
     if let Err(e) = storage.delete(&buildings).await {

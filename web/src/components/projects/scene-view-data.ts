@@ -101,6 +101,23 @@ export const TERRAIN_CONTENT = graphql(`
   }
 `);
 
+/** Detailed (1 m 3DEP) terrain GeoTIFF — null when none fetched. */
+export const DETAILED_TERRAIN_CONTENT = graphql(`
+  query DetailedTerrainContent($id: UUID!) {
+    projectDetailedTerrainContent(projectId: $id)
+  }
+`);
+
+/** Fetch the 1 m 3DEP terrain for the project's boundary AOI. */
+export const REFRESH_DETAILED_TERRAIN = graphql(`
+  mutation RefreshDetailedTerrain($id: UUID!, $force: Boolean) {
+    refreshDetailedTerrain(projectId: $id, force: $force) {
+      demtype
+      fetchedAt
+    }
+  }
+`);
+
 export const BUILDINGS_CONTENT = graphql(`
   query BuildingsContent($id: UUID!) {
     projectBuildingsContent(projectId: $id)

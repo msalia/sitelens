@@ -805,6 +805,14 @@ type MutationRoot {
 	"""
 	refreshTerrain(projectId: UUID!, south: Float!, north: Float!, west: Float!, east: Float!, demtype: String, force: Boolean): ProjectTerrain!
 	"""
+	Fetches (if needed) the **1 m USGS 3DEP LiDAR** DEM for the project's
+	property-boundary AOI — the accurate base for cut/fill volumes (and future
+	hydrology), distinct from the coarse context terrain. Requires a boundary;
+	the client calls this alongside `refreshTerrain` when one is defined. Same
+	7-day cooldown; API key stays server-side.
+	"""
+	refreshDetailedTerrain(projectId: UUID!, force: Boolean): ProjectTerrain!
+	"""
 	Fetches (if needed) and caches OSM building footprints for the bbox from
 	the free Overpass API. Same 7-day cooldown as terrain. Visual context only.
 	"""
@@ -867,6 +875,12 @@ type MutationRoot {
 	Builds a new TIN surface from selected survey points.
 	"""
 	buildSurface(projectId: UUID!, input: SurfaceInput!): Surface!
+	"""
+	Builds a TIN surface directly from digitized points (a drawn design pad or
+	graded points) instead of stored survey points. Each point carries its own
+	elevation — a flat pad passes a constant z, a graded surface per-point z.
+	"""
+	buildSurfaceFromPoints(projectId: UUID!, name: String!, points: [SurfacePointInput!]!, maxEdgeLength: Float): Surface!
 	"""
 	Rebuilds an existing surface from (possibly new) inputs → next version.
 	"""
@@ -1241,6 +1255,15 @@ type QueryRoot {
 	"""
 	project(id: UUID!): Project
 	"""
+	Looks up the property parcel containing the project's site origin from an
+	**ArcGIS parcel Feature Service** (a county/state GIS layer REST URL). Returns
+	the parcel's outer ring as a JSON `[[e,n],…]` string in the site's projected
+	meters — ready to drop into the boundary editor — or null when the service
+	covers no parcel at that point. Assessor/GIS parcels are approximate reference
+	data, **not** a legal survey; the user refines against monuments.
+	"""
+	parcelAtSite(projectId: UUID!, serviceUrl: String!): String
+	"""
 	Exports a project as a self-contained `.slx` archive (JSON text) with all
 	of its authored data. Re-import with `importProject`.
 	"""
@@ -1308,6 +1331,16 @@ type QueryRoot {
 	Base64-encoded cached DEM GeoTIFF for the project's terrain.
 	"""
 	projectTerrainContent(projectId: UUID!): String!
+	"""
+	Cached detailed (1 m 3DEP) terrain metadata for a project (null until first
+	fetched). Present only when a boundary was defined at refresh time.
+	"""
+	projectDetailedTerrain(projectId: UUID!): ProjectTerrain
+	"""
+	Base64 detailed-terrain GeoTIFF, or null when none is cached (so the client
+	can fall back to the coarse terrain).
+	"""
+	projectDetailedTerrainContent(projectId: UUID!): String
 	"""
 	Cached OSM buildings metadata for a project (null when none fetched yet).
 	"""
@@ -1691,6 +1724,16 @@ Phase 1 only builds `Tin`.
 enum SurfaceKind {
 	TIN
 	DEM
+}
+
+"""
+A digitized surface point (projected meters + elevation). A flat design pad
+passes a constant `z`; a graded surface passes each point's own `z`.
+"""
+input SurfacePointInput {
+	e: Float!
+	n: Float!
+	z: Float!
 }
 
 """

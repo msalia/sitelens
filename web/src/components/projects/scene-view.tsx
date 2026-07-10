@@ -35,6 +35,7 @@ import {
   FRESH_MS,
   OVERLAY_GEOMETRY,
   REFRESH_BUILDINGS,
+  REFRESH_DETAILED_TERRAIN,
   REFRESH_TERRAIN,
   SCENE_QUERY,
   sceneBbox,
@@ -152,6 +153,8 @@ export function SceneView({
   const [contourBlob, setContourBlob] = useState<{ contentBase64: string } | null>(null);
   const [volumeBlob, setVolumeBlob] = useState<{ contentBase64: string } | null>(null);
   const [showVolume, setShowVolume] = useState(true);
+  // Show the cut/fill heatmap lifted to the finished grade (post-earthwork).
+  const [gradedVolume, setGradedVolume] = useState(false);
   const [constraints, setConstraints] = useState<SceneConstraint[]>([]);
   const [showConstraints, setShowConstraints] = useState(true);
   const [underground, setUnderground] = useState(false);
@@ -472,6 +475,16 @@ export function SceneView({
         failed.push('buildings');
       }
     }
+    // Detailed 1 m terrain — only when a boundary bounds the AOI. Best-effort:
+    // 1 m 3DEP coverage is patchy, so a miss isn't a hard failure.
+    if (project.boundary) {
+      try {
+        await gql(REFRESH_DETAILED_TERRAIN, { force: false, id: project.id });
+        done.push('detailed terrain');
+      } catch {
+        failed.push('detailed terrain');
+      }
+    }
     setRefreshing(false);
     // Anti-spam: any attempt (success or failure) holds the button for 30 min.
     setCooldownUntil(Date.now() + SPAM_COOLDOWN_MS);
@@ -482,7 +495,15 @@ export function SceneView({
     if (failed.length > 0) {
       toast.error(`Couldn't fetch ${failed.join(' & ')}.`);
     }
-  }, [scene, project.id, terrainMeta, buildingsMeta, loadTerrainContent, loadBuildingsContent]);
+  }, [
+    scene,
+    project.id,
+    project.boundary,
+    terrainMeta,
+    buildingsMeta,
+    loadTerrainContent,
+    loadBuildingsContent,
+  ]);
 
   const onSelectPoint = useCallback(
     (id: string) => {
@@ -580,6 +601,7 @@ export function SceneView({
             contourLabels={contours.labels}
             volumeHeatmap={volumeBlob}
             showVolume={showVolume}
+            volumeGraded={gradedVolume}
             displayUnit={project.displayUnit}
             constraints={constraints}
             showConstraints={showConstraints}
@@ -700,6 +722,18 @@ export function SceneView({
               +{Math.abs(fromMeters(volumeRange.maxDz, project.displayUnit)).toFixed(1)}
             </span>
           </div>
+          {/* Toggle: drape the heatmap flat vs lift it to the finished grade. */}
+          <button
+            type="button"
+            onClick={() => setGradedVolume((g) => !g)}
+            className="hover:bg-accent pointer-events-auto mt-1.5 flex w-full items-center justify-between rounded border px-2 py-1 text-[11px]"
+            title="Lift the heatmap to the post-earthwork grade"
+          >
+            <span>Graded terrain</span>
+            <span className={gradedVolume ? 'text-primary font-semibold' : 'text-muted-foreground'}>
+              {gradedVolume ? 'On' : 'Off'}
+            </span>
+          </button>
         </div>
       ) : null}
 

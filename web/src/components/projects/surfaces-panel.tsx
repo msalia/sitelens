@@ -10,6 +10,7 @@ import {
   IconRefresh,
   IconTrash,
   IconVectorTriangle,
+  IconWorldDownload,
   IconX,
 } from '@tabler/icons-react';
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
@@ -48,10 +49,13 @@ import { gql, useMutation } from '@/lib/graphql';
 import { UNIT_LABELS } from '@/lib/types';
 import { formatArea, formatVolume, toMeters, type VolumeUnit } from '@/lib/units';
 
+import { DETAILED_TERRAIN_CONTENT, TERRAIN_CONTENT } from './scene-view-data';
 import {
   AUTO_BOUNDARY,
   BREAKLINES,
+  BUILD_DEM_SURFACE,
   BUILD_SURFACE,
+  BUILD_SURFACE_FROM_POINTS,
   COMPUTE_VOLUME,
   type ContourSettings,
   CREATE_BREAKLINE,
@@ -64,6 +68,7 @@ import {
   SURFACES,
   VOLUMES,
 } from './surfaces-data';
+import { base64ToBytes, demGridArgs, parseDemArrayBuffer } from './surfaces/parse-dem';
 import { POINT_GROUPS } from './survey-points-data';
 
 type Scope = 'ALL' | 'CATEGORY' | 'GROUP';
@@ -213,6 +218,15 @@ export function SurfacesPanel({
   const [captureKind, setCaptureKind] = useState<BreaklineKind>('HARD');
   const [capturing, setCapturing] = useState(false);
   const [captureVerts, setCaptureVerts] = useState<{ e: number; n: number; z: number }[]>([]);
+  // Design-surface (digitized pad / graded points) capture state.
+  const [designMode, setDesignMode] = useState<'PAD' | 'GRADED'>('PAD');
+  const [designCapturing, setDesignCapturing] = useState(false);
+  const [designVerts, setDesignVerts] = useState<{ e: number; n: number; z: number }[]>([]);
+  const [designName, setDesignName] = useState('Design surface');
+  const [padElev, setPadElev] = useState('');
+  const [deIn, setDeIn] = useState('');
+  const [dnIn, setDnIn] = useState('');
+  const [dzIn, setDzIn] = useState('');
   // Volume state.
   const [volumes, setVolumes] = useState<VolumeRow[]>([]);
   const [volName, setVolName] = useState('Volume 1');
@@ -274,11 +288,23 @@ export function SurfacesPanel({
     void loadVolumes();
   }, [load, loadBreaklines, loadGroups, loadVolumes]);
 
+  // Drop stale volume selections when the surface list changes (a rebuilt/deleted
+  // surface) so the picker shows a name/placeholder, never a raw id.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setVolBase((cur) => (cur && surfaces.some((s) => s.id === cur) ? cur : ''));
+    setVolCompare((cur) => (cur && surfaces.some((s) => s.id === cur) ? cur : ''));
+  }, [surfaces]);
+
   // Route snapped survey points into the active capture while digitizing.
   useEffect(() => {
     if (capturing) {
       pickRef.current = (p) =>
         setCaptureVerts((v) => [...v, { e: p.easting, n: p.northing, z: p.height }]);
+      onDigitizingChange(true);
+    } else if (designCapturing) {
+      pickRef.current = (p) =>
+        setDesignVerts((v) => [...v, { e: p.easting, n: p.northing, z: p.height }]);
       onDigitizingChange(true);
     } else {
       pickRef.current = null;
@@ -287,7 +313,7 @@ export function SurfacesPanel({
     return () => {
       pickRef.current = null;
     };
-  }, [capturing, pickRef, onDigitizingChange]);
+  }, [capturing, designCapturing, pickRef, onDigitizingChange]);
 
   // Clear the scene hint if the panel unmounts mid-capture.
   useEffect(() => () => onDigitizingChange(false), [onDigitizingChange]);
@@ -321,6 +347,91 @@ export function SurfacesPanel({
       },
       success: 'Surface built',
     });
+
+  // Add a digitized point by coordinates (Z from the pad elevation in PAD mode).
+  const addDesignNumeric = () => {
+    const e = Number(deIn);
+    const n = Number(dnIn);
+    const z = designMode === 'GRADED' ? Number(dzIn) : Number(padElev) || 0;
+    const zBad = designMode === 'GRADED' && (dzIn === '' || !Number.isFinite(z));
+    if (!Number.isFinite(e) || !Number.isFinite(n) || deIn === '' || dnIn === '' || zBad) {
+      toast.error('Enter easting, northing' + (designMode === 'GRADED' ? ', and elevation.' : '.'));
+      return;
+    }
+    setDesignVerts((v) => [...v, { e, n, z }]);
+    setDeIn('');
+    setDnIn('');
+    setDzIn('');
+  };
+
+  // Build a TIN from the digitized points: a flat pad forces every z to the pad
+  // elevation; a graded surface keeps each point's own z.
+  const buildDesign = () =>
+    run(
+      () => {
+        const pts =
+          designMode === 'PAD'
+            ? designVerts.map((v) => ({ e: v.e, n: v.n, z: Number(padElev) || 0 }))
+            : designVerts.map((v) => ({ e: v.e, n: v.n, z: v.z }));
+        return gql(BUILD_SURFACE_FROM_POINTS, {
+          maxEdgeLength: maxEdge ? Number(maxEdge) : null,
+          name: designName.trim() || 'Design surface',
+          points: pts,
+          projectId: project.id,
+        });
+      },
+      {
+        error: 'Could not build the design surface',
+        onDone: async (res) => {
+          setDesignCapturing(false);
+          setDesignVerts([]);
+          await load();
+          if (res?.buildSurfaceFromPoints.id) {
+            onSelect(res.buildSurfaceFromPoints.id);
+          }
+          onChanged();
+        },
+        success: 'Design surface built',
+      },
+    );
+
+  // Snapshot the project's fetched terrain (client-decoded GeoTIFF) into a normal
+  // surface, so it can be a volume base/compare — e.g. cut/fill of a design pad.
+  const snapshotTerrain = () =>
+    run(
+      async () => {
+        // Prefer the detailed 1 m terrain (accurate for volumes); fall back to the
+        // coarse context terrain when no boundary/1 m fetch exists.
+        const { projectDetailedTerrainContent: detailed } = await gql(DETAILED_TERRAIN_CONTENT, {
+          id: project.id,
+        });
+        const content =
+          detailed ?? (await gql(TERRAIN_CONTENT, { id: project.id })).projectTerrainContent;
+        if (!content) {
+          throw new Error('No terrain fetched yet — refresh terrain first.');
+        }
+        const bytes = base64ToBytes(content);
+        const dem = await parseDemArrayBuffer(bytes.buffer as ArrayBuffer, content);
+        return gql(BUILD_DEM_SURFACE, {
+          contentBase64: content,
+          filename: detailed ? 'terrain-1m.tif' : 'terrain.tif',
+          grid: demGridArgs(dem),
+          name: detailed ? 'Existing terrain (1 m)' : 'Existing terrain (coarse)',
+          projectId: project.id,
+        });
+      },
+      {
+        error: 'Could not capture the terrain',
+        onDone: async (res) => {
+          await load();
+          if (res?.buildDemSurface.id) {
+            onSelect(res.buildDemSurface.id);
+          }
+          onChanged();
+        },
+        success: 'Terrain captured as a surface',
+      },
+    );
 
   const rebuild = (id: string) =>
     run(() => gql(REBUILD_SURFACE, { id, input: currentInput }), {
@@ -612,15 +723,200 @@ export function SurfacesPanel({
               <span className="text-muted-foreground text-xs">or</span>
               <div className="bg-border h-px flex-1" />
             </div>
-            <UploadDemDialog
-              project={project}
-              onUploaded={(id) => {
-                void load();
-                onSelect(id);
-                onChanged();
-              }}
-            />
+            <div className="flex gap-2 [&>*]:flex-1">
+              <UploadDemDialog
+                project={project}
+                onUploaded={(id) => {
+                  void load();
+                  onSelect(id);
+                  onChanged();
+                }}
+              />
+              <Button type="button" variant="outline" disabled={busy} onClick={snapshotTerrain}>
+                <IconWorldDownload className="mr-1 size-4" /> Use existing terrain
+              </Button>
+            </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Design surface — digitize a building pad / graded points, then compare it
+          to the existing terrain for cut/fill. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Design surface</CardTitle>
+          <CardDescription>
+            Draw a building pad or graded points — snap to grid / survey / DXF, or type coordinates.
+            Compare it to “Existing terrain” for a cut/fill volume.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <Field>
+            <FieldLabel htmlFor="design-name">Name</FieldLabel>
+            <Input
+              id="design-name"
+              value={designName}
+              onChange={(e) => setDesignName(e.target.value)}
+            />
+          </Field>
+          <div className="grid grid-cols-2 gap-2">
+            <Field>
+              <FieldLabel htmlFor="design-mode">Mode</FieldLabel>
+              <Select
+                value={designMode}
+                onValueChange={(v) => v && setDesignMode(v as 'GRADED' | 'PAD')}
+              >
+                <SelectTrigger id="design-mode" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Surface mode</SelectLabel>
+                    <SelectItem value="PAD">Flat pad</SelectItem>
+                    <SelectItem value="GRADED">Graded points</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            {designMode === 'PAD' ? (
+              <Field>
+                <FieldLabel htmlFor="design-pad-elev">Pad elevation (m)</FieldLabel>
+                <Input
+                  id="design-pad-elev"
+                  type="number"
+                  step="any"
+                  placeholder="e.g. 12.5"
+                  value={padElev}
+                  onChange={(e) => setPadElev(e.target.value)}
+                />
+              </Field>
+            ) : null}
+          </div>
+
+          {designCapturing ? (
+            <div className="border-primary bg-primary/5 flex flex-col gap-2 rounded-md border p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Drawing — {designVerts.length} point(s)</span>
+                <span className="text-muted-foreground text-xs">
+                  {designMode === 'PAD' ? 'flat pad' : 'graded'} · click points to snap
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                {designVerts.length === 0 ? (
+                  <p className="text-muted-foreground text-xs">
+                    No points yet — click points in the 3D scene or add by coordinates below.
+                  </p>
+                ) : (
+                  designVerts.map((v, i) => (
+                    <div
+                      key={i}
+                      className="bg-muted/40 flex items-center gap-2 rounded px-2 py-1 text-xs"
+                    >
+                      <span className="text-muted-foreground w-5 tabular-nums">{i + 1}.</span>
+                      <span className="min-w-0 flex-1 truncate">
+                        E {v.e.toFixed(2)} · N {v.n.toFixed(2)}
+                        {designMode === 'GRADED' ? ` · Z ${v.z.toFixed(2)}` : ''}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={`Remove point ${i + 1}`}
+                        className="text-muted-foreground hover:text-foreground"
+                        onClick={() => setDesignVerts((vs) => vs.filter((_, j) => j !== i))}
+                      >
+                        <IconX className="size-3.5" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="flex items-end gap-1.5">
+                <Field className="flex-1">
+                  <FieldLabel htmlFor="design-e">Easting</FieldLabel>
+                  <Input
+                    id="design-e"
+                    type="number"
+                    step="any"
+                    placeholder="E"
+                    value={deIn}
+                    onChange={(e) => setDeIn(e.target.value)}
+                  />
+                </Field>
+                <Field className="flex-1">
+                  <FieldLabel htmlFor="design-n">Northing</FieldLabel>
+                  <Input
+                    id="design-n"
+                    type="number"
+                    step="any"
+                    placeholder="N"
+                    value={dnIn}
+                    onChange={(e) => setDnIn(e.target.value)}
+                  />
+                </Field>
+                {designMode === 'GRADED' ? (
+                  <Field className="flex-1">
+                    <FieldLabel htmlFor="design-z">Elev</FieldLabel>
+                    <Input
+                      id="design-z"
+                      type="number"
+                      step="any"
+                      placeholder="Z"
+                      value={dzIn}
+                      onChange={(e) => setDzIn(e.target.value)}
+                    />
+                  </Field>
+                ) : null}
+                <Button type="button" variant="secondary" onClick={addDesignNumeric}>
+                  Add
+                </Button>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setDesignCapturing(false);
+                    setDesignVerts([]);
+                  }}
+                >
+                  <IconX className="mr-1 size-4" /> Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setDesignVerts((v) => v.slice(0, -1))}
+                  disabled={designVerts.length === 0}
+                >
+                  Undo
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={buildDesign}
+                  disabled={
+                    busy || designVerts.length < 3 || (designMode === 'PAD' && padElev === '')
+                  }
+                >
+                  <IconMountain className="mr-1 size-4" /> Build surface
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              type="button"
+              onClick={() => {
+                setCapturing(false);
+                setDesignVerts([]);
+                setDesignCapturing(true);
+              }}
+            >
+              <IconPencil className="mr-1 size-4" /> Draw points
+            </Button>
+          )}
         </CardContent>
       </Card>
 
@@ -698,7 +994,10 @@ export function SurfacesPanel({
                   type="button"
                   size="sm"
                   className="shrink-0"
-                  onClick={() => setCapturing(true)}
+                  onClick={() => {
+                    setDesignCapturing(false);
+                    setCapturing(true);
+                  }}
                 >
                   <IconPencil className="mr-1 size-4" /> Digitize
                 </Button>

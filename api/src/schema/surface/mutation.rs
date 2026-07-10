@@ -2,7 +2,8 @@ use serde_json::{json, Value};
 
 use crate::models::{
     BreaklineImportResult, BreaklineInput, BreaklineKind, BreaklineLayerMapping, DemGridInput,
-    PointScope, Surface, SurfaceBreakline, SurfaceInput, Volume, VolumeComparison, VolumeInput,
+    PointScope, Surface, SurfaceBreakline, SurfaceInput, SurfacePointInput, Volume,
+    VolumeComparison, VolumeInput,
 };
 use crate::schema::*;
 use crate::surface::geom;
@@ -59,6 +60,61 @@ impl SurfaceMutation {
         .bind(project_id)
         .bind(&input.name)
         .bind(sqlx::types::Json(inputs_snapshot(&input)))
+        .bind(&storage_key)
+        .bind(vertex_count)
+        .bind(triangle_count)
+        .bind(auth.user_id)
+        .fetch_one(pool)
+        .await?;
+        Ok(row_to_surface(row))
+    }
+
+    /// Builds a TIN surface directly from digitized points (a drawn design pad or
+    /// graded points) instead of stored survey points. Each point carries its own
+    /// elevation — a flat pad passes a constant z, a graded surface per-point z.
+    async fn build_surface_from_points(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        name: String,
+        points: Vec<SurfacePointInput>,
+        max_edge_length: Option<f64>,
+    ) -> Result<Surface> {
+        require_feature(ctx, Feature::Surfaces).await?;
+        let auth = require_editor_active(ctx).await?;
+        let pool = pool(ctx)?;
+        // Org-ownership check + CRS for the geographic reprojection.
+        let crs = load_project_crs(pool, project_id, auth.org_id).await?;
+        if points.len() < 3 {
+            return Err(async_graphql::Error::new(
+                "a surface needs at least three points",
+            ));
+        }
+        let pts: Vec<(f64, f64, Option<f64>)> =
+            points.iter().map(|p| (p.e, p.n, Some(p.z))).collect();
+        let point_count = pts.len();
+        let (blob, vertex_count, triangle_count) =
+            build_mesh_blob(&crs, pts, Vec::new(), max_edge_length).await?;
+
+        let id = Uuid::new_v4();
+        let storage_key = format!("surface/{project_id}/{id}.bin");
+        storage(ctx)?
+            .put(&storage_key, &blob)
+            .await
+            .map_err(async_graphql::Error::new)?;
+
+        let inputs = json!({ "source": "digitized", "pointCount": point_count });
+        let row: SurfaceRow = sqlx::query_as(&format!(
+            "INSERT INTO surfaces \
+               (id, project_id, name, version, kind, status, inputs, storage_key, \
+                vertex_count, triangle_count, created_by) \
+             VALUES ($1, $2, $3, 1, 'tin', 'ready', $4, $5, $6, $7, $8) \
+             RETURNING {SURFACE_COLUMNS}"
+        ))
+        .bind(id)
+        .bind(project_id)
+        .bind(&name)
+        .bind(sqlx::types::Json(inputs))
         .bind(&storage_key)
         .bind(vertex_count)
         .bind(triangle_count)

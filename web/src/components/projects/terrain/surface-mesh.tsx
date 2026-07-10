@@ -170,6 +170,12 @@ export function SurfaceMesh({
         roughness={1}
         metalness={0}
         side={THREE.DoubleSide}
+        // Bias the surface toward the camera so a surface that sits on/near the
+        // terrain (e.g. a DEM/terrain snapshot) renders cleanly instead of
+        // z-fighting the terrain mesh.
+        polygonOffset
+        polygonOffsetFactor={-1}
+        polygonOffsetUnits={-1}
       />
     </mesh>
   );

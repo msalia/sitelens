@@ -152,6 +152,8 @@ export interface TerrainViewerProps {
   visibleIds?: Set<string> | null;
   /** Utility type keys to show; null shows all. */
   visibleUtilityTypes?: Set<string> | null;
+  /** Lift the volume heatmap to the finished grade (base + Δz) instead of flat. */
+  volumeGraded?: boolean;
   /** Active volume's cut/fill heatmap grid (SVOL base64), or null when none. */
   volumeHeatmap?: { contentBase64: string } | null;
 }
@@ -202,6 +204,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
     visibleCategoryIds,
     visibleIds,
     visibleUtilityTypes = null,
+    volumeGraded = false,
     volumeHeatmap,
   } = props;
   // Keep `frame` referentially stable while the geographic origin is unchanged,
@@ -379,7 +382,11 @@ export function TerrainViewer(props: TerrainViewerProps) {
 
       {volumeHeatmap ? (
         <Fade visible={showVolume}>
-          <VolumeHeatmap contentBase64={volumeHeatmap.contentBase64} frame={frame} />
+          <VolumeHeatmap
+            contentBase64={volumeHeatmap.contentBase64}
+            frame={frame}
+            graded={volumeGraded}
+          />
         </Fade>
       ) : null}
 

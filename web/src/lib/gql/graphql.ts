@@ -239,6 +239,16 @@ export type SurfaceInput = {
 export type SurfaceKind = 'DEM' | 'TIN';
 
 /**
+ * A digitized surface point (projected meters + elevation). A flat design pad
+ * passes a constant `z`; a graded surface passes each point's own `z`.
+ */
+export type SurfacePointInput = {
+  e: number;
+  n: number;
+  z: number;
+};
+
+/**
  * Build lifecycle. Triangulation runs synchronously (inside the mutation), so a
  * returned surface is already `Ready` or `Failed`; `Building` exists for
  * forward-compat with the larger DEM surfaces in a later phase.
@@ -631,6 +641,13 @@ export type SetProjectBoundaryMutationVariables = Exact<{
 export type SetProjectBoundaryMutation = {
   setProjectBoundary: { id: string; boundary: string | null };
 };
+
+export type ParcelAtSiteQueryVariables = Exact<{
+  projectId: string;
+  serviceUrl: string;
+}>;
+
+export type ParcelAtSiteQuery = { parcelAtSite: string | null };
 
 export type UploadDxfMutationVariables = Exact<{
   id: string;
@@ -1129,6 +1146,21 @@ export type TerrainContentQueryVariables = Exact<{
 
 export type TerrainContentQuery = { projectTerrainContent: string };
 
+export type DetailedTerrainContentQueryVariables = Exact<{
+  id: string;
+}>;
+
+export type DetailedTerrainContentQuery = { projectDetailedTerrainContent: string | null };
+
+export type RefreshDetailedTerrainMutationVariables = Exact<{
+  id: string;
+  force?: boolean | null | undefined;
+}>;
+
+export type RefreshDetailedTerrainMutation = {
+  refreshDetailedTerrain: { demtype: string; fetchedAt: string };
+};
+
 export type BuildingsContentQueryVariables = Exact<{
   id: string;
 }>;
@@ -1212,6 +1244,22 @@ export type BuildSurfaceMutationVariables = Exact<{
 
 export type BuildSurfaceMutation = {
   buildSurface: { id: string; version: number; vertexCount: number; triangleCount: number };
+};
+
+export type BuildSurfaceFromPointsMutationVariables = Exact<{
+  projectId: string;
+  name: string;
+  points: Array<SurfacePointInput> | SurfacePointInput;
+  maxEdgeLength?: number | null | undefined;
+}>;
+
+export type BuildSurfaceFromPointsMutation = {
+  buildSurfaceFromPoints: {
+    id: string;
+    version: number;
+    vertexCount: number;
+    triangleCount: number;
+  };
 };
 
 export type BuildDemSurfaceMutationVariables = Exact<{
@@ -2009,6 +2057,11 @@ export const SetProjectBoundaryDocument = new TypedDocumentString(`
   SetProjectBoundaryMutation,
   SetProjectBoundaryMutationVariables
 >;
+export const ParcelAtSiteDocument = new TypedDocumentString(`
+    query ParcelAtSite($projectId: UUID!, $serviceUrl: String!) {
+  parcelAtSite(projectId: $projectId, serviceUrl: $serviceUrl)
+}
+    `) as unknown as TypedDocumentString<ParcelAtSiteQuery, ParcelAtSiteQueryVariables>;
 export const UploadDxfDocument = new TypedDocumentString(`
     mutation UploadDxf($id: UUID!, $f: String!, $c: String!) {
   uploadDxf(projectId: $id, filename: $f, content: $c) {
@@ -2590,6 +2643,25 @@ export const TerrainContentDocument = new TypedDocumentString(`
   projectTerrainContent(projectId: $id)
 }
     `) as unknown as TypedDocumentString<TerrainContentQuery, TerrainContentQueryVariables>;
+export const DetailedTerrainContentDocument = new TypedDocumentString(`
+    query DetailedTerrainContent($id: UUID!) {
+  projectDetailedTerrainContent(projectId: $id)
+}
+    `) as unknown as TypedDocumentString<
+  DetailedTerrainContentQuery,
+  DetailedTerrainContentQueryVariables
+>;
+export const RefreshDetailedTerrainDocument = new TypedDocumentString(`
+    mutation RefreshDetailedTerrain($id: UUID!, $force: Boolean) {
+  refreshDetailedTerrain(projectId: $id, force: $force) {
+    demtype
+    fetchedAt
+  }
+}
+    `) as unknown as TypedDocumentString<
+  RefreshDetailedTerrainMutation,
+  RefreshDetailedTerrainMutationVariables
+>;
 export const BuildingsContentDocument = new TypedDocumentString(`
     query BuildingsContent($id: UUID!) {
   projectBuildingsContent(projectId: $id)
@@ -2690,6 +2762,24 @@ export const BuildSurfaceDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<BuildSurfaceMutation, BuildSurfaceMutationVariables>;
+export const BuildSurfaceFromPointsDocument = new TypedDocumentString(`
+    mutation BuildSurfaceFromPoints($projectId: UUID!, $name: String!, $points: [SurfacePointInput!]!, $maxEdgeLength: Float) {
+  buildSurfaceFromPoints(
+    projectId: $projectId
+    name: $name
+    points: $points
+    maxEdgeLength: $maxEdgeLength
+  ) {
+    id
+    version
+    vertexCount
+    triangleCount
+  }
+}
+    `) as unknown as TypedDocumentString<
+  BuildSurfaceFromPointsMutation,
+  BuildSurfaceFromPointsMutationVariables
+>;
 export const BuildDemSurfaceDocument = new TypedDocumentString(`
     mutation BuildDemSurface($projectId: UUID!, $name: String!, $filename: String!, $contentBase64: String!, $grid: DemGridInput!) {
   buildDemSurface(

@@ -22,6 +22,13 @@ const SET_PROJECT_BOUNDARY = graphql(`
   }
 `);
 
+/** Look up the parcel at the site origin from an ArcGIS parcel service. */
+const PARCEL_AT_SITE = graphql(`
+  query ParcelAtSite($projectId: UUID!, $serviceUrl: String!) {
+    parcelAtSite(projectId: $projectId, serviceUrl: $serviceUrl)
+  }
+`);
+
 /** Parses a stored `[[e,n],…]` boundary string into projected vertices. */
 export function parseBoundary(boundary: string | null): { e: number; n: number }[] {
   if (!boundary) {
@@ -63,6 +70,8 @@ export function BoundaryPanel({
   const [verts, setVerts] = useState<{ e: number; n: number }[]>([]);
   const [eIn, setEIn] = useState('');
   const [nIn, setNIn] = useState('');
+  const [serviceUrl, setServiceUrl] = useState('');
+  const [finding, setFinding] = useState(false);
   const { busy, run } = useMutation();
 
   // Route snapped scene points into the drawing while editing.
@@ -92,6 +101,34 @@ export function BoundaryPanel({
     setEditing(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.boundary]);
+
+  // Fetch the parcel at the site origin from an ArcGIS service and load it as an
+  // editable draft (approximate — the user reviews/snaps, then saves).
+  const findParcel = async () => {
+    const url = serviceUrl.trim();
+    if (!url) {
+      toast.error('Paste your county/state ArcGIS parcel layer URL first.');
+      return;
+    }
+    setFinding(true);
+    try {
+      const { parcelAtSite } = await gql(PARCEL_AT_SITE, {
+        projectId: project.id,
+        serviceUrl: url,
+      });
+      if (!parcelAtSite) {
+        toast.error('No parcel found at the site — check the service covers this area.');
+        return;
+      }
+      setVerts(parseBoundary(parcelAtSite));
+      setEditing(true);
+      toast.success('Parcel found — review, snap to monuments, then save.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Parcel lookup failed');
+    } finally {
+      setFinding(false);
+    }
+  };
 
   const addNumeric = () => {
     const e = Number(eIn);
@@ -242,6 +279,28 @@ export function BoundaryPanel({
                   <IconTrash className="mr-1 size-4" /> Clear
                 </Button>
               ) : null}
+            </div>
+
+            {/* Find the parcel from an open ArcGIS parcel service (approximate). */}
+            <div className="flex flex-col gap-1.5 border-t pt-3">
+              <FieldLabel htmlFor="parcel-url" className="text-xs">
+                Find parcel from GIS (ArcGIS)
+              </FieldLabel>
+              <div className="flex gap-1.5">
+                <Input
+                  id="parcel-url"
+                  placeholder="https://…/rest/services/…/FeatureServer/0"
+                  value={serviceUrl}
+                  onChange={(e) => setServiceUrl(e.target.value)}
+                />
+                <Button type="button" variant="outline" disabled={finding} onClick={findParcel}>
+                  {finding ? 'Finding…' : 'Find'}
+                </Button>
+              </div>
+              <p className="text-muted-foreground text-[11px]">
+                Paste your county/state parcel layer URL. Assessor/GIS parcels are approximate —
+                verify against the deed &amp; monuments.
+              </p>
             </div>
           </>
         )}

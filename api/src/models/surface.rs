@@ -126,6 +126,15 @@ pub struct SurfaceInput {
     pub hole_ids: Vec<Uuid>,
 }
 
+/// A digitized surface point (projected meters + elevation). A flat design pad
+/// passes a constant `z`; a graded surface passes each point's own `z`.
+#[derive(InputObject, Clone)]
+pub struct SurfacePointInput {
+    pub e: f64,
+    pub n: f64,
+    pub z: f64,
+}
+
 /// An uploaded DEM's downsampled elevation grid (parsed client-side from the
 /// GeoTIFF with geotiff.js). Nodes are in the DEM's own CRS (`epsg`); row 0 is the
 /// north edge. `values_base64` is a little-endian `f32` array, row-major,

@@ -12,6 +12,12 @@ const CUT: [number, number, number] = [0.86, 0.15, 0.15]; // red — material re
 const FILL: [number, number, number] = [0.15, 0.4, 0.86]; // blue — material added
 const NEUTRAL: [number, number, number] = [0.96, 0.96, 0.96];
 
+// Alpha ramp for the "boolean" overlay: |Δz|/range below MIN_FRAC is fully
+// transparent (terrain shows through); it reaches MAX_ALPHA by FULL_FRAC.
+const MIN_FRAC = 0.06;
+const FULL_FRAC = 0.35;
+const MAX_ALPHA = 0.9;
+
 /** Diverging cut→fill color for a signed Δz, normalized by `scale` (max |Δz|). */
 function divergingColor(dz: number, scale: number): [number, number, number] {
   const t = Math.max(-1, Math.min(1, scale > 0 ? dz / scale : 0));
@@ -63,7 +69,11 @@ export function readHeatmapRange(contentBase64: string): HeatmapRange | null {
  * follows the surface outline exactly and shades smoothly (red cut → blue fill),
  * lifted slightly so it reads over the surface. Layout: see `api/src/surface/mod.rs`.
  */
-function buildHeatmapGeometry(buf: ArrayBuffer, frame: Frame): THREE.BufferGeometry | null {
+function buildHeatmapGeometry(
+  buf: ArrayBuffer,
+  frame: Frame,
+  graded: boolean,
+): THREE.BufferGeometry | null {
   if (buf.byteLength < 32) {
     return null;
   }
@@ -82,7 +92,9 @@ function buildHeatmapGeometry(buf: ArrayBuffer, frame: Frame): THREE.BufferGeome
   const scale = Math.max(Math.abs(minDz), Math.abs(maxDz)) || 1;
 
   const positions = new Float32Array(vCount * 3);
-  const colors = new Float32Array(vCount * 3);
+  // RGBA: alpha fades out near-zero Δz so only the actual cut/fill regions paint
+  // over the terrain (a "boolean" overlay) — untouched ground shows through.
+  const colors = new Float32Array(vCount * 4);
   let off = 32;
   for (let i = 0; i < vCount; i++) {
     const lat = dv.getFloat64(off, true);
@@ -90,14 +102,23 @@ function buildHeatmapGeometry(buf: ArrayBuffer, frame: Frame): THREE.BufferGeome
     const h = dv.getFloat64(off + 16, true);
     const dz = dv.getFloat64(off + 24, true);
     off += 32;
-    const [x, y, z] = toLocal(frame, lat, lon, h + LIFT);
+    // `graded` lifts each vertex by Δz to the finished (post-earthwork) grade, so
+    // the mesh shows what the cut/fill would actually look like on the ground.
+    const [x, y, z] = toLocal(frame, lat, lon, h + (graded ? dz : 0) + LIFT);
     positions[i * 3] = x;
     positions[i * 3 + 1] = y;
     positions[i * 3 + 2] = z;
     const [r, g, b] = divergingColor(dz, scale);
-    colors[i * 3] = r;
-    colors[i * 3 + 1] = g;
-    colors[i * 3 + 2] = b;
+    // |Δz| as a fraction of the range → transparent below MIN_FRAC, ramping to
+    // MAX_ALPHA by FULL_FRAC. Graded mode stays fully opaque (it's a solid grade).
+    const m = scale > 0 ? Math.abs(dz) / scale : 0;
+    const a = graded
+      ? 0.95
+      : Math.min(MAX_ALPHA, Math.max(0, (m - MIN_FRAC) / (FULL_FRAC - MIN_FRAC)) * MAX_ALPHA);
+    colors[i * 4] = r;
+    colors[i * 4 + 1] = g;
+    colors[i * 4 + 2] = b;
+    colors[i * 4 + 3] = a;
   }
 
   const indices = new Uint32Array(tCount * 3);
@@ -108,19 +129,23 @@ function buildHeatmapGeometry(buf: ArrayBuffer, frame: Frame): THREE.BufferGeome
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 4));
   geometry.setIndex(new THREE.BufferAttribute(indices, 1));
   geometry.computeVertexNormals();
   return geometry;
 }
 
-/** Renders a volume's cut/fill heatmap as a colored quad grid over the base surface. */
+/** Renders a volume's cut/fill heatmap over the base surface. With `graded`, each
+ *  vertex is lifted to the finished grade (base + Δz) so it reads as the shaped
+ *  ground; otherwise it drapes on the base surface as a flat-position heatmap. */
 export function VolumeHeatmap({
   contentBase64,
   frame,
+  graded = false,
 }: {
   contentBase64: string | null;
   frame: Frame;
+  graded?: boolean;
 }) {
   const geometry = useMemo(() => {
     if (!contentBase64) {
@@ -132,11 +157,11 @@ export function VolumeHeatmap({
       for (let i = 0; i < bin.length; i++) {
         bytes[i] = bin.charCodeAt(i);
       }
-      return buildHeatmapGeometry(bytes.buffer, frame);
+      return buildHeatmapGeometry(bytes.buffer, frame, graded);
     } catch {
       return null;
     }
-  }, [contentBase64, frame]);
+  }, [contentBase64, frame, graded]);
 
   if (!geometry) {
     return null;
@@ -148,7 +173,8 @@ export function VolumeHeatmap({
         roughness={1}
         metalness={0}
         transparent
-        opacity={0.92}
+        opacity={1}
+        depthWrite={false}
         side={THREE.DoubleSide}
       />
     </mesh>
