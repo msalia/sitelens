@@ -31,8 +31,10 @@ import {
   useBounds,
   useMarkers,
 } from './terrain-objects';
+import { type AlignMarker, AlignPointsOverlay } from './terrain/align-points-overlay';
 import { AnalysisOverlay, type AnalysisPath } from './terrain/analysis-overlay';
 import { type AnalysisResult, AnalysisResultOverlay } from './terrain/analysis-result-overlay';
+import { BoundaryOverlay } from './terrain/boundary-overlay';
 import { type SceneConstraint, SurfaceConstraints } from './terrain/surface-constraints';
 import { SurfaceContours } from './terrain/surface-contours';
 import {
@@ -66,10 +68,16 @@ const PALETTE = {
   light: { bg: '#eef1f5', clay: '#e7eaee' },
 };
 export interface TerrainViewerProps {
+  /** DXF align-to-grid picks to highlight (numbered + coloured). */
+  alignPoints?: AlignMarker[];
   /** Analysis input paths (site-analysis plan geometry) to overlay. */
   analysisPaths?: AnalysisPath[];
   /** A turning analysis's computed result geometry (envelope/tracks/clips). */
   analysisResult?: AnalysisResult | null;
+  /** Property boundary ring to draw (saved or in-progress). */
+  boundary?: { e: number; n: number }[];
+  /** Whether `boundary` is an in-progress edit (styled distinctly). */
+  boundaryDraft?: boolean;
   /** OSM building footprints to extrude (visual context only). */
   buildings?: BuildingFootprint[];
   /** When set, the viewer assigns a function that downloads the canvas as a PNG. */
@@ -150,8 +158,11 @@ export interface TerrainViewerProps {
 
 export function TerrainViewer(props: TerrainViewerProps) {
   const {
+    alignPoints,
     analysisPaths,
     analysisResult,
+    boundary,
+    boundaryDraft,
     buildings,
     captureRef,
     categories,
@@ -412,6 +423,35 @@ export function TerrainViewer(props: TerrainViewerProps) {
           frame={frame}
           sample={sampler}
           visible={!!analysisResult}
+        />
+      ) : null}
+
+      {alignPoints?.length &&
+      originProjectedE !== null &&
+      originProjectedE !== undefined &&
+      originProjectedN !== null &&
+      originProjectedN !== undefined ? (
+        <AlignPointsOverlay
+          markers={alignPoints}
+          originE={originProjectedE}
+          originN={originProjectedN}
+          frame={frame}
+          sample={sampler}
+        />
+      ) : null}
+
+      {boundary?.length &&
+      originProjectedE !== null &&
+      originProjectedE !== undefined &&
+      originProjectedN !== null &&
+      originProjectedN !== undefined ? (
+        <BoundaryOverlay
+          points={boundary}
+          draft={boundaryDraft}
+          originE={originProjectedE}
+          originN={originProjectedN}
+          frame={frame}
+          sample={sampler}
         />
       ) : null}
 

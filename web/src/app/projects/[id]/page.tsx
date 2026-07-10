@@ -7,11 +7,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { ComparisonMarker } from '@/components/projects/terrain-viewer';
+import type { AlignMarker } from '@/components/projects/terrain/align-points-overlay';
 import type { AnalysisPath } from '@/components/projects/terrain/analysis-overlay';
 import type { AnalysisResult } from '@/components/projects/terrain/analysis-result-overlay';
 
 import { UpgradeDialog } from '@/components/billing/upgrade-dialog';
 import { AnalysisPanel } from '@/components/projects/analysis-panel';
+import { BoundaryPanel, parseBoundary } from '@/components/projects/boundary-panel';
 import { CadOverlayPanel } from '@/components/projects/cad-overlay-panel';
 import { ControlPointsEditor } from '@/components/projects/control-points-editor';
 import { ConverterPanel } from '@/components/projects/converter-panel';
@@ -71,6 +73,7 @@ const WORKSPACE_QUERY = graphql(`
       siteOriginLat
       siteOriginLon
       siteOriginRotationDeg
+      boundary
       createdAt
       updatedAt
     }
@@ -188,6 +191,10 @@ export default function ProjectWorkspace() {
   const [activeAnalysisId, setActiveAnalysisId] = useState<string | null>(null);
   const [analysisPaths, setAnalysisPaths] = useState<AnalysisPath[]>([]);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  // DXF align-to-grid picks, highlighted in the scene while capturing.
+  const [alignPoints, setAlignPoints] = useState<AlignMarker[]>([]);
+  // In-progress property-boundary ring (null when not editing → show the saved one).
+  const [boundaryDraft, setBoundaryDraft] = useState<{ e: number; n: number }[] | null>(null);
   const [surfaceReload, setSurfaceReload] = useState(0);
   const [contours, setContours] = useState<ContourSettings>(DEFAULT_CONTOURS);
   const [loading, setLoading] = useState(true);
@@ -398,6 +405,18 @@ export default function ProjectWorkspace() {
               <section id="panel-grid">
                 <GridEditor project={project} axes={axes} onSaved={load} />
               </section>
+              <section id="panel-boundary">
+                <BoundaryPanel
+                  project={project}
+                  pickRef={pickRef}
+                  onDigitizingChange={setDigitizing}
+                  onDraftChange={setBoundaryDraft}
+                  onChanged={() => {
+                    void load();
+                    setSceneReload((n) => n + 1);
+                  }}
+                />
+              </section>
               <section id="panel-transform">
                 <TransformPanel project={project} initialTransform={transform} />
               </section>
@@ -423,6 +442,9 @@ export default function ProjectWorkspace() {
               <CadOverlayPanel
                 project={project}
                 overlays={overlays}
+                pickRef={pickRef}
+                onDigitizingChange={setDigitizing}
+                onAlignPointsChange={setAlignPoints}
                 onChanged={() => {
                   void load();
                   setSceneReload((n) => n + 1);
@@ -506,6 +528,9 @@ export default function ProjectWorkspace() {
           activeVolumeId={activeVolumeId}
           analysisPaths={activeTab === 'analysis' ? analysisPaths : undefined}
           analysisResult={activeTab === 'analysis' ? analysisResult : null}
+          alignPoints={activeTab === 'overlays' ? alignPoints : undefined}
+          boundary={boundaryDraft ?? parseBoundary(project.boundary)}
+          boundaryDraft={boundaryDraft !== null}
           surfaceReload={surfaceReload}
           contours={contours}
           stats={[

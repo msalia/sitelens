@@ -163,3 +163,33 @@ pub struct TurningInput {
 fn default_json_array() -> String {
     "[]".to_string()
 }
+
+/// Parameters for a parking run: the drawn bays + stall module + code-check
+/// inputs. Dimensions in meters (internal); angle in degrees (90 = perpendicular).
+#[derive(InputObject, Clone)]
+pub struct ParkingInput {
+    pub name: String,
+    /// Bay baselines as a JSON `[[[e,n],…],…]` string (projected meters) — the
+    /// aisle-side edge of each stall row.
+    pub bays: String,
+    /// Stall depth into the lot (default 5.5 m ≈ 18 ft).
+    #[graphql(default = 5.5)]
+    pub stall_length: f64,
+    /// Stall width (default 2.7 m ≈ 9 ft).
+    #[graphql(default = 2.7)]
+    pub stall_width: f64,
+    /// Stall angle to the aisle: 90 = perpendicular, 60/45 = angled (default 90).
+    #[graphql(default = 90.0)]
+    pub angle: f64,
+    /// Drive-aisle width, carried for reporting (default 7.3 m ≈ 24 ft).
+    #[graphql(default = 7.3)]
+    pub aisle_width: f64,
+    /// One-way drive aisle (reporting only; does not change stall geometry).
+    #[graphql(default)]
+    pub one_way: bool,
+    /// Minimum stalls the site must provide — the required-count check (optional).
+    pub required_count: Option<i32>,
+    /// Accessible stalls the design provides — checked against the ADA §208
+    /// requirement (optional; when omitted the requirement is reported, not failed).
+    pub accessible_provided: Option<i32>,
+}

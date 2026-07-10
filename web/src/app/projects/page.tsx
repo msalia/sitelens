@@ -26,6 +26,7 @@ const PROJECTS_QUERY = graphql(`
       siteOriginLat
       siteOriginLon
       siteOriginRotationDeg
+      boundary
       createdAt
       updatedAt
     }

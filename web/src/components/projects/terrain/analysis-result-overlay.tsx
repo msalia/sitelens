@@ -8,8 +8,12 @@ import { AnimatedLine, AnimatedMarker } from './animated-line';
 
 type Pt = [number, number];
 
-/** Parsed turning-analysis result geometry (projected-meter coordinates). */
+/** Parsed analysis result geometry (projected-meter coordinates). Turning fields
+ *  (tracks/edges/clips) and parking fields (stalls/bays) share one blob; only the
+ *  keys for the analysis's type are populated. */
 export interface AnalysisResult {
+  /** Parking: drawn bay baselines (the aisle-side edge of each stall row). */
+  bays?: Pt[][];
   bodies?: Pt[][];
   clips?: Pt[];
   /** Full-res swept-edge corner curves (smooth). */
@@ -17,6 +21,8 @@ export interface AnalysisResult {
   frontTrack?: Pt[];
   obstacles?: Pt[][];
   rearTrack?: Pt[];
+  /** Parking: tiled stall footprints (each a 4-point quad). */
+  stalls?: Pt[][];
 }
 
 /** Parses an analysis `resultGeometry` JSON string (null-safe). */
@@ -204,6 +210,16 @@ export function AnalysisResultOverlay({
   );
   const clips = useMemo(() => (result.clips ?? []).map((c) => v(c)), [result.clips, v]);
 
+  // Parking: tiled stall footprints (closed quads) + the drawn bay baselines.
+  const stalls = useMemo(
+    () => (result.stalls ?? []).map((q) => [...q, q[0]].map(v)),
+    [result.stalls, v],
+  );
+  const bays = useMemo(
+    () => (result.bays ?? []).filter((b) => b.length >= 2).map((b) => b.map(v)),
+    [result.bays, v],
+  );
+
   // Elbow leader callouts. Anchors are spread along the curves and each chip is
   // pushed in a distinct 3D direction (height + horizontal) so they fan apart.
   const leaders = useMemo(() => {
@@ -253,6 +269,31 @@ export function AnalysisResultOverlay({
 
   return (
     <>
+      {/* Parking: drawn bay baselines (the aisle-side stall edge), muted. */}
+      {bays.map((pts, i) => (
+        <AnimatedLine
+          key={`bay${i}`}
+          points={pts}
+          color="#94a3b8"
+          lineWidth={2}
+          dashed
+          dashSize={0.8}
+          gapSize={0.5}
+          opacity={0.8}
+          visible={visible}
+        />
+      ))}
+      {/* Parking: tiled stall footprints (closed quads), blue outlines. */}
+      {stalls.map((pts, i) => (
+        <AnimatedLine
+          key={`stall${i}`}
+          points={pts}
+          color="#3b82f6"
+          lineWidth={2}
+          visible={visible}
+        />
+      ))}
+
       {/* Front-axle centre-line (steered path) — click to label. */}
       {center.length >= 2 ? (
         <Track

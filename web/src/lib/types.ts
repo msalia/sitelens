@@ -21,6 +21,8 @@ export interface Me {
 }
 
 export interface Project {
+  /** Property boundary polygon as a JSON `[[e,n],…]` string (projected meters); null when unset. */
+  boundary: string | null;
   combinedScaleFactor: number;
   createdAt: string;
   description: string;

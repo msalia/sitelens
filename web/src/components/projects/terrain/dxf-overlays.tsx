@@ -90,8 +90,10 @@ export function DxfOverlays({
                 transparent
                 opacity={0.9}
               />
-              {/* While digitizing, a wide invisible hit line snaps to the nearest
-                  vertex of this polyline via the shared pick bridge. */}
+              {/* While digitizing, a wide invisible hit line snaps to the closest
+                  point ON this polyline via the shared pick bridge — so clicking a
+                  line intersection lands the pick right at the crossing (grid
+                  intersections aren't vertices), not at a distant endpoint. */}
               {digitizing && onPick ? (
                 <Line
                   points={l.points}
@@ -110,13 +112,30 @@ export function DxfOverlays({
                   }}
                   onClick={(e) => {
                     e.stopPropagation();
+                    // Closest point on the polyline (per segment, in the XZ plane)
+                    // to the click — clamped to each segment, so it lands exactly
+                    // where the click meets the line (the intersection), and snaps
+                    // to an endpoint only when the click is nearest one.
+                    const cx = e.point.x;
+                    const cz = e.point.z;
                     let best = l.points[0];
                     let bd = Infinity;
-                    for (const p of l.points) {
-                      const d = (p[0] - e.point.x) ** 2 + (p[2] - e.point.z) ** 2;
+                    for (let i = 0; i < l.points.length - 1; i++) {
+                      const a = l.points[i];
+                      const b = l.points[i + 1];
+                      const abx = b[0] - a[0];
+                      const abz = b[2] - a[2];
+                      const len2 = abx * abx + abz * abz;
+                      const t =
+                        len2 > 0
+                          ? Math.max(0, Math.min(1, ((cx - a[0]) * abx + (cz - a[2]) * abz) / len2))
+                          : 0;
+                      const px = a[0] + t * abx;
+                      const pz = a[2] + t * abz;
+                      const d = (px - cx) ** 2 + (pz - cz) ** 2;
                       if (d < bd) {
                         bd = d;
-                        best = p;
+                        best = [px, a[1] + t * (b[1] - a[1]), pz];
                       }
                     }
                     onPick(best[0] + originE, originN - best[2], best[1], 'DXF vertex');

@@ -187,3 +187,56 @@ async fn project_changed_subscription_requires_org_ownership(pool: PgPool) {
         item.errors
     );
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn set_and_clear_project_boundary(pool: PgPool) {
+    let schema = schema(pool);
+    let (admin, org, _) = signup(&schema, "b@example.com", "Org").await;
+    let pid = create_project(&schema, admin_ctx(admin, org), "Site").await;
+
+    // Set a triangular boundary (projected meters).
+    let set = r#"mutation ($id: UUID!, $b: String) {
+        setProjectBoundary(projectId: $id, boundary: $b) { id boundary }
+    }"#;
+    let r = exec_ok_vars(
+        &schema,
+        set,
+        serde_json::json!({ "id": pid, "b": "[[0,0],[10,0],[10,10]]" }),
+        admin_ctx(admin, org),
+    )
+    .await;
+    let b = r["setProjectBoundary"]["boundary"].as_str().unwrap();
+    assert!(b.contains("10"), "boundary stored: {b}");
+
+    // It round-trips on the project query.
+    let got = exec_ok(
+        &schema,
+        &format!(r#"{{ project(id: "{pid}") {{ boundary }} }}"#),
+        Some(admin_ctx(admin, org)),
+    )
+    .await;
+    assert!(got["project"]["boundary"].as_str().unwrap().contains("10"));
+
+    // Passing null clears it.
+    let cleared = exec_ok_vars(
+        &schema,
+        set,
+        serde_json::json!({ "id": pid, "b": serde_json::Value::Null }),
+        admin_ctx(admin, org),
+    )
+    .await;
+    assert!(cleared["setProjectBoundary"]["boundary"].is_null());
+
+    // Fewer than three points is rejected.
+    let msg = exec_err_vars(
+        &schema,
+        set,
+        serde_json::json!({ "id": pid, "b": "[[0,0],[1,1]]" }),
+        admin_ctx(admin, org),
+    )
+    .await;
+    assert!(
+        msg.contains("at least three"),
+        "expected min-points error: {msg}"
+    );
+}

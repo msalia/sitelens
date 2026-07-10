@@ -3,7 +3,7 @@ use super::*;
 
 const PROJECT_COLUMNS: &str = "id, org_id, name, description, epsg_code, display_unit, \
     combined_scale_factor, site_origin_lat, site_origin_lon, site_origin_rotation_deg, \
-    tol_h_warn, tol_h_fail, tol_v_warn, tol_v_fail, created_at, updated_at";
+    tol_h_warn, tol_h_fail, tol_v_warn, tol_v_fail, boundary, created_at, updated_at";
 
 /// Blocks creating another project once a free org is at the Solo project cap.
 async fn require_project_quota(ctx: &Context<'_>) -> Result<()> {
@@ -203,6 +203,48 @@ impl ProjectMutation {
         .fetch_optional(pool)
         .await?;
         Ok(found_in_org(row, "project")?.into())
+    }
+
+    /// Sets (or clears) the project's property boundary — an ordered polygon of
+    /// `[[e,n],…]` vertices in projected meters, passed as a JSON string. Passing
+    /// null/empty clears it. The boundary is the area-of-interest for the detailed
+    /// hydrology terrain fetch. Editor role required.
+    async fn set_project_boundary(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        boundary: Option<String>,
+    ) -> Result<Project> {
+        let auth = require_editor_active(ctx).await?;
+        let pool = pool(ctx)?;
+        // Parse + validate the ring (null/empty clears the boundary).
+        let parsed: Option<serde_json::Value> =
+            match boundary.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                Some(s) => {
+                    let pts: Vec<[f64; 2]> = serde_json::from_str(s).map_err(|e| {
+                        async_graphql::Error::new(format!("invalid boundary JSON: {e}"))
+                    })?;
+                    if pts.len() < 3 {
+                        return Err(async_graphql::Error::new(
+                            "a boundary needs at least three points",
+                        ));
+                    }
+                    Some(serde_json::to_value(pts).unwrap())
+                }
+                None => None,
+            };
+        let row: Option<ProjectRow> = sqlx::query_as(&format!(
+            "UPDATE projects SET boundary = $2, updated_at = now() \
+             WHERE id = $1 AND org_id = $3 RETURNING {PROJECT_COLUMNS}"
+        ))
+        .bind(project_id)
+        .bind(parsed.map(sqlx::types::Json))
+        .bind(auth.org_id)
+        .fetch_optional(pool)
+        .await?;
+        let row = found_in_org(row, "project")?;
+        publish_scene(ctx, project_id);
+        Ok(row.into())
     }
 
     /// Permanently deletes a project: removes every uploaded file (DXF overlays,

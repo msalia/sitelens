@@ -8,6 +8,20 @@ export const UPLOAD = graphql(`
   }
 `);
 
+/** Align a DXF overlay to the grid from 2 point correspondences (Rust solves the
+ *  similarity: offset E/N + rotation + scale). */
+export const ALIGN_CAD_OVERLAY = graphql(`
+  mutation AlignCadOverlay($id: UUID!, $src: [AlignPoint!]!, $dst: [AlignPoint!]!) {
+    alignCadOverlay(id: $id, src: $src, dst: $dst) {
+      id
+      offsetE
+      offsetN
+      rotationDeg
+      scale
+    }
+  }
+`);
+
 export const SET_GEO = graphql(`
   mutation SetCadGeoreference(
     $id: UUID!

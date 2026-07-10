@@ -1,5 +1,6 @@
 #![allow(clippy::too_many_arguments)]
 use super::*;
+use crate::geo::{solve_helmert, Correspondence, GeoError};
 
 const CAD_OVERLAY_COLUMNS: &str = "id, project_id, original_filename, offset_e, offset_n, \
     rotation_deg, scale, elevation, assume_real_world, visible";
@@ -36,6 +37,14 @@ pub struct DxfPolylineGql {
 pub struct DxfGeometry {
     pub layers: Vec<String>,
     pub polylines: Vec<DxfPolylineGql>,
+}
+
+/// A planar point in projected meters — an alignment pick (a DXF vertex's current
+/// world position, or a grid intersection).
+#[derive(async_graphql::InputObject)]
+pub struct AlignPoint {
+    pub e: f64,
+    pub n: f64,
 }
 
 #[derive(Default)]
@@ -197,6 +206,97 @@ impl OverlayMutation {
         .bind(auth.org_id)
         .bind(elevation)
         .fetch_optional(pool(ctx)?)
+        .await?;
+        let row = found_in_org(row, "overlay")?;
+        publish_scene(ctx, row.project_id);
+        Ok(row)
+    }
+
+    /// Aligns a DXF overlay to the grid from two point correspondences: two picked
+    /// DXF vertices (their current world E/N) mapped onto two grid intersections.
+    /// Solves the 2-point Helmert similarity — the same solver that ties control
+    /// points — and persists the resulting offset / rotation / scale. Rust owns the
+    /// geometry so the placement never diverges from what's drawn.
+    async fn align_cad_overlay(
+        &self,
+        ctx: &Context<'_>,
+        id: Uuid,
+        // `src`: two picked DXF vertices in their current rendered world E/N.
+        // `dst`: the two grid intersections they should land on, in E/N.
+        src: Vec<AlignPoint>,
+        dst: Vec<AlignPoint>,
+    ) -> Result<CadOverlay> {
+        let auth = require_editor_active(ctx).await?;
+        require_feature(ctx, Feature::DxfOverlays).await?;
+        let pool = pool(ctx)?;
+        if src.len() != 2 || dst.len() != 2 {
+            return Err(async_graphql::Error::new(
+                "alignment needs exactly two DXF points and two grid intersections",
+            ));
+        }
+
+        // The overlay's current transform — what the picked vertices were rendered
+        // under (org-scoped).
+        let cur: Option<(f64, f64, f64, f64)> = sqlx::query_as(
+            "SELECT co.offset_e, co.offset_n, co.rotation_deg, co.scale \
+             FROM cad_overlays co JOIN projects p ON co.project_id = p.id \
+             WHERE co.id = $1 AND p.org_id = $2",
+        )
+        .bind(id)
+        .bind(auth.org_id)
+        .fetch_optional(pool)
+        .await?;
+        let (oe, on, rot_deg, sc) = found_in_org(cur, "overlay")?;
+
+        // Solve S: current-world → target-world, then compose it onto the overlay's
+        // current transform. offset' = S(offset), scale' = S.scale·scale,
+        // rotation' = S.rotation + rotation.
+        //
+        // Center the source points first. DXF picks are large projected-world
+        // coordinates (~1e6); two points a few meters apart at that magnitude make
+        // the Helmert normal matrix ill-conditioned, tripping its relative
+        // rank check as a false "degenerate". Centering keeps it well-conditioned;
+        // `S(world) = p.apply(world − origin)` recovers the same transform.
+        let (ox, oy) = (src[0].e, src[0].n);
+        let corr: Vec<Correspondence> = src
+            .iter()
+            .zip(dst.iter())
+            .map(|(s, d)| Correspondence {
+                grid_x: s.e - ox,
+                grid_y: s.n - oy,
+                proj_e: d.e,
+                proj_n: d.n,
+            })
+            .collect();
+        let sol = solve_helmert(&corr).map_err(|e| {
+            async_graphql::Error::new(match e {
+                GeoError::Degenerate => {
+                    "the two points coincide — pick two separated points".to_string()
+                }
+                other => format!("could not align the overlay: {other:?}"),
+            })
+        })?;
+        let p = sol.params;
+        let (new_oe, new_on) = p.apply(oe - ox, on - oy);
+        let new_scale = sc * p.scale();
+        let new_rot = {
+            let d = rot_deg + p.rotation_rad().to_degrees();
+            ((d % 360.0) + 360.0) % 360.0
+        };
+
+        let row: Option<CadOverlay> = sqlx::query_as(&format!(
+            "UPDATE cad_overlays co SET offset_e = $2, offset_n = $3, rotation_deg = $4, scale = $5 \
+             FROM projects p WHERE co.id = $1 AND co.project_id = p.id AND p.org_id = $6 \
+             RETURNING {}",
+            qualify_columns(CAD_OVERLAY_COLUMNS, "co")
+        ))
+        .bind(id)
+        .bind(new_oe)
+        .bind(new_on)
+        .bind(new_rot)
+        .bind(new_scale)
+        .bind(auth.org_id)
+        .fetch_optional(pool)
         .await?;
         let row = found_in_org(row, "overlay")?;
         publish_scene(ctx, row.project_id);

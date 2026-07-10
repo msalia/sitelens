@@ -5,14 +5,17 @@ import {
   IconArrowsHorizontal,
   IconArrowsMaximize,
   IconArrowsVertical,
+  IconFocusCentered,
   IconRotateClockwise,
   IconTrash,
   IconWand,
+  IconX,
 } from '@tabler/icons-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import type { CadOverlay, Project } from '@/lib/types';
+import type { AlignMarker } from '@/components/projects/terrain/align-points-overlay';
+import type { CadOverlay, Project, ScenePoint } from '@/lib/types';
 
 import { SliderField } from '@/components/projects/cad-overlay/slider-field';
 import { ConfirmDialog } from '@/components/projects/confirm-dialog';
@@ -25,6 +28,7 @@ import { dxfExtent } from '@/lib/dxf';
 import { gql } from '@/lib/graphql';
 
 import {
+  ALIGN_CAD_OVERLAY,
   ELEV_WINDOW,
   OFFSET_WINDOW,
   OVERLAY_DXF,
@@ -33,16 +37,46 @@ import {
   SITE_PROJECTED,
 } from '../cad-overlay-data';
 
+/** One align pick, in projected meters, tagged by which side it fills. `height`
+ *  is the pick's world elevation (a DXF vertex carries its flat layer Z). */
+type AlignPick = { e: number; height: number; kind: 'src' | 'dst'; n: number };
+
+// The capture order that defines the pairing: drawing point 1, its grid
+// intersection, drawing point 2, its grid intersection. This is why order
+// matters — each drawing point pairs with the intersection clicked right after.
+const ALIGN_SEQUENCE = ['src', 'dst', 'src', 'dst'] as const;
+const ALIGN_STEP_LABEL = [
+  'click drawing point 1',
+  'click the grid intersection for point 1',
+  'click drawing point 2',
+  'click the grid intersection for point 2',
+];
+
 export function OverlayRow({
+  aligning = false,
+  onAlignChange,
+  onAlignPointsChange,
   onChanged,
   onDelete,
+  onDigitizingChange,
   overlay,
+  pickRef,
   project,
 }: {
   overlay: CadOverlay;
   project: Project;
   onChanged: () => void;
   onDelete: () => void;
+  /** Scene digitize bridge — snapped DXF vertices + grid intersections feed the
+   *  align-to-grid capture. */
+  pickRef?: React.MutableRefObject<((point: ScenePoint) => void) | null>;
+  onDigitizingChange?: (on: boolean) => void;
+  /** Whether this overlay is the one currently capturing align points. */
+  aligning?: boolean;
+  /** Enter/leave align mode for this overlay (the panel enforces one at a time). */
+  onAlignChange?: (on: boolean) => void;
+  /** Publishes the captured picks so the scene can highlight them. */
+  onAlignPointsChange?: (markers: AlignMarker[]) => void;
 }) {
   const [oe, setOe] = useState(overlay.offsetE);
   const [on, setOn] = useState(overlay.offsetN);
@@ -56,6 +90,97 @@ export function OverlayRow({
   const [baseEl, setBaseEl] = useState(overlay.elevation);
   const [saving, setSaving] = useState(false);
   const [placing, setPlacing] = useState(false);
+  // Align-to-grid capture, in strict pairing order (see ALIGN_SEQUENCE): the
+  // picks the bridge reports, in projected meters.
+  const [picks, setPicks] = useState<AlignPick[]>([]);
+
+  // While this overlay is in align mode, own the shared pick bridge. A click is
+  // only accepted if it's the kind the current step expects (a DXF vertex or a
+  // grid intersection) — that's what enforces the pairing order.
+  useEffect(() => {
+    if (!aligning) {
+      return;
+    }
+    onDigitizingChange?.(true);
+    if (pickRef) {
+      pickRef.current = (p) => {
+        setPicks((cur) => {
+          if (cur.length >= 4) {
+            return cur;
+          }
+          const expected = ALIGN_SEQUENCE[cur.length];
+          const kind =
+            p.label === 'DXF vertex' ? 'src' : p.label === 'Grid intersection' ? 'dst' : null;
+          if (kind !== expected) {
+            return cur; // out-of-step click — ignore (the prompt says what's next)
+          }
+          return [...cur, { e: p.easting, height: p.height, kind, n: p.northing }];
+        });
+      };
+    }
+    return () => {
+      if (pickRef) {
+        pickRef.current = null;
+      }
+      onDigitizingChange?.(false);
+    };
+  }, [aligning, pickRef, onDigitizingChange]);
+
+  // Highlight the captured picks in the 3D scene (numbered by pair, coloured by
+  // kind). Only the aligning row publishes; it clears on exit.
+  useEffect(() => {
+    if (!aligning || !onAlignPointsChange) {
+      return;
+    }
+    onAlignPointsChange(
+      picks.map((p, i) => ({
+        e: p.e,
+        height: p.height,
+        kind: p.kind,
+        n: p.n,
+        pair: Math.floor(i / 2) + 1,
+      })),
+    );
+    return () => onAlignPointsChange([]);
+  }, [aligning, picks, onAlignPointsChange]);
+
+  function resetAlign() {
+    setPicks([]);
+  }
+
+  // Solve + apply on the API — Rust owns the geometry (the same 2-point Helmert
+  // fit used for control points). Send the picks, get the new transform back, and
+  // reflect it in the row's controls.
+  async function applyAlign() {
+    if (picks.length < 4) {
+      return;
+    }
+    // Pair by capture order: (point 1 → grid 1), (point 2 → grid 2).
+    const src = [picks[0], picks[2]];
+    const dst = [picks[1], picks[3]];
+    setSaving(true);
+    try {
+      const { alignCadOverlay: r } = await gql(ALIGN_CAD_OVERLAY, {
+        dst: dst.map((p) => ({ e: p.e, n: p.n })),
+        id: overlay.id,
+        src: src.map((p) => ({ e: p.e, n: p.n })),
+      });
+      setOe(r.offsetE);
+      setOn(r.offsetN);
+      setBaseE(r.offsetE);
+      setBaseN(r.offsetN);
+      setRot(r.rotationDeg);
+      setSc(r.scale);
+      toast.success('Aligned to grid.');
+      resetAlign();
+      onAlignChange?.(false);
+      onChanged();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Alignment failed');
+    } finally {
+      setSaving(false);
+    }
+  }
   // Only show the filename tooltip when the title is actually clipped.
   const titleRef = useRef<HTMLSpanElement>(null);
   const [truncated, setTruncated] = useState(false);
@@ -284,9 +409,96 @@ export function OverlayRow({
           onCommit={(v) => setBaseEl(v)}
         />
 
-        <Button size="sm" variant="outline" disabled={placing} onClick={autoPlace}>
-          <IconWand className="mr-1 size-4" /> {placing ? 'Placing…' : 'Auto-place at site'}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            className="flex-1"
+            size="sm"
+            variant="outline"
+            disabled={placing}
+            onClick={autoPlace}
+          >
+            <IconWand className="mr-1 size-4" /> {placing ? 'Placing…' : 'Auto-place'}
+          </Button>
+          <Button
+            className="flex-1"
+            size="sm"
+            variant={aligning ? 'secondary' : 'outline'}
+            onClick={() => onAlignChange?.(!aligning)}
+          >
+            <IconFocusCentered className="mr-1 size-4" /> Align to grid
+          </Button>
+        </div>
+
+        {aligning ? (
+          <div className="border-primary bg-primary/5 flex flex-col gap-2 rounded-md border p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Align to grid</span>
+              <span className="text-muted-foreground text-xs">click points in the scene</span>
+            </div>
+            <p className="text-muted-foreground text-xs">
+              Pair two drawing points with two grid intersections. <strong>Order matters</strong> —
+              each drawing point pairs with the grid intersection you click right after it.
+            </p>
+            {!overlay.visible ? (
+              <p className="text-xs text-amber-600 dark:text-amber-500">
+                This overlay is hidden — turn it visible to click its vertices.
+              </p>
+            ) : null}
+
+            {/* Current step prompt. */}
+            <div className="bg-background/60 rounded px-2 py-1.5 text-xs font-medium">
+              {picks.length < 4
+                ? `Step ${picks.length + 1} of 4 — ${ALIGN_STEP_LABEL[picks.length]}`
+                : 'Ready — apply the alignment.'}
+            </div>
+
+            {/* Captured picks, numbered + coloured to match the 3D markers. */}
+            {picks.length > 0 ? (
+              <div className="flex flex-col gap-1 text-xs">
+                {picks.map((p, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span
+                      className="inline-flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white"
+                      style={{ backgroundColor: p.kind === 'src' ? '#f59e0b' : '#3b82f6' }}
+                    >
+                      {Math.floor(i / 2) + 1}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {p.kind === 'src' ? 'Drawing point' : 'Grid intersection'}
+                    </span>
+                    <span className="ml-auto tabular-nums">
+                      E {p.e.toFixed(2)} · N {p.n.toFixed(2)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  resetAlign();
+                  onAlignChange?.(false);
+                }}
+              >
+                <IconX className="mr-1 size-4" /> Cancel
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPicks((cur) => cur.slice(0, -1))}
+                disabled={picks.length === 0}
+              >
+                Undo
+              </Button>
+              <Button size="sm" onClick={applyAlign} disabled={saving || picks.length < 4}>
+                Apply
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </CardContent>
 
       <CardFooter className="border-t p-3">

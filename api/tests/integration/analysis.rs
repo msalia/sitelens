@@ -313,3 +313,89 @@ async fn turning_run_is_crew_gated(pool: PgPool) {
     .await;
     assert!(msg.contains("Crew feature"), "turning not gated: {msg}");
 }
+
+// --- Phase 3: parking -------------------------------------------------------
+
+const RUN_PARKING: &str = r#"mutation ($pid: UUID!, $in: ParkingInput!) {
+    runParkingAnalysis(projectId: $pid, input: $in) { id type status result resultGeometry }
+}"#;
+
+#[sqlx::test(migrations = "./migrations")]
+async fn parking_run_tiles_stalls_and_checks_codes(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (auth, pid) = seed(&schema, &pool, "park@example.com").await;
+
+    // A 30 m perpendicular bay at 2.5 m stalls tiles 12 stalls; required 10 → pass.
+    let ok = exec_ok_vars(
+        &schema,
+        RUN_PARKING,
+        serde_json::json!({ "pid": pid, "in": {
+            "name": "Lot A", "bays": "[[[0,0],[30,0]]]",
+            "stallWidth": 2.5, "stallLength": 5.5, "angle": 90.0, "requiredCount": 10,
+        } }),
+        auth.clone(),
+    )
+    .await;
+    let a = &ok["runParkingAnalysis"];
+    assert_eq!(a["type"], serde_json::json!("PARKING"));
+    assert_eq!(a["status"], serde_json::json!("COMPLETE"));
+    let result = a["result"].as_str().unwrap();
+    assert!(result.contains("\"stallCount\":12"), "count: {result}");
+    assert!(result.contains("\"adaRequired\":1"), "ada: {result}");
+    assert!(result.contains("\"pass\":true"), "verdict: {result}");
+    assert!(a["resultGeometry"].as_str().unwrap().contains("stalls"));
+
+    // The same bay but requiring 20 stalls → the required-count check fails.
+    let short = exec_ok_vars(
+        &schema,
+        RUN_PARKING,
+        serde_json::json!({ "pid": pid, "in": {
+            "name": "Lot B", "bays": "[[[0,0],[30,0]]]",
+            "stallWidth": 2.5, "angle": 90.0, "requiredCount": 20,
+        } }),
+        auth.clone(),
+    )
+    .await;
+    assert!(short["runParkingAnalysis"]["result"]
+        .as_str()
+        .unwrap()
+        .contains("\"pass\":false"));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn parking_ada_provided_check_fails_when_short(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (auth, pid) = seed(&schema, &pool, "ada@example.com").await;
+    // 12 stalls need 1 accessible; providing 0 fails ADA.
+    let short = exec_ok_vars(
+        &schema,
+        RUN_PARKING,
+        serde_json::json!({ "pid": pid, "in": {
+            "name": "No accessible", "bays": "[[[0,0],[30,0]]]",
+            "stallWidth": 2.5, "angle": 90.0, "accessibleProvided": 0,
+        } }),
+        auth,
+    )
+    .await;
+    let result = short["runParkingAnalysis"]["result"].as_str().unwrap();
+    assert!(result.contains("\"adaPass\":false"), "adaPass: {result}");
+    assert!(result.contains("\"pass\":false"), "verdict: {result}");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn parking_run_is_crew_gated(pool: PgPool) {
+    let schema = schema(pool.clone());
+    let (admin, org, _) = signup(&schema, "solo@example.com", "Solo Co").await;
+    let auth = admin_ctx(admin, org);
+    let pid = create_project(&schema, auth.clone(), "Site").await;
+    let msg = exec_err_vars(
+        &schema,
+        RUN_PARKING,
+        serde_json::json!({ "pid": pid, "in": {
+            "name": "x", "bays": "[[[0,0],[10,0]]]",
+        } }),
+        auth,
+    )
+    .await;
+    assert!(msg.contains("Crew feature"), "parking not gated: {msg}");
+}

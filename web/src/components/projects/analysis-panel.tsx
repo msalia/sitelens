@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { gql, useMutation } from '@/lib/graphql';
 
 import {
@@ -35,6 +36,7 @@ import {
   CREATE_ANALYSIS,
   DELETE_ANALYSIS,
   DUPLICATE_ANALYSIS,
+  RUN_PARKING_ANALYSIS,
   RUN_TURNING_ANALYSIS,
   VEHICLE_TEMPLATES,
 } from './analysis-data';
@@ -65,6 +67,33 @@ function verdict(result: string | null): 'pass' | 'fail' | null {
   try {
     const r = JSON.parse(result) as { pass?: boolean };
     return r.pass === undefined ? null : r.pass ? 'pass' : 'fail';
+  } catch {
+    return null;
+  }
+}
+
+/** Reads the stall count + (configured) verdict from a parking `result` JSON. */
+function parkingInfo(
+  result: string | null,
+): { checked: boolean; count: number; pass: boolean } | null {
+  if (!result) {
+    return null;
+  }
+  try {
+    const r = JSON.parse(result) as {
+      accessibleProvided?: number | null;
+      pass?: boolean;
+      requiredCount?: number | null;
+      stallCount?: number;
+    };
+    if (r.stallCount === undefined) {
+      return null;
+    }
+    return {
+      checked: typeof r.requiredCount === 'number' || typeof r.accessibleProvided === 'number',
+      count: r.stallCount,
+      pass: r.pass ?? true,
+    };
   } catch {
     return null;
   }
@@ -127,6 +156,14 @@ export function AnalysisPanel({
   const [type, setType] = useState<AnalysisType>('TURNING');
   const [vehicleId, setVehicleId] = useState('');
   const [step, setStep] = useState('0.5');
+  // Parking module params (meters; angle in degrees).
+  const [stallLength, setStallLength] = useState('5.5');
+  const [stallWidth, setStallWidth] = useState('2.7');
+  const [angle, setAngle] = useState('90');
+  const [aisleWidth, setAisleWidth] = useState('7.3');
+  const [oneWay, setOneWay] = useState(false);
+  const [requiredCount, setRequiredCount] = useState('');
+  const [accessibleProvided, setAccessibleProvided] = useState('');
   const [capturing, setCapturing] = useState(false);
   const [verts, setVerts] = useState<{ e: number; n: number }[]>([]);
   const [eIn, setEIn] = useState('');
@@ -282,6 +319,49 @@ export function AnalysisPanel({
       },
     );
 
+  const runParking = () => {
+    const num = (s: string) => (s === '' ? null : Math.trunc(Number(s)));
+    return run(
+      () =>
+        gql(RUN_PARKING_ANALYSIS, {
+          input: {
+            accessibleProvided: num(accessibleProvided),
+            aisleWidth: Number(aisleWidth) || 7.3,
+            angle: Number(angle) || 90,
+            bays: JSON.stringify([verts.map((v) => [v.e, v.n])]),
+            name: name.trim() || 'Parking analysis',
+            oneWay,
+            requiredCount: num(requiredCount),
+            stallLength: Number(stallLength) || 5.5,
+            stallWidth: Number(stallWidth) || 2.7,
+          },
+          projectId: project.id,
+        }),
+      {
+        error: 'Could not run the parking analysis',
+        onDone: async (res) => {
+          setCapturing(false);
+          setVerts([]);
+          await load();
+          if (res?.runParkingAnalysis.id) {
+            onSelect(res.runParkingAnalysis.id);
+          }
+          onChanged();
+          const info = parkingInfo(res?.runParkingAnalysis.result ?? null);
+          if (info) {
+            const msg = `${info.count} stall${info.count === 1 ? '' : 's'} tiled`;
+            if (info.checked && !info.pass) {
+              toast.warning(`${msg} — below code requirement`);
+            } else {
+              toast.success(msg);
+            }
+          }
+        },
+        success: 'Parking analysis complete',
+      },
+    );
+  };
+
   const duplicate = (id: string) =>
     run(() => gql(DUPLICATE_ANALYSIS, { id }), {
       error: 'Could not duplicate',
@@ -315,8 +395,8 @@ export function AnalysisPanel({
           <CardTitle className="text-sm">New analysis</CardTitle>
           <CardDescription>
             Draw plan geometry on the survey — snap to survey points in the scene or type
-            coordinates. Turning radius, parking, hydrology, and traffic compute in upcoming
-            releases.
+            coordinates. Turning radius and parking compute now; hydrology and traffic land in
+            upcoming releases.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
@@ -452,6 +532,102 @@ export function AnalysisPanel({
                 </div>
               ) : null}
 
+              {/* Parking: the stall module (size, angle, aisle) + code checks. */}
+              {type === 'PARKING' ? (
+                <div className="flex flex-col gap-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field>
+                      <FieldLabel htmlFor="an-stall-w">Stall width (m)</FieldLabel>
+                      <Input
+                        id="an-stall-w"
+                        title="Stall width along the aisle, in meters"
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={stallWidth}
+                        onChange={(e) => setStallWidth(e.target.value)}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="an-stall-l">Stall length (m)</FieldLabel>
+                      <Input
+                        id="an-stall-l"
+                        title="Stall depth into the lot, in meters"
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={stallLength}
+                        onChange={(e) => setStallLength(e.target.value)}
+                      />
+                    </Field>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field>
+                      <FieldLabel htmlFor="an-angle">Angle</FieldLabel>
+                      <Select value={angle} onValueChange={(v) => v && setAngle(v)}>
+                        <SelectTrigger id="an-angle" className="w-full" title="Stall angle">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectLabel>Stall angle</SelectLabel>
+                            <SelectItem value="90">90° (perpendicular)</SelectItem>
+                            <SelectItem value="60">60°</SelectItem>
+                            <SelectItem value="45">45°</SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="an-aisle">Aisle width (m)</FieldLabel>
+                      <Input
+                        id="an-aisle"
+                        title="Drive-aisle width, in meters"
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={aisleWidth}
+                        onChange={(e) => setAisleWidth(e.target.value)}
+                      />
+                    </Field>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field>
+                      <FieldLabel htmlFor="an-required">Required stalls</FieldLabel>
+                      <Input
+                        id="an-required"
+                        title="Minimum stalls the site must provide (optional)"
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="optional"
+                        value={requiredCount}
+                        onChange={(e) => setRequiredCount(e.target.value)}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="an-accessible">Accessible provided</FieldLabel>
+                      <Input
+                        id="an-accessible"
+                        title="Accessible stalls the design provides — checked against ADA §208 (optional)"
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="optional"
+                        value={accessibleProvided}
+                        onChange={(e) => setAccessibleProvided(e.target.value)}
+                      />
+                    </Field>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch id="an-oneway" checked={oneWay} onCheckedChange={setOneWay} />
+                    <FieldLabel htmlFor="an-oneway" className="!mb-0">
+                      One-way aisle
+                    </FieldLabel>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="flex justify-end gap-2">
                 <Button
                   type="button"
@@ -470,6 +646,15 @@ export function AnalysisPanel({
                     size="sm"
                     onClick={runTurning}
                     disabled={busy || verts.length < 2 || !vehicleId}
+                  >
+                    <IconPlus className="mr-1 size-4" /> Run
+                  </Button>
+                ) : type === 'PARKING' ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={runParking}
+                    disabled={busy || verts.length < 2}
                   >
                     <IconPlus className="mr-1 size-4" /> Run
                   </Button>
@@ -503,7 +688,8 @@ export function AnalysisPanel({
             analyses.map((a) => {
               const active = a.id === activeAnalysisId;
               const count = parsePath(a.inputGeometry).length;
-              const v = verdict(a.result);
+              const v = a.type === 'PARKING' ? null : verdict(a.result);
+              const pk = a.type === 'PARKING' ? parkingInfo(a.result) : null;
               return (
                 <ListRow
                   key={a.id}
@@ -524,6 +710,21 @@ export function AnalysisPanel({
                         >
                           {v === 'pass' ? 'Pass' : 'Fail'}
                         </Badge>
+                      ) : null}
+                      {pk ? (
+                        <>
+                          <Badge variant="secondary" className="shrink-0">
+                            {pk.count} stall{pk.count === 1 ? '' : 's'}
+                          </Badge>
+                          {pk.checked ? (
+                            <Badge
+                              variant={pk.pass ? 'default' : 'destructive'}
+                              className="shrink-0"
+                            >
+                              {pk.pass ? 'Pass' : 'Fail'}
+                            </Badge>
+                          ) : null}
+                        </>
                       ) : null}
                     </span>
                   }

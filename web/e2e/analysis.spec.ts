@@ -73,6 +73,44 @@ test('run a turning-radius analysis → swept path + pass verdict', async ({ pag
   await expect(page.getByText('Pass', { exact: true })).toBeVisible();
 });
 
+test('run a parking analysis → tiled stalls + count badge', async ({ page }) => {
+  const email = await signUpAndLogin(page, 'analysis-parking');
+  upgradeOrg(email);
+  await createProjectAndOpen(page, 'Parking P3');
+
+  await gotoTab(page, 'Analysis');
+  await page.getByLabel('Name').fill('Lot A');
+  // Switch the analysis type to Parking (base-ui Select: combobox → option).
+  await page.locator('#an-type').click();
+  await page.getByRole('option', { name: 'Parking' }).click();
+
+  // Draw a 30 m bay baseline via numeric entry.
+  await page.getByRole('button', { name: 'Draw geometry' }).click();
+  await page.getByLabel('Easting').fill('0');
+  await page.getByLabel('Northing').fill('0');
+  await page.getByRole('button', { exact: true, name: 'Add' }).click();
+  await page.getByLabel('Easting').fill('30');
+  await page.getByLabel('Northing').fill('0');
+  await page.getByRole('button', { exact: true, name: 'Add' }).click();
+
+  // Default 2.7 m stalls → floor(30 / 2.7) = 11 stalls.
+  const runResp = page.waitForResponse(
+    (r) =>
+      r.url().includes('/api/graphql') &&
+      (r.request().postData()?.includes('RunParkingAnalysis') ?? false) &&
+      r.ok(),
+  );
+  await page.getByRole('button', { exact: true, name: 'Run' }).click();
+  const body = (await (await runResp).json()) as {
+    data: { runParkingAnalysis: { result: string } };
+  };
+  expect(body.data.runParkingAnalysis.result).toContain('"stallCount":11');
+
+  // The completed analysis shows its stall-count badge in the list.
+  await expect(page.getByText('Lot A')).toBeVisible();
+  await expect(page.getByText('11 stalls')).toBeVisible();
+});
+
 test('Solo plan gates the Analysis tab behind the upgrade dialog', async ({ page }) => {
   await signUpAndLogin(page, 'analysis-gate'); // no upgrade → Solo
   await createProjectAndOpen(page, 'Analysis Gate');

@@ -13,8 +13,8 @@ import * as types from './graphql';
  * Learn more about it here: https://the-guild.dev/graphql/codegen/plugins/presets/preset-client#reducing-bundle-size
  */
 type Documents = {
-  '\n  query Workspace($id: UUID!) {\n    project(id: $id) {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      siteOriginRotationDeg\n      createdAt\n      updatedAt\n    }\n    gridAxes(projectId: $id) {\n      id\n      projectId\n      family\n      label\n      position\n    }\n    controlPoints(projectId: $id) {\n      id\n      projectId\n      label\n      northing\n      easting\n      elevation\n      gridX\n      gridY\n      source\n    }\n    transform(projectId: $id) {\n      translationE\n      translationN\n      rotationDegrees\n      scale\n      rmsError\n      pointCount\n      residuals {\n        label\n        deltaEasting\n        deltaNorthing\n        magnitude\n      }\n    }\n    categories {\n      id\n      orgId\n      name\n      color\n      icon\n      isDefault\n    }\n    cadOverlays(projectId: $id) {\n      id\n      projectId\n      originalFilename\n      offsetE\n      offsetN\n      rotationDeg\n      scale\n      elevation\n      assumeRealWorld\n      visible\n    }\n    surveyPointCount(projectId: $id)\n  }\n': typeof types.WorkspaceDocument;
-  '\n  query Projects {\n    projects {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      siteOriginRotationDeg\n      createdAt\n      updatedAt\n    }\n  }\n': typeof types.ProjectsDocument;
+  '\n  query Workspace($id: UUID!) {\n    project(id: $id) {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      siteOriginRotationDeg\n      boundary\n      createdAt\n      updatedAt\n    }\n    gridAxes(projectId: $id) {\n      id\n      projectId\n      family\n      label\n      position\n    }\n    controlPoints(projectId: $id) {\n      id\n      projectId\n      label\n      northing\n      easting\n      elevation\n      gridX\n      gridY\n      source\n    }\n    transform(projectId: $id) {\n      translationE\n      translationN\n      rotationDegrees\n      scale\n      rmsError\n      pointCount\n      residuals {\n        label\n        deltaEasting\n        deltaNorthing\n        magnitude\n      }\n    }\n    categories {\n      id\n      orgId\n      name\n      color\n      icon\n      isDefault\n    }\n    cadOverlays(projectId: $id) {\n      id\n      projectId\n      originalFilename\n      offsetE\n      offsetN\n      rotationDeg\n      scale\n      elevation\n      assumeRealWorld\n      visible\n    }\n    surveyPointCount(projectId: $id)\n  }\n': typeof types.WorkspaceDocument;
+  '\n  query Projects {\n    projects {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      siteOriginRotationDeg\n      boundary\n      createdAt\n      updatedAt\n    }\n  }\n': typeof types.ProjectsDocument;
   '\n  mutation DeleteProject($id: UUID!) {\n    deleteProject(id: $id)\n  }\n': typeof types.DeleteProjectDocument;
   '\n  query BillingMe {\n    me {\n      id\n      orgId\n      email\n      role\n      emailVerified\n    }\n  }\n': typeof types.BillingMeDocument;
   '\n  query SettingsData {\n    me {\n      id\n      orgId\n      email\n      role\n      emailVerified\n    }\n    organization {\n      id\n      name\n    }\n  }\n': typeof types.SettingsDataDocument;
@@ -35,11 +35,14 @@ type Documents = {
   '\n  query Analyses($projectId: UUID!) {\n    analyses(projectId: $projectId) {\n      id\n      type\n      name\n      status\n      inputGeometry\n      result\n      resultGeometry\n    }\n  }\n': typeof types.AnalysesDocument;
   '\n  query VehicleTemplates {\n    vehicleTemplates {\n      id\n      name\n      vehicleClass\n      wheelbase\n      width\n      isPreset\n    }\n  }\n': typeof types.VehicleTemplatesDocument;
   '\n  mutation RunTurningAnalysis($projectId: UUID!, $input: TurningInput!) {\n    runTurningAnalysis(projectId: $projectId, input: $input) {\n      id\n      name\n      result\n    }\n  }\n': typeof types.RunTurningAnalysisDocument;
+  '\n  mutation RunParkingAnalysis($projectId: UUID!, $input: ParkingInput!) {\n    runParkingAnalysis(projectId: $projectId, input: $input) {\n      id\n      name\n      result\n    }\n  }\n': typeof types.RunParkingAnalysisDocument;
   '\n  mutation CreateAnalysis($projectId: UUID!, $input: AnalysisInput!) {\n    createAnalysis(projectId: $projectId, input: $input) {\n      id\n      type\n      name\n    }\n  }\n': typeof types.CreateAnalysisDocument;
   '\n  mutation UpdateAnalysis($id: UUID!, $input: AnalysisInput!) {\n    updateAnalysis(id: $id, input: $input) {\n      id\n    }\n  }\n': typeof types.UpdateAnalysisDocument;
   '\n  mutation DeleteAnalysis($id: UUID!) {\n    deleteAnalysis(id: $id)\n  }\n': typeof types.DeleteAnalysisDocument;
   '\n  mutation DuplicateAnalysis($id: UUID!) {\n    duplicateAnalysis(id: $id) {\n      id\n    }\n  }\n': typeof types.DuplicateAnalysisDocument;
+  '\n  mutation SetProjectBoundary($projectId: UUID!, $boundary: String) {\n    setProjectBoundary(projectId: $projectId, boundary: $boundary) {\n      id\n      boundary\n    }\n  }\n': typeof types.SetProjectBoundaryDocument;
   '\n  mutation UploadDxf($id: UUID!, $f: String!, $c: String!) {\n    uploadDxf(projectId: $id, filename: $f, content: $c) {\n      id\n    }\n  }\n': typeof types.UploadDxfDocument;
+  '\n  mutation AlignCadOverlay($id: UUID!, $src: [AlignPoint!]!, $dst: [AlignPoint!]!) {\n    alignCadOverlay(id: $id, src: $src, dst: $dst) {\n      id\n      offsetE\n      offsetN\n      rotationDeg\n      scale\n    }\n  }\n': typeof types.AlignCadOverlayDocument;
   '\n  mutation SetCadGeoreference(\n    $id: UUID!\n    $oe: Float\n    $on: Float\n    $rot: Float\n    $sc: Float\n    $el: Float\n    $vis: Boolean\n  ) {\n    setCadGeoreference(\n      id: $id\n      offsetE: $oe\n      offsetN: $on\n      rotationDeg: $rot\n      scale: $sc\n      elevation: $el\n      visible: $vis\n    ) {\n      id\n    }\n  }\n': typeof types.SetCadGeoreferenceDocument;
   '\n  mutation DeleteCadOverlay($id: UUID!) {\n    deleteCadOverlay(id: $id)\n  }\n': typeof types.DeleteCadOverlayDocument;
   '\n  query SiteProjected($id: UUID!, $lon: Float!, $lat: Float!) {\n    convertCoordinate(projectId: $id, space: GEOGRAPHIC, x: $lon, y: $lat, unit: METER) {\n      projectedGridE\n      projectedGridN\n    }\n  }\n': typeof types.SiteProjectedDocument;
@@ -129,9 +132,9 @@ type Documents = {
   '\n  subscription ProjectChanged($projectId: UUID!) {\n    projectChanged(projectId: $projectId)\n  }\n': typeof types.ProjectChangedDocument;
 };
 const documents: Documents = {
-  '\n  query Workspace($id: UUID!) {\n    project(id: $id) {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      siteOriginRotationDeg\n      createdAt\n      updatedAt\n    }\n    gridAxes(projectId: $id) {\n      id\n      projectId\n      family\n      label\n      position\n    }\n    controlPoints(projectId: $id) {\n      id\n      projectId\n      label\n      northing\n      easting\n      elevation\n      gridX\n      gridY\n      source\n    }\n    transform(projectId: $id) {\n      translationE\n      translationN\n      rotationDegrees\n      scale\n      rmsError\n      pointCount\n      residuals {\n        label\n        deltaEasting\n        deltaNorthing\n        magnitude\n      }\n    }\n    categories {\n      id\n      orgId\n      name\n      color\n      icon\n      isDefault\n    }\n    cadOverlays(projectId: $id) {\n      id\n      projectId\n      originalFilename\n      offsetE\n      offsetN\n      rotationDeg\n      scale\n      elevation\n      assumeRealWorld\n      visible\n    }\n    surveyPointCount(projectId: $id)\n  }\n':
+  '\n  query Workspace($id: UUID!) {\n    project(id: $id) {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      siteOriginRotationDeg\n      boundary\n      createdAt\n      updatedAt\n    }\n    gridAxes(projectId: $id) {\n      id\n      projectId\n      family\n      label\n      position\n    }\n    controlPoints(projectId: $id) {\n      id\n      projectId\n      label\n      northing\n      easting\n      elevation\n      gridX\n      gridY\n      source\n    }\n    transform(projectId: $id) {\n      translationE\n      translationN\n      rotationDegrees\n      scale\n      rmsError\n      pointCount\n      residuals {\n        label\n        deltaEasting\n        deltaNorthing\n        magnitude\n      }\n    }\n    categories {\n      id\n      orgId\n      name\n      color\n      icon\n      isDefault\n    }\n    cadOverlays(projectId: $id) {\n      id\n      projectId\n      originalFilename\n      offsetE\n      offsetN\n      rotationDeg\n      scale\n      elevation\n      assumeRealWorld\n      visible\n    }\n    surveyPointCount(projectId: $id)\n  }\n':
     types.WorkspaceDocument,
-  '\n  query Projects {\n    projects {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      siteOriginRotationDeg\n      createdAt\n      updatedAt\n    }\n  }\n':
+  '\n  query Projects {\n    projects {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      siteOriginRotationDeg\n      boundary\n      createdAt\n      updatedAt\n    }\n  }\n':
     types.ProjectsDocument,
   '\n  mutation DeleteProject($id: UUID!) {\n    deleteProject(id: $id)\n  }\n':
     types.DeleteProjectDocument,
@@ -172,6 +175,8 @@ const documents: Documents = {
     types.VehicleTemplatesDocument,
   '\n  mutation RunTurningAnalysis($projectId: UUID!, $input: TurningInput!) {\n    runTurningAnalysis(projectId: $projectId, input: $input) {\n      id\n      name\n      result\n    }\n  }\n':
     types.RunTurningAnalysisDocument,
+  '\n  mutation RunParkingAnalysis($projectId: UUID!, $input: ParkingInput!) {\n    runParkingAnalysis(projectId: $projectId, input: $input) {\n      id\n      name\n      result\n    }\n  }\n':
+    types.RunParkingAnalysisDocument,
   '\n  mutation CreateAnalysis($projectId: UUID!, $input: AnalysisInput!) {\n    createAnalysis(projectId: $projectId, input: $input) {\n      id\n      type\n      name\n    }\n  }\n':
     types.CreateAnalysisDocument,
   '\n  mutation UpdateAnalysis($id: UUID!, $input: AnalysisInput!) {\n    updateAnalysis(id: $id, input: $input) {\n      id\n    }\n  }\n':
@@ -180,8 +185,12 @@ const documents: Documents = {
     types.DeleteAnalysisDocument,
   '\n  mutation DuplicateAnalysis($id: UUID!) {\n    duplicateAnalysis(id: $id) {\n      id\n    }\n  }\n':
     types.DuplicateAnalysisDocument,
+  '\n  mutation SetProjectBoundary($projectId: UUID!, $boundary: String) {\n    setProjectBoundary(projectId: $projectId, boundary: $boundary) {\n      id\n      boundary\n    }\n  }\n':
+    types.SetProjectBoundaryDocument,
   '\n  mutation UploadDxf($id: UUID!, $f: String!, $c: String!) {\n    uploadDxf(projectId: $id, filename: $f, content: $c) {\n      id\n    }\n  }\n':
     types.UploadDxfDocument,
+  '\n  mutation AlignCadOverlay($id: UUID!, $src: [AlignPoint!]!, $dst: [AlignPoint!]!) {\n    alignCadOverlay(id: $id, src: $src, dst: $dst) {\n      id\n      offsetE\n      offsetN\n      rotationDeg\n      scale\n    }\n  }\n':
+    types.AlignCadOverlayDocument,
   '\n  mutation SetCadGeoreference(\n    $id: UUID!\n    $oe: Float\n    $on: Float\n    $rot: Float\n    $sc: Float\n    $el: Float\n    $vis: Boolean\n  ) {\n    setCadGeoreference(\n      id: $id\n      offsetE: $oe\n      offsetN: $on\n      rotationDeg: $rot\n      scale: $sc\n      elevation: $el\n      visible: $vis\n    ) {\n      id\n    }\n  }\n':
     types.SetCadGeoreferenceDocument,
   '\n  mutation DeleteCadOverlay($id: UUID!) {\n    deleteCadOverlay(id: $id)\n  }\n':
@@ -362,13 +371,13 @@ const documents: Documents = {
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
-  source: '\n  query Workspace($id: UUID!) {\n    project(id: $id) {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      siteOriginRotationDeg\n      createdAt\n      updatedAt\n    }\n    gridAxes(projectId: $id) {\n      id\n      projectId\n      family\n      label\n      position\n    }\n    controlPoints(projectId: $id) {\n      id\n      projectId\n      label\n      northing\n      easting\n      elevation\n      gridX\n      gridY\n      source\n    }\n    transform(projectId: $id) {\n      translationE\n      translationN\n      rotationDegrees\n      scale\n      rmsError\n      pointCount\n      residuals {\n        label\n        deltaEasting\n        deltaNorthing\n        magnitude\n      }\n    }\n    categories {\n      id\n      orgId\n      name\n      color\n      icon\n      isDefault\n    }\n    cadOverlays(projectId: $id) {\n      id\n      projectId\n      originalFilename\n      offsetE\n      offsetN\n      rotationDeg\n      scale\n      elevation\n      assumeRealWorld\n      visible\n    }\n    surveyPointCount(projectId: $id)\n  }\n',
+  source: '\n  query Workspace($id: UUID!) {\n    project(id: $id) {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      siteOriginRotationDeg\n      boundary\n      createdAt\n      updatedAt\n    }\n    gridAxes(projectId: $id) {\n      id\n      projectId\n      family\n      label\n      position\n    }\n    controlPoints(projectId: $id) {\n      id\n      projectId\n      label\n      northing\n      easting\n      elevation\n      gridX\n      gridY\n      source\n    }\n    transform(projectId: $id) {\n      translationE\n      translationN\n      rotationDegrees\n      scale\n      rmsError\n      pointCount\n      residuals {\n        label\n        deltaEasting\n        deltaNorthing\n        magnitude\n      }\n    }\n    categories {\n      id\n      orgId\n      name\n      color\n      icon\n      isDefault\n    }\n    cadOverlays(projectId: $id) {\n      id\n      projectId\n      originalFilename\n      offsetE\n      offsetN\n      rotationDeg\n      scale\n      elevation\n      assumeRealWorld\n      visible\n    }\n    surveyPointCount(projectId: $id)\n  }\n',
 ): typeof import('./graphql').WorkspaceDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
-  source: '\n  query Projects {\n    projects {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      siteOriginRotationDeg\n      createdAt\n      updatedAt\n    }\n  }\n',
+  source: '\n  query Projects {\n    projects {\n      id\n      orgId\n      name\n      description\n      epsgCode\n      displayUnit\n      combinedScaleFactor\n      siteOriginLat\n      siteOriginLon\n      siteOriginRotationDeg\n      boundary\n      createdAt\n      updatedAt\n    }\n  }\n',
 ): typeof import('./graphql').ProjectsDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -494,6 +503,12 @@ export function graphql(
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
+  source: '\n  mutation RunParkingAnalysis($projectId: UUID!, $input: ParkingInput!) {\n    runParkingAnalysis(projectId: $projectId, input: $input) {\n      id\n      name\n      result\n    }\n  }\n',
+): typeof import('./graphql').RunParkingAnalysisDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
   source: '\n  mutation CreateAnalysis($projectId: UUID!, $input: AnalysisInput!) {\n    createAnalysis(projectId: $projectId, input: $input) {\n      id\n      type\n      name\n    }\n  }\n',
 ): typeof import('./graphql').CreateAnalysisDocument;
 /**
@@ -518,8 +533,20 @@ export function graphql(
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
+  source: '\n  mutation SetProjectBoundary($projectId: UUID!, $boundary: String) {\n    setProjectBoundary(projectId: $projectId, boundary: $boundary) {\n      id\n      boundary\n    }\n  }\n',
+): typeof import('./graphql').SetProjectBoundaryDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
   source: '\n  mutation UploadDxf($id: UUID!, $f: String!, $c: String!) {\n    uploadDxf(projectId: $id, filename: $f, content: $c) {\n      id\n    }\n  }\n',
 ): typeof import('./graphql').UploadDxfDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  mutation AlignCadOverlay($id: UUID!, $src: [AlignPoint!]!, $dst: [AlignPoint!]!) {\n    alignCadOverlay(id: $id, src: $src, dst: $dst) {\n      id\n      offsetE\n      offsetN\n      rotationDeg\n      scale\n    }\n  }\n',
+): typeof import('./graphql').AlignCadOverlayDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

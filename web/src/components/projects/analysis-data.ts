@@ -40,6 +40,17 @@ export const RUN_TURNING_ANALYSIS = graphql(`
   }
 `);
 
+/** Run a parking analysis (bay-based stall tiling + count + ADA/ratio checks). */
+export const RUN_PARKING_ANALYSIS = graphql(`
+  mutation RunParkingAnalysis($projectId: UUID!, $input: ParkingInput!) {
+    runParkingAnalysis(projectId: $projectId, input: $input) {
+      id
+      name
+      result
+    }
+  }
+`);
+
 /** Create a draft analysis from a drawn input + params. */
 export const CREATE_ANALYSIS = graphql(`
   mutation CreateAnalysis($projectId: UUID!, $input: AnalysisInput!) {

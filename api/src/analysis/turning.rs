@@ -34,30 +34,7 @@ pub struct SweptPath {
     pub envelope: Vec<[f64; 2]>,
 }
 
-fn sub(a: [f64; 2], b: [f64; 2]) -> [f64; 2] {
-    [a[0] - b[0], a[1] - b[1]]
-}
-fn add(a: [f64; 2], b: [f64; 2]) -> [f64; 2] {
-    [a[0] + b[0], a[1] + b[1]]
-}
-fn scale(a: [f64; 2], s: f64) -> [f64; 2] {
-    [a[0] * s, a[1] * s]
-}
-fn hypot(a: [f64; 2]) -> f64 {
-    a[0].hypot(a[1])
-}
-fn unit(a: [f64; 2]) -> [f64; 2] {
-    let l = hypot(a);
-    if l < 1e-12 {
-        [0.0, 0.0]
-    } else {
-        [a[0] / l, a[1] / l]
-    }
-}
-/// Left normal (90° CCW).
-fn perp(a: [f64; 2]) -> [f64; 2] {
-    [-a[1], a[0]]
-}
+use super::vec2::{add, hypot, perp, scale, sub, unit};
 
 /// Resamples a polyline to points spaced ~`step` apart (endpoints kept).
 /// Rounds the sharp corners of a drawn centre-line with Chaikin corner-cutting,

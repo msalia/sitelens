@@ -1,4 +1,13 @@
 """
+A planar point in projected meters — an alignment pick (a DXF vertex's current
+world position, or a grid intersection).
+"""
+input AlignPoint {
+	e: Float!
+	n: Float!
+}
+
+"""
 One analysis instance. `params`, `input_geometry`, `result`, and
 `result_geometry` are JSON object/array strings (projected meters).
 """
@@ -679,6 +688,13 @@ type MutationRoot {
 	"""
 	setProjectTolerances(projectId: UUID!, tolHWarn: Float!, tolHFail: Float!, tolVWarn: Float!, tolVFail: Float!): Project!
 	"""
+	Sets (or clears) the project's property boundary — an ordered polygon of
+	`[[e,n],…]` vertices in projected meters, passed as a JSON string. Passing
+	null/empty clears it. The boundary is the area-of-interest for the detailed
+	hydrology terrain fetch. Editor role required.
+	"""
+	setProjectBoundary(projectId: UUID!, boundary: String): Project!
+	"""
 	Permanently deletes a project: removes every uploaded file (DXF overlays,
 	terrain, buildings) and all database rows (cascades to grid, control
 	points, survey points, transforms, imports, groups, categories links).
@@ -769,6 +785,14 @@ type MutationRoot {
 	Updates an overlay's georeference / visibility. Editor role required.
 	"""
 	setCadGeoreference(id: UUID!, offsetE: Float, offsetN: Float, rotationDeg: Float, scale: Float, elevation: Float, assumeRealWorld: Boolean, visible: Boolean): CadOverlay!
+	"""
+	Aligns a DXF overlay to the grid from two point correspondences: two picked
+	DXF vertices (their current world E/N) mapped onto two grid intersections.
+	Solves the 2-point Helmert similarity — the same solver that ties control
+	points — and persists the resulting offset / rotation / scale. Rust owns the
+	geometry so the placement never diverges from what's drawn.
+	"""
+	alignCadOverlay(id: UUID!, src: [AlignPoint!]!, dst: [AlignPoint!]!): CadOverlay!
 	"""
 	Deletes an overlay and its stored file. Editor role required.
 	"""
@@ -923,6 +947,12 @@ type MutationRoot {
 	"""
 	runTurningAnalysis(projectId: UUID!, input: TurningInput!): Analysis!
 	"""
+	Runs a parking analysis: tiles stalls along the drawn bays at the given
+	module + angle, counts them, and checks the ADA §208 accessible-stall
+	requirement and an optional required-count. Synchronous.
+	"""
+	runParkingAnalysis(projectId: UUID!, input: ParkingInput!): Analysis!
+	"""
 	Starts a hosted Stripe Checkout for the Crew plan; returns the redirect URL
 	the client sends the browser to. Admin-only.
 	"""
@@ -967,6 +997,48 @@ type OrgMember {
 	"""
 	status: String!
 	createdAt: DateTime!
+}
+
+"""
+Parameters for a parking run: the drawn bays + stall module + code-check
+inputs. Dimensions in meters (internal); angle in degrees (90 = perpendicular).
+"""
+input ParkingInput {
+	name: String!
+	"""
+	Bay baselines as a JSON `[[[e,n],…],…]` string (projected meters) — the
+	aisle-side edge of each stall row.
+	"""
+	bays: String!
+	"""
+	Stall depth into the lot (default 5.5 m ≈ 18 ft).
+	"""
+	stallLength: Float! = 5.5
+	"""
+	Stall width (default 2.7 m ≈ 9 ft).
+	"""
+	stallWidth: Float! = 2.7
+	"""
+	Stall angle to the aisle: 90 = perpendicular, 60/45 = angled (default 90).
+	"""
+	angle: Float! = 90.0
+	"""
+	Drive-aisle width, carried for reporting (default 7.3 m ≈ 24 ft).
+	"""
+	aisleWidth: Float! = 7.3
+	"""
+	One-way drive aisle (reporting only; does not change stall geometry).
+	"""
+	oneWay: Boolean! = false
+	"""
+	Minimum stalls the site must provide — the required-count check (optional).
+	"""
+	requiredCount: Int
+	"""
+	Accessible stalls the design provides — checked against the ADA §208
+	requirement (optional; when omitted the requirement is reported, not failed).
+	"""
+	accessibleProvided: Int
 }
 
 """
@@ -1074,6 +1146,11 @@ type Project {
 	tolHFail: Float!
 	tolVWarn: Float!
 	tolVFail: Float!
+	"""
+	Property boundary polygon as a JSON `[[e,n],…]` string (projected meters);
+	null when unset. The area-of-interest for detailed hydrology terrain.
+	"""
+	boundary: String
 	createdAt: DateTime!
 	updatedAt: DateTime!
 }

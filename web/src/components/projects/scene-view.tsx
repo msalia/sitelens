@@ -13,6 +13,7 @@ import type {
   TerrainData,
   UtilityPick,
 } from '@/components/projects/terrain-viewer';
+import type { AlignMarker } from '@/components/projects/terrain/align-points-overlay';
 import type { AnalysisPath } from '@/components/projects/terrain/analysis-overlay';
 import type { AnalysisResult } from '@/components/projects/terrain/analysis-result-overlay';
 import type { SceneConstraint } from '@/components/projects/terrain/surface-constraints';
@@ -61,8 +62,11 @@ const TerrainViewer = dynamic(
 export function SceneView({
   activeSurfaceId,
   activeVolumeId,
+  alignPoints,
   analysisPaths,
   analysisResult,
+  boundary,
+  boundaryDraft,
   categories,
   comparison,
   contours = DEFAULT_CONTOURS,
@@ -80,8 +84,14 @@ export function SceneView({
   activeSurfaceId?: string | null;
   /** The volume whose cut/fill heatmap is rendered (from the Surfaces panel). */
   activeVolumeId?: string | null;
+  /** DXF align-to-grid picks to highlight (from the Overlays panel). */
+  alignPoints?: AlignMarker[];
   /** Analysis plan paths to overlay (from the Analysis panel). */
   analysisPaths?: AnalysisPath[];
+  /** Property boundary ring to draw (saved or in-progress). */
+  boundary?: { e: number; n: number }[];
+  /** Whether `boundary` is an in-progress edit (styled distinctly). */
+  boundaryDraft?: boolean;
   /** A turning analysis's computed result geometry to overlay. */
   analysisResult?: AnalysisResult | null;
   /** Bumped by the Surfaces panel after a build/rebuild to refetch the mesh. */
@@ -573,8 +583,11 @@ export function SceneView({
             displayUnit={project.displayUnit}
             constraints={constraints}
             showConstraints={showConstraints}
+            alignPoints={alignPoints}
             analysisPaths={analysisPaths}
             analysisResult={analysisResult}
+            boundary={boundary}
+            boundaryDraft={boundaryDraft}
             terrain={terrain}
             buildings={buildings}
             showBuildings={showBuildings}

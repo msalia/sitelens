@@ -4,7 +4,8 @@ import { IconUpload, IconVector } from '@tabler/icons-react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import type { CadOverlay, Project } from '@/lib/types';
+import type { AlignMarker } from '@/components/projects/terrain/align-points-overlay';
+import type { CadOverlay, Project, ScenePoint } from '@/lib/types';
 
 import { OverlayRow } from '@/components/projects/cad-overlay/overlay-row';
 import { GeoreferenceCard } from '@/components/projects/georeference-card';
@@ -22,16 +23,29 @@ import { gql } from '@/lib/graphql';
 import { DELETE_CAD_OVERLAY, MAX_DXF_BYTES, UPLOAD } from './cad-overlay-data';
 
 export function CadOverlayPanel({
+  onAlignPointsChange,
   onChanged,
+  onDigitizingChange,
   overlays,
+  pickRef,
   project,
 }: {
   project: Project;
   overlays: CadOverlay[];
   onChanged: () => void;
+  /** Scene digitize bridge — snapped DXF vertices / grid intersections feed the
+   *  active overlay's align-to-grid capture. */
+  pickRef?: React.MutableRefObject<((point: ScenePoint) => void) | null>;
+  /** Toggles the scene's snap targets (grid intersections + DXF vertices). */
+  onDigitizingChange?: (on: boolean) => void;
+  /** Publishes the active overlay's captured align picks for scene highlighting. */
+  onAlignPointsChange?: (markers: AlignMarker[]) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Only one overlay can be in align-to-grid capture at a time (they share the
+  // single scene pick bridge).
+  const [aligningId, setAligningId] = useState<string | null>(null);
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -122,6 +136,11 @@ export function CadOverlayPanel({
               overlay={o}
               onChanged={onChanged}
               onDelete={() => remove(o.id)}
+              pickRef={pickRef}
+              onDigitizingChange={onDigitizingChange}
+              onAlignPointsChange={onAlignPointsChange}
+              aligning={aligningId === o.id}
+              onAlignChange={(on) => setAligningId(on ? o.id : null)}
             />
           ))}
         </div>

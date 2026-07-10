@@ -7,6 +7,15 @@ export type Incremental<T> =
   | { [P in keyof T]?: P extends ' $fragmentName' | '__typename' ? T[P] : never };
 import { DocumentTypeDecoration } from '@graphql-typed-document-node/core';
 /**
+ * A planar point in projected meters — an alignment pick (a DXF vertex's current
+ * world position, or a grid intersection).
+ */
+export type AlignPoint = {
+  e: number;
+  n: number;
+};
+
+/**
  * Create/update an analysis. Phase 1 persists the drawn input + params as a
  * `draft`; the per-type run mutations (later phases) compute the result.
  */
@@ -150,6 +159,36 @@ export type ImportFormat = 'CSV' | 'LANDXML';
 
 /** A length unit used at I/O boundaries. The canonical internal unit is meters. */
 export type LengthUnit = 'INTERNATIONAL_FOOT' | 'METER' | 'US_SURVEY_FOOT';
+
+/**
+ * Parameters for a parking run: the drawn bays + stall module + code-check
+ * inputs. Dimensions in meters (internal); angle in degrees (90 = perpendicular).
+ */
+export type ParkingInput = {
+  /**
+   * Accessible stalls the design provides — checked against the ADA §208
+   * requirement (optional; when omitted the requirement is reported, not failed).
+   */
+  accessibleProvided?: number | null | undefined;
+  /** Drive-aisle width, carried for reporting (default 7.3 m ≈ 24 ft). */
+  aisleWidth?: number;
+  /** Stall angle to the aisle: 90 = perpendicular, 60/45 = angled (default 90). */
+  angle?: number;
+  /**
+   * Bay baselines as a JSON `[[[e,n],…],…]` string (projected meters) — the
+   * aisle-side edge of each stall row.
+   */
+  bays: string;
+  name: string;
+  /** One-way drive aisle (reporting only; does not change stall geometry). */
+  oneWay?: boolean;
+  /** Minimum stalls the site must provide — the required-count check (optional). */
+  requiredCount?: number | null | undefined;
+  /** Stall depth into the lot (default 5.5 m ≈ 18 ft). */
+  stallLength?: number;
+  /** Stall width (default 2.7 m ≈ 9 ft). */
+  stallWidth?: number;
+};
 
 /** The subscription plans. Binary today: free `Solo` vs paid `Crew`. */
 export type Plan =
@@ -320,6 +359,7 @@ export type WorkspaceQuery = {
     siteOriginLat: number | null;
     siteOriginLon: number | null;
     siteOriginRotationDeg: number;
+    boundary: string | null;
     createdAt: string;
     updatedAt: string;
   } | null;
@@ -391,6 +431,7 @@ export type ProjectsQuery = {
     siteOriginLat: number | null;
     siteOriginLon: number | null;
     siteOriginRotationDeg: number;
+    boundary: string | null;
     createdAt: string;
     updatedAt: string;
   }>;
@@ -545,6 +586,15 @@ export type RunTurningAnalysisMutation = {
   runTurningAnalysis: { id: string; name: string; result: string };
 };
 
+export type RunParkingAnalysisMutationVariables = Exact<{
+  projectId: string;
+  input: ParkingInput;
+}>;
+
+export type RunParkingAnalysisMutation = {
+  runParkingAnalysis: { id: string; name: string; result: string };
+};
+
 export type CreateAnalysisMutationVariables = Exact<{
   projectId: string;
   input: AnalysisInput;
@@ -573,6 +623,15 @@ export type DuplicateAnalysisMutationVariables = Exact<{
 
 export type DuplicateAnalysisMutation = { duplicateAnalysis: { id: string } };
 
+export type SetProjectBoundaryMutationVariables = Exact<{
+  projectId: string;
+  boundary?: string | null | undefined;
+}>;
+
+export type SetProjectBoundaryMutation = {
+  setProjectBoundary: { id: string; boundary: string | null };
+};
+
 export type UploadDxfMutationVariables = Exact<{
   id: string;
   f: string;
@@ -580,6 +639,22 @@ export type UploadDxfMutationVariables = Exact<{
 }>;
 
 export type UploadDxfMutation = { uploadDxf: { id: string } };
+
+export type AlignCadOverlayMutationVariables = Exact<{
+  id: string;
+  src: Array<AlignPoint> | AlignPoint;
+  dst: Array<AlignPoint> | AlignPoint;
+}>;
+
+export type AlignCadOverlayMutation = {
+  alignCadOverlay: {
+    id: string;
+    offsetE: number;
+    offsetN: number;
+    rotationDeg: number;
+    scale: number;
+  };
+};
 
 export type SetCadGeoreferenceMutationVariables = Exact<{
   id: string;
@@ -1612,6 +1687,7 @@ export const WorkspaceDocument = new TypedDocumentString(`
     siteOriginLat
     siteOriginLon
     siteOriginRotationDeg
+    boundary
     createdAt
     updatedAt
   }
@@ -1683,6 +1759,7 @@ export const ProjectsDocument = new TypedDocumentString(`
     siteOriginLat
     siteOriginLon
     siteOriginRotationDeg
+    boundary
     createdAt
     updatedAt
   }
@@ -1878,6 +1955,18 @@ export const RunTurningAnalysisDocument = new TypedDocumentString(`
   RunTurningAnalysisMutation,
   RunTurningAnalysisMutationVariables
 >;
+export const RunParkingAnalysisDocument = new TypedDocumentString(`
+    mutation RunParkingAnalysis($projectId: UUID!, $input: ParkingInput!) {
+  runParkingAnalysis(projectId: $projectId, input: $input) {
+    id
+    name
+    result
+  }
+}
+    `) as unknown as TypedDocumentString<
+  RunParkingAnalysisMutation,
+  RunParkingAnalysisMutationVariables
+>;
 export const CreateAnalysisDocument = new TypedDocumentString(`
     mutation CreateAnalysis($projectId: UUID!, $input: AnalysisInput!) {
   createAnalysis(projectId: $projectId, input: $input) {
@@ -1909,6 +1998,17 @@ export const DuplicateAnalysisDocument = new TypedDocumentString(`
   DuplicateAnalysisMutation,
   DuplicateAnalysisMutationVariables
 >;
+export const SetProjectBoundaryDocument = new TypedDocumentString(`
+    mutation SetProjectBoundary($projectId: UUID!, $boundary: String) {
+  setProjectBoundary(projectId: $projectId, boundary: $boundary) {
+    id
+    boundary
+  }
+}
+    `) as unknown as TypedDocumentString<
+  SetProjectBoundaryMutation,
+  SetProjectBoundaryMutationVariables
+>;
 export const UploadDxfDocument = new TypedDocumentString(`
     mutation UploadDxf($id: UUID!, $f: String!, $c: String!) {
   uploadDxf(projectId: $id, filename: $f, content: $c) {
@@ -1916,6 +2016,17 @@ export const UploadDxfDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<UploadDxfMutation, UploadDxfMutationVariables>;
+export const AlignCadOverlayDocument = new TypedDocumentString(`
+    mutation AlignCadOverlay($id: UUID!, $src: [AlignPoint!]!, $dst: [AlignPoint!]!) {
+  alignCadOverlay(id: $id, src: $src, dst: $dst) {
+    id
+    offsetE
+    offsetN
+    rotationDeg
+    scale
+  }
+}
+    `) as unknown as TypedDocumentString<AlignCadOverlayMutation, AlignCadOverlayMutationVariables>;
 export const SetCadGeoreferenceDocument = new TypedDocumentString(`
     mutation SetCadGeoreference($id: UUID!, $oe: Float, $on: Float, $rot: Float, $sc: Float, $el: Float, $vis: Boolean) {
   setCadGeoreference(

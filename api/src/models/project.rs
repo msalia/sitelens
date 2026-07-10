@@ -25,6 +25,9 @@ pub struct Project {
     pub tol_h_fail: f64,
     pub tol_v_warn: f64,
     pub tol_v_fail: f64,
+    /// Property boundary polygon as a JSON `[[e,n],…]` string (projected meters);
+    /// null when unset. The area-of-interest for detailed hydrology terrain.
+    pub boundary: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -45,6 +48,7 @@ pub struct ProjectRow {
     pub tol_h_fail: f64,
     pub tol_v_warn: f64,
     pub tol_v_fail: f64,
+    pub boundary: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -66,6 +70,7 @@ impl From<ProjectRow> for Project {
             tol_h_fail: r.tol_h_fail,
             tol_v_warn: r.tol_v_warn,
             tol_v_fail: r.tol_v_fail,
+            boundary: r.boundary.map(|v| v.to_string()),
             created_at: r.created_at,
             updated_at: r.updated_at,
         }

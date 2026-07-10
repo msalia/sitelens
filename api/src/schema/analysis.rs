@@ -6,10 +6,10 @@
 use serde_json::{json, Value};
 
 use super::*;
-use crate::analysis::turning;
+use crate::analysis::{parking, turning};
 use crate::models::{
-    Analysis, AnalysisInput, AnalysisStatus, AnalysisType, TurningInput, VehicleTemplate,
-    VehicleTemplateInput,
+    Analysis, AnalysisInput, AnalysisStatus, AnalysisType, ParkingInput, TurningInput,
+    VehicleTemplate, VehicleTemplateInput,
 };
 
 /// Read columns for an `analysis` row, in the order [`row_to_analysis`] expects.
@@ -473,6 +473,91 @@ impl AnalysisMutation {
             "INSERT INTO analysis \
                (project_id, type, name, status, params, input_geometry, result, result_geometry, created_by) \
              VALUES ($1, 'turning', $2, 'complete', $3, $4, $5, $6, $7) RETURNING {ANALYSIS_COLUMNS}"
+        ))
+        .bind(project_id)
+        .bind(&input.name)
+        .bind(sqlx::types::Json(params))
+        .bind(sqlx::types::Json(input_geo))
+        .bind(sqlx::types::Json(result))
+        .bind(sqlx::types::Json(result_geometry))
+        .bind(auth.user_id)
+        .fetch_one(pool)
+        .await?;
+        Ok(row_to_analysis(row))
+    }
+
+    /// Runs a parking analysis: tiles stalls along the drawn bays at the given
+    /// module + angle, counts them, and checks the ADA §208 accessible-stall
+    /// requirement and an optional required-count. Synchronous.
+    async fn run_parking_analysis(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        input: ParkingInput,
+    ) -> Result<Analysis> {
+        require_feature(ctx, Feature::SiteAnalysis).await?;
+        let auth = require_editor_active(ctx).await?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+
+        let bays = parse_polylines(&input.bays)?;
+        // Keep a JSON copy of the drawn bays for the render blob + input geometry
+        // (the parsed copy moves into the compute closure).
+        let bays_json: Vec<Value> = bays.iter().map(|line| points_json(line)).collect();
+        let spec = parking::StallSpec {
+            length: input.stall_length,
+            width: input.stall_width,
+            angle_deg: input.angle,
+        };
+        // CPU-bound tiling off the async runtime.
+        let layout = tokio::task::spawn_blocking(move || parking::tile_bays(&bays, &spec))
+            .await
+            .map_err(|e| async_graphql::Error::new(format!("parking task failed: {e}")))?
+            .map_err(async_graphql::Error::new)?;
+
+        let count = layout.stalls.len() as u32;
+        let ada = parking::ada_required(count);
+        let van = parking::van_required(ada);
+
+        // Code checks: each is `None` (not configured) until the user supplies an
+        // input, so an unconfigured check never fails the run.
+        let ratio_pass = input.required_count.map(|rc| count as i32 >= rc);
+        let accessible = input.accessible_provided.map(|a| a.max(0) as u32);
+        let ada_pass = accessible.map(|a| a >= ada);
+        let pass = ratio_pass.unwrap_or(true) && ada_pass.unwrap_or(true);
+
+        let stalls: Vec<Value> = layout.stalls.iter().map(|q| points_json(q)).collect();
+        let result = json!({
+            "pass": pass,
+            "stallCount": count,
+            "adaRequired": ada,
+            "adaVanRequired": van,
+            "accessibleProvided": input.accessible_provided,
+            "adaPass": ada_pass,
+            "requiredCount": input.required_count,
+            "ratioPass": ratio_pass,
+            "moduleDepth": layout.module_depth,
+        });
+        let result_geometry = json!({
+            "stalls": stalls,
+            "bays": bays_json.clone(),
+        });
+        let params = json!({
+            "stallLength": input.stall_length,
+            "stallWidth": input.stall_width,
+            "angle": input.angle,
+            "aisleWidth": input.aisle_width,
+            "oneWay": input.one_way,
+            "requiredCount": input.required_count,
+            "accessibleProvided": input.accessible_provided,
+        });
+        // The drawn bays, stored verbatim as the analysis input geometry.
+        let input_geo = Value::Array(bays_json);
+
+        let row: AnalysisRow = sqlx::query_as(&format!(
+            "INSERT INTO analysis \
+               (project_id, type, name, status, params, input_geometry, result, result_geometry, created_by) \
+             VALUES ($1, 'parking', $2, 'complete', $3, $4, $5, $6, $7) RETURNING {ANALYSIS_COLUMNS}"
         ))
         .bind(project_id)
         .bind(&input.name)

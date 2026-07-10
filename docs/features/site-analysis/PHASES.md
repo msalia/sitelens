@@ -13,9 +13,9 @@
 
 | Phase | Focus | Depends On | Status |
 | ----- | ----- | ---------- | ------ |
-| 1 | Analysis foundation (domain, schema, gating, plan editor) | — | Not started |
-| 2 | Turning radius (flagship) | 1 | Not started |
-| 3 | Parking | 1 | Not started |
+| 1 | Analysis foundation (domain, schema, gating, plan editor) | — | Shipped |
+| 2 | Turning radius (flagship) | 1 | Shipped |
+| 3 | Parking | 1 | Shipped |
 | 4 | Terrain hydrology (existing-conditions screening) | 1 | Not started |
 | 5 | Traffic (AADT + OSM roads) | 1 | Not started |
 | 6 | Reports & export (DXF / PNG / PDF service) | 2–5 | Not started |
@@ -115,16 +115,45 @@ value, exploiting the geometry core.
 
 Draw bays, tile stalls, count them, check ADA and required ratio.
 
+> **Build notes (as shipped):**
+> - `analysis/parking.rs` — deterministic **bay-based tiling**. The user draws a
+>   bay **baseline** (the aisle-side edge of a stall row) as a polyline; each
+>   straight segment is tiled independently (so L-shaped bays work), stalls
+>   extending to the **left** of the drawn direction. A stall is a parallelogram:
+>   frontage/pitch along the aisle = `width / sin θ`, module depth into the lot =
+>   `length · sin θ`; at 90° it is a plain `width × length` rectangle. Each stall
+>   stays exactly `width` wide perpendicular to its own axis (golden-tested). The
+>   engine accepts **multiple bays**; the v1 UI sends one baseline per run.
+> - **ADA §208.2** table (`ada_required`) plus **§208.2.4** van count
+>   (`van_required`, 1 per 6 accessible) — both unit-tested at every published
+>   boundary. Above 500 stalls it is 2 % of the total; above 1000, 20 + 1 per 100.
+> - **Code checks are opt-in**: `requiredCount` (min stalls) and
+>   `accessibleProvided` (checked vs the ADA requirement) are each optional — an
+>   unconfigured check never fails a run, and the ADA requirement is always
+>   *reported* even when nothing is provided. The **required-ratio** deliverable
+>   ships as a user-supplied **count** (`requiredCount`); a ratio-with-basis
+>   (spaces per 1000 ft²) is deferred — it needs a floor-area input this feature
+>   doesn't yet collect. `oneWay`/`aisleWidth` are carried for reporting; they do
+>   not change stall geometry in v1.
+> - `runParkingAnalysis` is synchronous (`spawn_blocking`); it stores the stall
+>   quads + drawn bays in `result_geometry` and counts/verdicts in `result`. No
+>   migration — the Phase-1 `analysis` tables already cover it.
+> - UI: parking type → stall size/angle/aisle/one-way + optional required &
+>   accessible fields → **Run**; the scene overlays tiled stall outlines (blue) +
+>   the dashed bay baseline, with a stall-count badge (and Pass/Fail when a check
+>   is configured) in the list.
+
 ### Deliverables
-- [ ] **Bay-based stall tiling** in Rust: tile stalls along drawn bays/aisles at given size/angle/aisle width; snap to module.
-- [ ] Auto **stall count**; **ADA-table (§208)** required-vs-provided check; **required-ratio** check (user-supplied ratio/count).
-- [ ] `runParkingAnalysis` synchronous mutation; stall geometry + counts stored.
-- [ ] UI: draw bays, module param panel, render tiled stalls + count + ADA/ratio verdicts.
+- [x] **Bay-based stall tiling** in Rust: tile stalls along drawn bays/aisles at given size/angle/aisle width; snap to module.
+- [x] Auto **stall count**; **ADA-table (§208)** required-vs-provided check; **required-count** check (user-supplied). (Ratio-with-floor-area-basis deferred — no area input yet.)
+- [x] `runParkingAnalysis` synchronous mutation; stall geometry + counts stored.
+- [x] UI: draw bays, module param panel, render tiled stalls + count + ADA/ratio verdicts.
 
 ### Tests
-- [ ] Tiling count correct for 90/60/45° bays of known dimensions.
-- [ ] ADA-table thresholds correct across §208 boundary cases.
-- [ ] Playwright: draw bays → count + ADA/ratio verdict.
+- [x] Tiling count correct for 90/60/45° bays of known dimensions (`analysis/parking.rs`), plus perpendicular-width preservation, L-shaped bays, degenerate-input errors.
+- [x] ADA-table thresholds correct across §208 boundary cases (incl. the 2 % and 20+1/100 tiers) + van table.
+- [x] Integration (`tests/integration/analysis.rs`): parking run tiles + counts, required-count fail, ADA-provided fail, Crew gate.
+- [x] Playwright (`web/e2e/analysis.spec.ts`): switch to Parking, draw a bay → run → stall-count badge. (Run locally — sandbox can't launch Chromium.)
 
 ### Validates
 An engineer gets stall counts and ADA compliance from a drawn layout in seconds.
