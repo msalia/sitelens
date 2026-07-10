@@ -437,6 +437,10 @@ impl MetricFrame {
             (lat - self.lat0) * self.m_lat,
         )
     }
+    /// Inverse of [`to_metric`]: planar `(x, y)` meters → geographic `(lat, lon)`.
+    fn to_geo(&self, x: f64, y: f64) -> (f64, f64) {
+        (self.lat0 + y / self.m_lat, self.lon0 + x / self.m_lon)
+    }
 }
 
 /// The stored numeric result of a volume compute, plus its heatmap blob.
@@ -508,6 +512,157 @@ pub(super) fn compute_volume_blob(
         net: res.net,
         area: res.area,
     })
+}
+
+/// Builds a **clean earthwork solid** for a surface-to-surface volume: the cut/fill
+/// mass between the existing (`base`) surface and the proposed (`compare`) design,
+/// clipped exactly to the design footprint so the edges are straight (not the
+/// staircase you'd get from the base mesh). The design triangulation is subdivided
+/// to pick up existing-ground relief for the top cap; the bottom cap is the design;
+/// vertical walls follow the design boundary. Red = cut (design below existing),
+/// blue = fill. Display only — the volume totals come from the grid integration.
+pub(super) fn build_earthwork_solid_blob(
+    base_bytes: &[u8],
+    compare_bytes: &[u8],
+) -> std::result::Result<Vec<u8>, String> {
+    const CUT: [f64; 3] = [0.86, 0.15, 0.15];
+    const FILL: [f64; 3] = [0.2, 0.45, 0.9];
+    const NEUTRAL: [f64; 3] = [0.72, 0.72, 0.72];
+    const TARGET_M: f64 = 3.0; // sub-edge length target (meters)
+    const KMAX: usize = 12;
+
+    let (base_geo, base_tris) =
+        surface::deserialize_mesh(base_bytes).ok_or("base surface mesh is unreadable")?;
+    let (cmp_geo, cmp_tris) =
+        surface::deserialize_mesh(compare_bytes).ok_or("design surface mesh is unreadable")?;
+    let frame = MetricFrame::from_centroid(&base_geo);
+    let base = volume::SurfaceSampler::new(frame.mesh_to_metric(&base_geo), base_tris)
+        .ok_or("base surface mesh is unusable")?;
+    // Design vertices in metric (xy) with their design elevation.
+    let cmp: Vec<[f64; 3]> = frame.mesh_to_metric(&cmp_geo);
+
+    // Colour scale: the largest |design − existing| across design vertices.
+    let mut scale = 0.0_f64;
+    for v in &cmp {
+        if let Some(e) = base.sample(v[0], v[1]) {
+            scale = scale.max((v[2] - e).abs());
+        }
+    }
+    if scale <= 0.0 {
+        scale = 1.0;
+    }
+    let colour = |dz: f64| -> [f64; 3] {
+        let end = if dz < 0.0 { CUT } else { FILL };
+        let k = (dz.abs() / scale).clamp(0.0, 1.0);
+        let t = 0.35 + 0.65 * k;
+        [
+            NEUTRAL[0] + (end[0] - NEUTRAL[0]) * t,
+            NEUTRAL[1] + (end[1] - NEUTRAL[1]) * t,
+            NEUTRAL[2] + (end[2] - NEUTRAL[2]) * t,
+        ]
+    };
+
+    let mut verts: Vec<[f64; 3]> = Vec::new();
+    let mut cols: Vec<[f64; 3]> = Vec::new();
+    let mut tris: Vec<[u32; 3]> = Vec::new();
+    // Push a triangle of metric points at the given elevations, in geographic space.
+    let mut push_tri = |p: [(f64, f64, f64); 3], c: [f64; 3]| {
+        let n = verts.len() as u32;
+        for (x, y, z) in p {
+            let (lat, lon) = frame.to_geo(x, y);
+            verts.push([lat, lon, z]);
+            cols.push(c);
+        }
+        tris.push([n, n + 1, n + 2]);
+    };
+    // Existing ground at a metric point (falls back to the design elev off-terrain).
+    let existing = |x: f64, y: f64, design_z: f64| base.sample(x, y).unwrap_or(design_z);
+
+    // Caps: subdivide each design triangle to capture existing-ground relief.
+    for t in &cmp_tris {
+        let a = cmp[t[0] as usize];
+        let b = cmp[t[1] as usize];
+        let c = cmp[t[2] as usize];
+        let edge =
+            |p: [f64; 3], q: [f64; 3]| ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2)).sqrt();
+        let max_edge = edge(a, b).max(edge(b, c)).max(edge(c, a));
+        let k = ((max_edge / TARGET_M).round() as usize).clamp(1, KMAX);
+        // Barycentric point (ii, jj) of the k-subdivided triangle → (x, y, design_z).
+        let pt = |ii: usize, jj: usize| -> (f64, f64, f64) {
+            let wb = ii as f64 / k as f64;
+            let wc = jj as f64 / k as f64;
+            let wa = 1.0 - wb - wc;
+            (
+                wa * a[0] + wb * b[0] + wc * c[0],
+                wa * a[1] + wb * b[1] + wc * c[1],
+                wa * a[2] + wb * b[2] + wc * c[2],
+            )
+        };
+        for ii in 0..k {
+            for jj in 0..(k - ii) {
+                let lower = [(ii, jj), (ii + 1, jj), (ii, jj + 1)];
+                let mut emit = |grid: [(usize, usize); 3]| {
+                    let d: Vec<(f64, f64, f64)> = grid.iter().map(|&(i, j)| pt(i, j)).collect();
+                    let top: Vec<(f64, f64, f64)> = d
+                        .iter()
+                        .map(|&(x, y, z)| (x, y, existing(x, y, z)))
+                        .collect();
+                    let mdz = (d[0].2 - top[0].2 + d[1].2 - top[1].2 + d[2].2 - top[2].2) / 3.0;
+                    let col = colour(mdz);
+                    // Top cap (existing ground).
+                    push_tri([top[0], top[1], top[2]], col);
+                    // Bottom cap (design), reversed winding.
+                    push_tri([d[0], d[2], d[1]], col);
+                };
+                emit(lower);
+                if ii + jj + 1 < k {
+                    emit([(ii + 1, jj), (ii + 1, jj + 1), (ii, jj + 1)]);
+                }
+            }
+        }
+    }
+
+    // Vertical walls along the design boundary (edges used by a single triangle).
+    let mut edge_count: std::collections::HashMap<(u32, u32), i32> =
+        std::collections::HashMap::new();
+    for t in &cmp_tris {
+        for (i, j) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
+            let key = if i < j { (i, j) } else { (j, i) };
+            *edge_count.entry(key).or_insert(0) += 1;
+        }
+    }
+    for (&(i, j), &count) in &edge_count {
+        if count != 1 {
+            continue;
+        }
+        let (vi, vj) = (cmp[i as usize], cmp[j as usize]);
+        let len = ((vi[0] - vj[0]).powi(2) + (vi[1] - vj[1]).powi(2)).sqrt();
+        let k = ((len / TARGET_M).round() as usize).clamp(1, KMAX);
+        for s in 0..k {
+            let t0 = s as f64 / k as f64;
+            let t1 = (s + 1) as f64 / k as f64;
+            let seg = |tt: f64| -> (f64, f64, f64) {
+                (
+                    vi[0] + (vj[0] - vi[0]) * tt,
+                    vi[1] + (vj[1] - vi[1]) * tt,
+                    vi[2] + (vj[2] - vi[2]) * tt,
+                )
+            };
+            let (x0, y0, dz0) = seg(t0);
+            let (x1, y1, dz1) = seg(t1);
+            let e0 = existing(x0, y0, dz0);
+            let e1 = existing(x1, y1, dz1);
+            let col = colour(((dz0 - e0) + (dz1 - e1)) / 2.0);
+            // Vertical quad: existing → design at each segment end.
+            push_tri([(x0, y0, e0), (x1, y1, e1), (x1, y1, dz1)], col);
+            push_tri([(x0, y0, e0), (x1, y1, dz1), (x0, y0, dz0)], col);
+        }
+    }
+
+    if tris.is_empty() {
+        return Err("no earthwork geometry to display".into());
+    }
+    Ok(surface::serialize_earthwork_solid(&verts, &cols, &tris))
 }
 
 // --- DEM source -------------------------------------------------------------

@@ -48,6 +48,7 @@ import {
   DEFAULT_CONTOURS,
   SURFACE_CONTOURS,
   SURFACE_MESH,
+  VOLUME_EARTHWORK_SOLID,
   VOLUME_HEATMAP,
 } from './surfaces-data';
 
@@ -152,6 +153,7 @@ export function SceneView({
   const [surface, setSurface] = useState<{ contentBase64: string } | null>(null);
   const [contourBlob, setContourBlob] = useState<{ contentBase64: string } | null>(null);
   const [volumeBlob, setVolumeBlob] = useState<{ contentBase64: string } | null>(null);
+  const [volumeSolid, setVolumeSolid] = useState<string | null>(null);
   const [showVolume, setShowVolume] = useState(true);
   // Show the cut/fill heatmap lifted to the finished grade (post-earthwork).
   const [gradedVolume, setGradedVolume] = useState(false);
@@ -253,10 +255,12 @@ export function SceneView({
     void loadContours();
   }, [loadContours, surfaceReload]);
 
-  // Loads the active volume's cut/fill heatmap grid (null when none selected).
+  // Loads the active volume's cut/fill heatmap grid + clean earthwork solid (null
+  // when none selected).
   const loadVolumeHeatmap = useCallback(async () => {
     if (!activeVolumeId) {
       setVolumeBlob(null);
+      setVolumeSolid(null);
       return;
     }
     try {
@@ -264,6 +268,12 @@ export function SceneView({
       setVolumeBlob({ contentBase64: volumeHeatmap.contentBase64 });
     } catch {
       setVolumeBlob(null);
+    }
+    try {
+      const { volumeEarthworkSolid } = await gql(VOLUME_EARTHWORK_SOLID, { id: activeVolumeId });
+      setVolumeSolid(volumeEarthworkSolid ?? null);
+    } catch {
+      setVolumeSolid(null);
     }
   }, [activeVolumeId]);
 
@@ -600,6 +610,7 @@ export function SceneView({
             showContours={contours.enabled}
             contourLabels={contours.labels}
             volumeHeatmap={volumeBlob}
+            volumeSolid={volumeSolid}
             showVolume={showVolume}
             volumeGraded={gradedVolume}
             displayUnit={project.displayUnit}
@@ -722,18 +733,38 @@ export function SceneView({
               +{Math.abs(fromMeters(volumeRange.maxDz, project.displayUnit)).toFixed(1)}
             </span>
           </div>
-          {/* Toggle: drape the heatmap flat vs lift it to the finished grade. */}
-          <button
-            type="button"
-            onClick={() => setGradedVolume((g) => !g)}
-            className="hover:bg-accent pointer-events-auto mt-1.5 flex w-full items-center justify-between rounded border px-2 py-1 text-[11px]"
-            title="Lift the heatmap to the post-earthwork grade"
-          >
-            <span>Graded terrain</span>
-            <span className={gradedVolume ? 'text-primary font-semibold' : 'text-muted-foreground'}>
-              {gradedVolume ? 'On' : 'Off'}
-            </span>
-          </button>
+          {/* View mode: cut/fill as solid masses, or the terrain carved to grade. */}
+          <div className="text-muted-foreground mt-1.5 mb-1 text-[10px] font-medium uppercase tracking-wide">
+            View
+          </div>
+          <div className="pointer-events-auto grid grid-cols-2 gap-1 text-[11px]">
+            <button
+              type="button"
+              onClick={() => setGradedVolume(false)}
+              aria-pressed={!gradedVolume}
+              className={`rounded border px-2 py-1 transition-colors ${
+                gradedVolume
+                  ? 'text-muted-foreground hover:bg-accent'
+                  : 'border-primary bg-primary/15 text-primary font-semibold'
+              }`}
+              title="Show the cut/fill as solid 3D masses"
+            >
+              Cut / fill solids
+            </button>
+            <button
+              type="button"
+              onClick={() => setGradedVolume(true)}
+              aria-pressed={gradedVolume}
+              className={`rounded border px-2 py-1 transition-colors ${
+                gradedVolume
+                  ? 'border-primary bg-primary/15 text-primary font-semibold'
+                  : 'text-muted-foreground hover:bg-accent'
+              }`}
+              title="Carve the terrain to the finished grade"
+            >
+              Graded terrain
+            </button>
+          </div>
         </div>
       ) : null}
 

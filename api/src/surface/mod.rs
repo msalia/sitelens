@@ -42,6 +42,10 @@ pub const SVOL_MAGIC: &[u8; 4] = b"SVOL";
 /// Current volume-heatmap-blob format version. v2 carries the base surface mesh
 /// with a per-vertex Δz (so the heatmap follows the surface outline exactly).
 pub const SVOL_VERSION: u32 = 2;
+/// Earthwork solid mesh — a clean cut/fill volume clipped to the design footprint,
+/// for display (vertical walls + straight edges). Layout: `ESOL` magic, vCount u32,
+/// tCount u32, then vCount × (lat,lon,z,r,g,b as f64), then tCount × 3 u32.
+pub const ESOL_MAGIC: &[u8; 4] = b"ESOL";
 
 /// An indexed mesh decoded from a blob: `(vertices [x/lat, y/lon, z], triangles)`.
 pub type MeshData = (Vec<[f64; 3]>, Vec<[u32; 3]>);
@@ -188,6 +192,33 @@ pub fn serialize_volume_heatmap(
             buf.extend_from_slice(&c.to_le_bytes());
         }
         buf.extend_from_slice(&d.to_le_bytes());
+    }
+    for tri in indices {
+        for i in tri {
+            buf.extend_from_slice(&i.to_le_bytes());
+        }
+    }
+    buf
+}
+
+/// Serializes an earthwork solid: per-vertex geographic `[lat, lon, z]` + `[r,g,b]`
+/// colour, plus triangle indices. See [`ESOL_MAGIC`] for the layout.
+pub fn serialize_earthwork_solid(
+    vertices: &[[f64; 3]],
+    colors: &[[f64; 3]],
+    indices: &[[u32; 3]],
+) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(12 + vertices.len() * 48 + indices.len() * 12);
+    buf.extend_from_slice(ESOL_MAGIC);
+    buf.extend_from_slice(&(vertices.len() as u32).to_le_bytes());
+    buf.extend_from_slice(&(indices.len() as u32).to_le_bytes());
+    for (v, c) in vertices.iter().zip(colors) {
+        for p in v {
+            buf.extend_from_slice(&p.to_le_bytes());
+        }
+        for ch in c {
+            buf.extend_from_slice(&ch.to_le_bytes());
+        }
     }
     for tri in indices {
         for i in tri {

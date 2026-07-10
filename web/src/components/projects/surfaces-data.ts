@@ -229,6 +229,13 @@ export const VOLUME_HEATMAP = graphql(`
   }
 `);
 
+/** Clean earthwork solid (cut/fill clipped to the design footprint) — ESOL blob. */
+export const VOLUME_EARTHWORK_SOLID = graphql(`
+  query VolumeEarthworkSolid($id: UUID!) {
+    volumeEarthworkSolid(id: $id)
+  }
+`);
+
 /** Every constraint (breakline / boundary / hole) in a project. */
 export const BREAKLINES = graphql(`
   query Breaklines($projectId: UUID!) {

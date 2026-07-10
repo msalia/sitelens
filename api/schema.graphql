@@ -805,11 +805,11 @@ type MutationRoot {
 	"""
 	refreshTerrain(projectId: UUID!, south: Float!, north: Float!, west: Float!, east: Float!, demtype: String, force: Boolean): ProjectTerrain!
 	"""
-	Fetches (if needed) the **1 m USGS 3DEP LiDAR** DEM for the project's
+	Fetches (if needed) the **~1 m USGS 3DEP** DEM for the project's
 	property-boundary AOI — the accurate base for cut/fill volumes (and future
 	hydrology), distinct from the coarse context terrain. Requires a boundary;
 	the client calls this alongside `refreshTerrain` when one is defined. Same
-	7-day cooldown; API key stays server-side.
+	7-day cooldown. Uses the free, keyless USGS 3DEP ImageServer.
 	"""
 	refreshDetailedTerrain(projectId: UUID!, force: Boolean): ProjectTerrain!
 	"""
@@ -1472,6 +1472,12 @@ type QueryRoot {
 	The cut/fill heatmap grid (SVOL binary blob, base64-encoded).
 	"""
 	volumeHeatmap(id: UUID!): FileBlob!
+	"""
+	A clean earthwork solid (the cut/fill mass clipped to the design footprint,
+	with straight edges + vertical walls) for display, as a base64 ESOL blob.
+	Null for surface-to-elevation volumes (no design mesh to clip to).
+	"""
+	volumeEarthworkSolid(id: UUID!): String
 	"""
 	Exports a surface as LandXML, DXF (3DFACE + optional contour layers), or a
 	GeoTIFF DEM. `contour_interval` (meters) adds contour layers to DXF;

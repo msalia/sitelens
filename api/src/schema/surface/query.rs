@@ -258,6 +258,67 @@ impl SurfaceQuery {
         })
     }
 
+    /// A clean earthwork solid (the cut/fill mass clipped to the design footprint,
+    /// with straight edges + vertical walls) for display, as a base64 ESOL blob.
+    /// Null for surface-to-elevation volumes (no design mesh to clip to).
+    async fn volume_earthwork_solid(&self, ctx: &Context<'_>, id: Uuid) -> Result<Option<String>> {
+        require_feature(ctx, Feature::Surfaces).await?;
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        let row: Option<(Uuid, Option<Uuid>)> = sqlx::query_as(
+            "SELECT v.base_surface_id, v.compare_surface_id FROM volumes v \
+             JOIN projects p ON p.id = v.project_id WHERE v.id = $1 AND p.org_id = $2",
+        )
+        .bind(id)
+        .bind(auth.org_id)
+        .fetch_optional(pool)
+        .await?;
+        let (base_id, compare_id) = found_in_org(row, "volume")?;
+        let Some(compare_id) = compare_id else {
+            return Ok(None);
+        };
+
+        // Storage keys for both surfaces (org-scoped).
+        let key_of = |sid: Uuid| async move {
+            let r: Option<(Option<String>,)> = sqlx::query_as(
+                "SELECT s.storage_key FROM surfaces s JOIN projects p ON p.id = s.project_id \
+                 WHERE s.id = $1 AND p.org_id = $2",
+            )
+            .bind(sid)
+            .bind(auth.org_id)
+            .fetch_optional(pool)
+            .await?;
+            found_in_org(r, "surface")?
+                .0
+                .ok_or_else(|| async_graphql::Error::new("surface has no mesh"))
+        };
+        let base_key = key_of(base_id).await?;
+        let compare_key = key_of(compare_id).await?;
+        let storage = storage(ctx)?;
+        let base_bytes = storage
+            .get(&base_key)
+            .await
+            .map_err(async_graphql::Error::new)?;
+        let cmp_bytes = storage
+            .get(&compare_key)
+            .await
+            .map_err(async_graphql::Error::new)?;
+
+        let blob = tokio::task::spawn_blocking(move || {
+            build_earthwork_solid_blob(&base_bytes, &cmp_bytes)
+        })
+        .await
+        .map_err(|e| async_graphql::Error::new(format!("earthwork task failed: {e}")))?
+        .map_err(async_graphql::Error::new)?;
+        let b64 = tokio::task::spawn_blocking(move || {
+            use base64::Engine;
+            base64::engine::general_purpose::STANDARD.encode(blob)
+        })
+        .await
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+        Ok(Some(b64))
+    }
+
     /// Exports a surface as LandXML, DXF (3DFACE + optional contour layers), or a
     /// GeoTIFF DEM. `contour_interval` (meters) adds contour layers to DXF;
     /// `cell_size` (meters) sets the GeoTIFF raster resolution (default 1 m).

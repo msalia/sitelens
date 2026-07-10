@@ -35,6 +35,7 @@ import { type AlignMarker, AlignPointsOverlay } from './terrain/align-points-ove
 import { AnalysisOverlay, type AnalysisPath } from './terrain/analysis-overlay';
 import { type AnalysisResult, AnalysisResultOverlay } from './terrain/analysis-result-overlay';
 import { BoundaryOverlay } from './terrain/boundary-overlay';
+import { EarthworkTerrain } from './terrain/earthwork-terrain';
 import { type SceneConstraint, SurfaceConstraints } from './terrain/surface-constraints';
 import { SurfaceContours } from './terrain/surface-contours';
 import {
@@ -44,7 +45,7 @@ import {
   type SurfaceMode,
 } from './terrain/surface-mesh';
 import { Utilities, type UtilityPick } from './terrain/utilities';
-import { VolumeHeatmap } from './terrain/volume-heatmap';
+import { VolumeSolid } from './terrain/volume-solid';
 import { silenceThreeClockWarning } from './three-clock-warning';
 
 export type { UtilityPick } from './terrain/utilities';
@@ -152,10 +153,13 @@ export interface TerrainViewerProps {
   visibleIds?: Set<string> | null;
   /** Utility type keys to show; null shows all. */
   visibleUtilityTypes?: Set<string> | null;
-  /** Lift the volume heatmap to the finished grade (base + Δz) instead of flat. */
+  /** Volume view: true carves the terrain to the finished grade; false shows the
+   *  cut/fill as a solid 3D mass. */
   volumeGraded?: boolean;
-  /** Active volume's cut/fill heatmap grid (SVOL base64), or null when none. */
+  /** Active volume's cut/fill grid (SVOL base64), or null when none selected. */
   volumeHeatmap?: { contentBase64: string } | null;
+  /** Active volume's clean earthwork solid (ESOL base64), or null. */
+  volumeSolid?: string | null;
 }
 
 export function TerrainViewer(props: TerrainViewerProps) {
@@ -206,6 +210,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
     visibleUtilityTypes = null,
     volumeGraded = false,
     volumeHeatmap,
+    volumeSolid,
   } = props;
   // Keep `frame` referentially stable while the geographic origin is unchanged,
   // so a live scene refetch (same project) doesn't churn frame-derived work — in
@@ -285,6 +290,11 @@ export function TerrainViewer(props: TerrainViewerProps) {
   // The terrain elevation sampler, only when projecting is enabled + loaded.
   const sampler: Sampler = projectOnTerrain ? (terrainMesh?.sample ?? null) : null;
 
+  // Volume view mode: `volumeGraded` on ⇒ carve the terrain to the finished grade;
+  // off ⇒ show the cut/fill as solid 3D masses over a ghosted terrain.
+  const volumeCarve = !!volumeHeatmap && !!volumeGraded && !!showVolume;
+  const volumeSolidActive = !!volumeHeatmap && !volumeGraded && !!showVolume;
+
   // Retain the last analysis geometry so the overlays stay mounted and can fade
   // OUT (driven by `visible`) instead of unmounting and snapping away.
   const [shownResult, setShownResult] = useState<AnalysisResult | null>(analysisResult ?? null);
@@ -352,7 +362,10 @@ export function TerrainViewer(props: TerrainViewerProps) {
         // heights flat↔relief in step with the same toggle, so it grows as it
         // fades in and settles flat as it fades out. `key` remounts only when a
         // genuinely new terrain geometry loads (re-snapshots its base heights).
-        <Fade visible={showTerrain} cull>
+        // Hidden while a volume is shown — carved mode replaces it with the graded
+        // surface, solid mode shows just the cut/fill masses — so nothing occludes
+        // the earthwork.
+        <Fade visible={showTerrain && !volumeCarve && !volumeSolidActive} cull>
           <TerrainSurface
             key={terrainMesh.geometry.uuid}
             geometry={terrainMesh.geometry}
@@ -361,6 +374,21 @@ export function TerrainViewer(props: TerrainViewerProps) {
             opacity={underground ? 0.18 : 1}
           />
         </Fade>
+      ) : null}
+
+      {/* Graded ON: the finished-grade surface (detailed base carved to grade). */}
+      {volumeHeatmap && volumeCarve ? (
+        <EarthworkTerrain
+          heatmapBase64={volumeHeatmap.contentBase64}
+          frame={frame}
+          baseColor={palette.clay}
+          visible={showVolume}
+        />
+      ) : null}
+
+      {/* Graded OFF: the clean cut/fill solid (clipped to the design footprint). */}
+      {volumeSolid && volumeSolidActive ? (
+        <VolumeSolid solidBase64={volumeSolid} frame={frame} visible={showVolume} />
       ) : null}
 
       {surfaceGeom ? (
@@ -380,15 +408,6 @@ export function TerrainViewer(props: TerrainViewerProps) {
         </Fade>
       ) : null}
 
-      {volumeHeatmap ? (
-        <Fade visible={showVolume}>
-          <VolumeHeatmap
-            contentBase64={volumeHeatmap.contentBase64}
-            frame={frame}
-            graded={volumeGraded}
-          />
-        </Fade>
-      ) : null}
 
       {constraints?.length &&
       originProjectedE !== null &&
