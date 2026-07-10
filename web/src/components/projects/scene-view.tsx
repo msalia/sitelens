@@ -49,6 +49,7 @@ import {
   SURFACE_CONTOURS,
   SURFACE_MESH,
   VOLUME_EARTHWORK_SOLID,
+  VOLUME_GRADED_TERRAIN,
   VOLUME_HEATMAP,
 } from './surfaces-data';
 
@@ -154,6 +155,7 @@ export function SceneView({
   const [contourBlob, setContourBlob] = useState<{ contentBase64: string } | null>(null);
   const [volumeBlob, setVolumeBlob] = useState<{ contentBase64: string } | null>(null);
   const [volumeSolid, setVolumeSolid] = useState<string | null>(null);
+  const [volumeGradedBlob, setVolumeGradedBlob] = useState<string | null>(null);
   const [showVolume, setShowVolume] = useState(true);
   // Show the cut/fill heatmap lifted to the finished grade (post-earthwork).
   const [gradedVolume, setGradedVolume] = useState(false);
@@ -261,6 +263,7 @@ export function SceneView({
     if (!activeVolumeId) {
       setVolumeBlob(null);
       setVolumeSolid(null);
+      setVolumeGradedBlob(null);
       return;
     }
     try {
@@ -274,6 +277,12 @@ export function SceneView({
       setVolumeSolid(volumeEarthworkSolid ?? null);
     } catch {
       setVolumeSolid(null);
+    }
+    try {
+      const { volumeGradedTerrain } = await gql(VOLUME_GRADED_TERRAIN, { id: activeVolumeId });
+      setVolumeGradedBlob(volumeGradedTerrain ?? null);
+    } catch {
+      setVolumeGradedBlob(null);
     }
   }, [activeVolumeId]);
 
@@ -611,6 +620,7 @@ export function SceneView({
             contourLabels={contours.labels}
             volumeHeatmap={volumeBlob}
             volumeSolid={volumeSolid}
+            volumeGradedMesh={volumeGradedBlob}
             showVolume={showVolume}
             volumeGraded={gradedVolume}
             displayUnit={project.displayUnit}
@@ -734,7 +744,7 @@ export function SceneView({
             </span>
           </div>
           {/* View mode: cut/fill as solid masses, or the terrain carved to grade. */}
-          <div className="text-muted-foreground mt-1.5 mb-1 text-[10px] font-medium uppercase tracking-wide">
+          <div className="text-muted-foreground mt-1.5 mb-1 text-[10px] font-medium tracking-wide uppercase">
             View
           </div>
           <div className="pointer-events-auto grid grid-cols-2 gap-1 text-[11px]">

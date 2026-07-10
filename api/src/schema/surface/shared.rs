@@ -665,6 +665,214 @@ pub(super) fn build_earthwork_solid_blob(
     Ok(surface::serialize_earthwork_solid(&verts, &cols, &tris))
 }
 
+/// Orders a mesh's boundary (edges used by a single triangle) into a ring of
+/// vertex indices. Returns the first ring found (the outer boundary for a simple
+/// footprint). None if there's no closed boundary loop.
+fn order_boundary_ring(tris: &[[u32; 3]]) -> Option<Vec<usize>> {
+    use std::collections::HashMap;
+    let mut count: HashMap<(u32, u32), i32> = HashMap::new();
+    for t in tris {
+        for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
+            let k = if a < b { (a, b) } else { (b, a) };
+            *count.entry(k).or_insert(0) += 1;
+        }
+    }
+    let mut adj: HashMap<u32, Vec<u32>> = HashMap::new();
+    for (&(a, b), &c) in &count {
+        if c == 1 {
+            adj.entry(a).or_default().push(b);
+            adj.entry(b).or_default().push(a);
+        }
+    }
+    let start = *adj.keys().min()?;
+    let mut ring = vec![start];
+    let (mut prev, mut cur) = (u32::MAX, start);
+    loop {
+        let next = *adj.get(&cur)?.iter().find(|&&n| n != prev)?;
+        if next == start {
+            break;
+        }
+        ring.push(next);
+        if ring.len() > adj.len() + 1 {
+            return None; // safety: not a simple ring
+        }
+        prev = cur;
+        cur = next;
+    }
+    if ring.len() < 3 {
+        return None;
+    }
+    Some(ring.into_iter().map(|i| i as usize).collect())
+}
+
+/// Builds a clean **graded-terrain surface** for a surface-to-surface volume: the
+/// existing terrain retriangulated with the design footprint cut out as a clean
+/// hole, the hole filled with the proposed design, and vertical walls between —
+/// so the finished ground reads with straight edges (not the base-grid staircase).
+/// Existing ground is neutral; the graded pad is tinted red (cut) / blue (fill).
+/// Kept local to the footprint (+ a margin ring of context). Display only. Emits
+/// the same `ESOL` mesh format as [`build_earthwork_solid_blob`].
+pub(super) fn build_graded_terrain_blob(
+    base_bytes: &[u8],
+    compare_bytes: &[u8],
+) -> std::result::Result<Vec<u8>, String> {
+    const CUT: [f64; 3] = [0.86, 0.15, 0.15];
+    const FILL: [f64; 3] = [0.2, 0.45, 0.9];
+    const NEUTRAL: [f64; 3] = [0.55, 0.55, 0.6]; // existing ground
+    const TARGET_M: f64 = 3.0;
+    const KMAX: usize = 12;
+
+    let (base_geo, base_tris) =
+        surface::deserialize_mesh(base_bytes).ok_or("base surface mesh is unreadable")?;
+    let (cmp_geo, cmp_tris) =
+        surface::deserialize_mesh(compare_bytes).ok_or("design surface mesh is unreadable")?;
+    let frame = MetricFrame::from_centroid(&base_geo);
+    let base = volume::SurfaceSampler::new(frame.mesh_to_metric(&base_geo), base_tris)
+        .ok_or("base surface mesh is unusable")?;
+    let cmp: Vec<[f64; 3]> = frame.mesh_to_metric(&cmp_geo);
+
+    // Ordered design footprint ring (metric), for the hole + walls.
+    let ring_idx = order_boundary_ring(&cmp_tris).ok_or("could not trace the design footprint")?;
+
+    // Colour scale + ramp.
+    let mut scale = 0.0_f64;
+    for v in &cmp {
+        if let Some(e) = base.sample(v[0], v[1]) {
+            scale = scale.max((v[2] - e).abs());
+        }
+    }
+    if scale <= 0.0 {
+        scale = 1.0;
+    }
+    let colour = |dz: f64| -> [f64; 3] {
+        let end = if dz < 0.0 { CUT } else { FILL };
+        let k = (dz.abs() / scale).clamp(0.0, 1.0);
+        let t = 0.35 + 0.65 * k;
+        [
+            NEUTRAL[0] + (end[0] - NEUTRAL[0]) * t,
+            NEUTRAL[1] + (end[1] - NEUTRAL[1]) * t,
+            NEUTRAL[2] + (end[2] - NEUTRAL[2]) * t,
+        ]
+    };
+
+    // Footprint bbox + a context margin.
+    let (mut minx, mut maxx, mut miny, mut maxy) = (
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+    );
+    for v in &cmp {
+        minx = minx.min(v[0]);
+        maxx = maxx.max(v[0]);
+        miny = miny.min(v[1]);
+        maxy = maxy.max(v[1]);
+    }
+    let margin = ((maxx - minx).max(maxy - miny) * 0.6).max(10.0);
+    let (rx0, rx1, ry0, ry1) = (minx - margin, maxx + margin, miny - margin, maxy + margin);
+
+    let mut verts: Vec<[f64; 3]> = Vec::new();
+    let mut cols: Vec<[f64; 3]> = Vec::new();
+    let mut tris: Vec<[u32; 3]> = Vec::new();
+    let mut push_geo = |lat: f64, lon: f64, z: f64, c: [f64; 3]| -> u32 {
+        let i = verts.len() as u32;
+        verts.push([lat, lon, z]);
+        cols.push(c);
+        i
+    };
+
+    // OUTSIDE: existing terrain in the region, with the footprint as a clean hole.
+    let out_points: Vec<tin::InputPoint> = frame
+        .mesh_to_metric(&base_geo)
+        .into_iter()
+        .filter(|v| v[0] >= rx0 && v[0] <= rx1 && v[1] >= ry0 && v[1] <= ry1)
+        .map(|v| tin::InputPoint {
+            e: v[0],
+            n: v[1],
+            z: v[2],
+        })
+        .collect();
+    let hole = tin::Constraint {
+        closed: true,
+        verts: ring_idx
+            .iter()
+            .map(|&i| tin::InputPoint {
+                e: cmp[i][0],
+                n: cmp[i][1],
+                z: cmp[i][2],
+            })
+            .collect(),
+    };
+    if out_points.len() >= 3 {
+        if let Ok(outside) = tin::triangulate_constrained(&out_points, &[], None, &[hole], None) {
+            for t in &outside.indices {
+                let idx: Vec<u32> = t
+                    .iter()
+                    .map(|&vi| {
+                        let v = outside.vertices[vi as usize];
+                        let (lat, lon) = frame.to_geo(v[0], v[1]);
+                        push_geo(lat, lon, v[2], NEUTRAL)
+                    })
+                    .collect();
+                tris.push([idx[0], idx[1], idx[2]]);
+            }
+        }
+    }
+
+    // INSIDE: the proposed design fills the hole, tinted by cut/fill.
+    for t in &cmp_tris {
+        let idx: Vec<u32> = t
+            .iter()
+            .map(|&vi| {
+                let m = cmp[vi as usize];
+                let existing = base.sample(m[0], m[1]).unwrap_or(m[2]);
+                let g = cmp_geo[vi as usize];
+                push_geo(g[0], g[1], g[2], colour(m[2] - existing))
+            })
+            .collect();
+        tris.push([idx[0], idx[1], idx[2]]);
+    }
+
+    // WALLS: vertical along the footprint ring (existing → design), subdivided so
+    // the top follows the terrain.
+    let n = ring_idx.len();
+    for s in 0..n {
+        let a = cmp[ring_idx[s]];
+        let b = cmp[ring_idx[(s + 1) % n]];
+        let len = ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2)).sqrt();
+        let k = ((len / TARGET_M).round() as usize).clamp(1, KMAX);
+        for seg in 0..k {
+            let t0 = seg as f64 / k as f64;
+            let t1 = (seg + 1) as f64 / k as f64;
+            let pt = |tt: f64| {
+                (
+                    a[0] + (b[0] - a[0]) * tt,
+                    a[1] + (b[1] - a[1]) * tt,
+                    a[2] + (b[2] - a[2]) * tt,
+                )
+            };
+            let (x0, y0, d0) = pt(t0);
+            let (x1, y1, d1) = pt(t1);
+            let e0 = base.sample(x0, y0).unwrap_or(d0);
+            let e1 = base.sample(x1, y1).unwrap_or(d1);
+            let c = colour(((d0 - e0) + (d1 - e1)) / 2.0);
+            let (lat0, lon0) = frame.to_geo(x0, y0);
+            let (lat1, lon1) = frame.to_geo(x1, y1);
+            let te0 = push_geo(lat0, lon0, e0, c);
+            let te1 = push_geo(lat1, lon1, e1, c);
+            let td1 = push_geo(lat1, lon1, d1, c);
+            let td0 = push_geo(lat0, lon0, d0, c);
+            tris.push([te0, te1, td1]);
+            tris.push([te0, td1, td0]);
+        }
+    }
+
+    if tris.is_empty() {
+        return Err("no graded-terrain geometry to display".into());
+    }
+    Ok(surface::serialize_earthwork_solid(&verts, &cols, &tris))
+}
+
 // --- DEM source -------------------------------------------------------------
 
 /// Reprojects a DEM grid node to geographic. Geographic sources (4326/4269) carry

@@ -236,6 +236,13 @@ export const VOLUME_EARTHWORK_SOLID = graphql(`
   }
 `);
 
+/** Clean graded-terrain surface (terrain carved to the design footprint) — ESOL. */
+export const VOLUME_GRADED_TERRAIN = graphql(`
+  query VolumeGradedTerrain($id: UUID!) {
+    volumeGradedTerrain(id: $id)
+  }
+`);
+
 /** Every constraint (breakline / boundary / hole) in a project. */
 export const BREAKLINES = graphql(`
   query Breaklines($projectId: UUID!) {

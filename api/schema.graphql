@@ -1479,6 +1479,12 @@ type QueryRoot {
 	"""
 	volumeEarthworkSolid(id: UUID!): String
 	"""
+	The clean **graded-terrain surface** (existing terrain with the design
+	footprint cut out + filled to the proposed grade, straight edges + vertical
+	walls) for display, as a base64 ESOL blob. Null for surface-to-elevation.
+	"""
+	volumeGradedTerrain(id: UUID!): String
+	"""
 	Exports a surface as LandXML, DXF (3DFACE + optional contour layers), or a
 	GeoTIFF DEM. `contour_interval` (meters) adds contour layers to DXF;
 	`cell_size` (meters) sets the GeoTIFF raster resolution (default 1 m).
