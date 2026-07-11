@@ -354,6 +354,16 @@ export function TerrainViewer(props: TerrainViewerProps) {
   const volumeCarve = !!volumeHeatmap && !!volumeGraded && !!showVolume;
   const volumeSolidActive = !!volumeHeatmap && !volumeGraded && !!showVolume;
 
+  // Retain the last graded composite so it can fade OUT when graded turns off
+  // (kept mounted via `cull`) — the graded layer cross-fades with the plain one.
+  const [shownGraded, setShownGraded] = useState<ArrayBuffer | null>(gradedComposite ?? null);
+  useEffect(() => {
+    if (gradedComposite) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setShownGraded(gradedComposite);
+    }
+  }, [gradedComposite]);
+
   // Retain the last analysis geometry so the overlays stay mounted and can fade
   // OUT (driven by `visible`) instead of unmounting and snapping away.
   const [shownResult, setShownResult] = useState<AnalysisResult | null>(analysisResult ?? null);
@@ -416,18 +426,30 @@ export function TerrainViewer(props: TerrainViewerProps) {
           presence hook when passed an empty list). */}
       {composite ? (
         // Boundary present → the server-composited coarse+detail surface replaces
-        // the plain terrain mesh. When a volume is graded, we swap in the graded
-        // composite (detail lifted to the finished grade) — so "graded" shows here,
-        // not as a separate solid. Wrapped in `Fade` (cull) so the terrain toggle
-        // dissolves in/out; only hidden for the solid cut/fill view.
-        <Fade visible={showTerrain && !volumeSolidActive} cull>
-          <CompositeTerrain
-            buffer={gradedComposite ?? composite}
-            frame={frame}
-            color={palette.clay}
-            opacity={underground ? 0.18 : 1}
-          />
-        </Fade>
+        // the plain terrain mesh. When a volume is graded we cross-fade in the
+        // graded composite (detail lifted to the finished grade) as a second layer,
+        // fading the plain one out. Both `Fade`+`cull` so toggling terrain / graded
+        // dissolves; only hidden for the solid cut/fill view.
+        <>
+          <Fade visible={showTerrain && !volumeSolidActive && !gradedComposite} cull>
+            <CompositeTerrain
+              buffer={composite}
+              frame={frame}
+              color={palette.clay}
+              opacity={underground ? 0.18 : 1}
+            />
+          </Fade>
+          {shownGraded ? (
+            <Fade visible={showTerrain && !volumeSolidActive && !!gradedComposite} cull>
+              <CompositeTerrain
+                buffer={shownGraded}
+                frame={frame}
+                color={palette.clay}
+                opacity={underground ? 0.18 : 1}
+              />
+            </Fade>
+          ) : null}
+        </>
       ) : terrainMesh ? (
         // `cull`: terrain is one heavy mesh kept resident in state anyway, so
         // keep it mounted + warm when hidden (no remount shader-recompile hitch
