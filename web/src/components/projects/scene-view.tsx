@@ -47,6 +47,7 @@ import {
   BREAKLINES,
   type ContourSettings,
   DEFAULT_CONTOURS,
+  GRADED_TERRAIN,
   SURFACE_CONTOURS,
   VOLUME_EARTHWORK_SOLID,
   VOLUME_GRADED_TERRAIN,
@@ -124,6 +125,7 @@ export function SceneView({
   const [scene, setScene] = useState<SceneData | null>(null);
   const [terrain, setTerrain] = useState<TerrainData | null>(null);
   const [composite, setComposite] = useState<ArrayBuffer | null>(null);
+  const [gradedComposite, setGradedComposite] = useState<ArrayBuffer | null>(null);
   const [samplerBlob, setSamplerBlob] = useState<ArrayBuffer | null>(null);
   const [terrainMeta, setTerrainMeta] = useState<{ fetchedAt: string; demtype: string } | null>(
     null,
@@ -290,6 +292,30 @@ export function SceneView({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadVolumeHeatmap();
   }, [loadVolumeHeatmap, surfaceReload]);
+
+  // The combined graded terrain (CTER): the composite with the active volume's
+  // earthwork applied. Only on the boundary path (a composite exists), when the
+  // graded toggle is on. Rendered by swapping the composite buffer client-side.
+  const loadGradedComposite = useCallback(async () => {
+    if (!gradedVolume || !activeVolumeId || !composite) {
+      setGradedComposite(null);
+      return;
+    }
+    try {
+      const { gradedTerrain } = await gql(GRADED_TERRAIN, {
+        projectId: project.id,
+        volumeIds: [activeVolumeId],
+      });
+      setGradedComposite(gradedTerrain ? base64ToArrayBuffer(gradedTerrain) : null);
+    } catch {
+      setGradedComposite(null);
+    }
+  }, [gradedVolume, activeVolumeId, composite, project.id]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadGradedComposite();
+  }, [loadGradedComposite, surfaceReload]);
 
   // Δz range (for the legend), read cheaply from the heatmap blob header.
   const volumeRange = useMemo(
@@ -673,6 +699,7 @@ export function SceneView({
             boundaryDraft={boundaryDraft}
             terrain={terrain}
             composite={composite}
+            gradedComposite={gradedComposite}
             samplerBlob={samplerBlob}
             buildings={buildings}
             showBuildings={showBuildings}

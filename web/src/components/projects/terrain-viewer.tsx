@@ -102,6 +102,9 @@ export interface TerrainViewerProps {
   displayUnit: LengthUnit;
   /** Move the camera to a point. `nonce` re-triggers. */
   focus?: FocusTarget;
+  /** Graded composite (CTER bytes): the composite with the active volume's
+   *  earthwork applied. When present it renders in place of `composite`. */
+  gradedComposite?: ArrayBuffer | null;
   /** Generic snap sink: grid intersections + DXF vertices call this with
    *  projected coords so ANY digitizing tool (analysis, utilities, surfaces)
    *  snaps to them via the shared pick bridge. */
@@ -189,6 +192,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
     digitizing,
     displayUnit,
     focus,
+    gradedComposite,
     onDigitizePick,
     onSelectPoint,
     onSelectUtility,
@@ -412,13 +416,13 @@ export function TerrainViewer(props: TerrainViewerProps) {
           presence hook when passed an empty list). */}
       {composite ? (
         // Boundary present → the server-composited coarse+detail surface replaces
-        // the plain terrain mesh. Wrapped in `Fade` (cull) so the terrain toggle
-        // dissolves in/out like every other layer; hidden while a volume solid/
-        // carve is shown. Fade lerps both region materials' opacity, composing with
-        // the per-vertex boundary fade.
-        <Fade visible={showTerrain && !volumeCarve && !volumeSolidActive} cull>
+        // the plain terrain mesh. When a volume is graded, we swap in the graded
+        // composite (detail lifted to the finished grade) — so "graded" shows here,
+        // not as a separate solid. Wrapped in `Fade` (cull) so the terrain toggle
+        // dissolves in/out; only hidden for the solid cut/fill view.
+        <Fade visible={showTerrain && !volumeSolidActive} cull>
           <CompositeTerrain
-            buffer={composite}
+            buffer={gradedComposite ?? composite}
             frame={frame}
             color={palette.clay}
             opacity={underground ? 0.18 : 1}
@@ -445,9 +449,10 @@ export function TerrainViewer(props: TerrainViewerProps) {
         </Fade>
       ) : null}
 
-      {/* Graded ON: the clean finished-grade terrain (server-clipped to the
-          design footprint); OFF: the clean cut/fill solid. Both are ESOL meshes. */}
-      {volumeGradedMesh && volumeCarve ? (
+      {/* Graded ON: the clean finished-grade terrain. On the composite path the
+          graded surface is shown by swapping the composite buffer above, so the
+          legacy ESOL solid only renders on the non-boundary path. */}
+      {volumeGradedMesh && volumeCarve && !composite ? (
         <VolumeSolid solidBase64={volumeGradedMesh} frame={frame} visible={showVolume} />
       ) : null}
       {volumeSolid && volumeSolidActive ? (

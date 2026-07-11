@@ -243,6 +243,13 @@ export const VOLUME_GRADED_TERRAIN = graphql(`
   }
 `);
 
+/** The combined graded terrain (CTER) for a set of volumes over the split terrain. */
+export const GRADED_TERRAIN = graphql(`
+  query GradedTerrain($projectId: UUID!, $volumeIds: [UUID!]!) {
+    gradedTerrain(projectId: $projectId, volumeIds: $volumeIds)
+  }
+`);
+
 /** Every constraint (breakline / boundary / hole) in a project. */
 export const BREAKLINES = graphql(`
   query Breaklines($projectId: UUID!) {

@@ -1181,6 +1181,14 @@ export type VolumeGradedTerrainQueryVariables = Exact<{
 
 export type VolumeGradedTerrainQuery = { volumeGradedTerrain: string | null };
 
+export type GradedTerrainQueryVariables = Exact<{
+  projectId: string;
+  volumeIds: Array<string> | string;
+}>;
+
+
+export type GradedTerrainQuery = { gradedTerrain: string | null };
+
 export type BreaklinesQueryVariables = Exact<{
   projectId: string;
 }>;
@@ -2558,6 +2566,11 @@ export const VolumeGradedTerrainDocument = new TypedDocumentString(`
   volumeGradedTerrain(id: $id)
 }
     `) as unknown as TypedDocumentString<VolumeGradedTerrainQuery, VolumeGradedTerrainQueryVariables>;
+export const GradedTerrainDocument = new TypedDocumentString(`
+    query GradedTerrain($projectId: UUID!, $volumeIds: [UUID!]!) {
+  gradedTerrain(projectId: $projectId, volumeIds: $volumeIds)
+}
+    `) as unknown as TypedDocumentString<GradedTerrainQuery, GradedTerrainQueryVariables>;
 export const BreaklinesDocument = new TypedDocumentString(`
     query Breaklines($projectId: UUID!) {
   breaklines(projectId: $projectId) {

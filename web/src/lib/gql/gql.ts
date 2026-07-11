@@ -108,6 +108,7 @@ type Documents = {
     "\n  query VolumeHeatmap($id: UUID!) {\n    volumeHeatmap(id: $id) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n": typeof types.VolumeHeatmapDocument,
     "\n  query VolumeEarthworkSolid($id: UUID!) {\n    volumeEarthworkSolid(id: $id)\n  }\n": typeof types.VolumeEarthworkSolidDocument,
     "\n  query VolumeGradedTerrain($id: UUID!) {\n    volumeGradedTerrain(id: $id)\n  }\n": typeof types.VolumeGradedTerrainDocument,
+    "\n  query GradedTerrain($projectId: UUID!, $volumeIds: [UUID!]!) {\n    gradedTerrain(projectId: $projectId, volumeIds: $volumeIds)\n  }\n": typeof types.GradedTerrainDocument,
     "\n  query Breaklines($projectId: UUID!) {\n    breaklines(projectId: $projectId) {\n      id\n      kind\n      closed\n      vertices\n      source\n      sourceLayer\n    }\n  }\n": typeof types.BreaklinesDocument,
     "\n  mutation CreateBreakline($projectId: UUID!, $input: BreaklineInput!) {\n    createBreakline(projectId: $projectId, input: $input) {\n      id\n      kind\n    }\n  }\n": typeof types.CreateBreaklineDocument,
     "\n  mutation DeleteBreakline($id: UUID!) {\n    deleteBreakline(id: $id)\n  }\n": typeof types.DeleteBreaklineDocument,
@@ -235,6 +236,7 @@ const documents: Documents = {
     "\n  query VolumeHeatmap($id: UUID!) {\n    volumeHeatmap(id: $id) {\n      filename\n      mimeType\n      contentBase64\n    }\n  }\n": types.VolumeHeatmapDocument,
     "\n  query VolumeEarthworkSolid($id: UUID!) {\n    volumeEarthworkSolid(id: $id)\n  }\n": types.VolumeEarthworkSolidDocument,
     "\n  query VolumeGradedTerrain($id: UUID!) {\n    volumeGradedTerrain(id: $id)\n  }\n": types.VolumeGradedTerrainDocument,
+    "\n  query GradedTerrain($projectId: UUID!, $volumeIds: [UUID!]!) {\n    gradedTerrain(projectId: $projectId, volumeIds: $volumeIds)\n  }\n": types.GradedTerrainDocument,
     "\n  query Breaklines($projectId: UUID!) {\n    breaklines(projectId: $projectId) {\n      id\n      kind\n      closed\n      vertices\n      source\n      sourceLayer\n    }\n  }\n": types.BreaklinesDocument,
     "\n  mutation CreateBreakline($projectId: UUID!, $input: BreaklineInput!) {\n    createBreakline(projectId: $projectId, input: $input) {\n      id\n      kind\n    }\n  }\n": types.CreateBreaklineDocument,
     "\n  mutation DeleteBreakline($id: UUID!) {\n    deleteBreakline(id: $id)\n  }\n": types.DeleteBreaklineDocument,
@@ -641,6 +643,10 @@ export function graphql(source: "\n  query VolumeEarthworkSolid($id: UUID!) {\n 
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query VolumeGradedTerrain($id: UUID!) {\n    volumeGradedTerrain(id: $id)\n  }\n"): typeof import('./graphql').VolumeGradedTerrainDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query GradedTerrain($projectId: UUID!, $volumeIds: [UUID!]!) {\n    gradedTerrain(projectId: $projectId, volumeIds: $volumeIds)\n  }\n"): typeof import('./graphql').GradedTerrainDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
