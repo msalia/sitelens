@@ -31,7 +31,7 @@ test('surface mesh loads over /asset (200 + ETag) and revalidates (304)', async 
   const meshResponse = page.waitForResponse((r) =>
     /\/api\/asset\/surface\/[^/]+\/mesh/.test(r.url()),
   );
-  await page.getByLabel('Name').fill('Existing grade');
+  await page.locator('#surf-name').fill('Existing grade');
   await page.getByRole('button', { name: 'Build surface' }).click();
   await expect(page.getByText(/2 triangles/)).toBeVisible();
 
