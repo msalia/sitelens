@@ -36,10 +36,13 @@ Seams (from the codebase map): router `api/src/lib.rs:282`; auth `auth_from_head
 
 > **1a COMPLETE + browser-verified.** *Backend* — `api/src/asset.rs` + `/asset` routes in `lib.rs`, gzip/brotli, sha256 ETag/304; `api/tests/integration/asset.rs` (8) + `etag_for` unit; suite green (200 lib + 133 integration). *Web* — `/api/asset` proxy + `lib/asset.ts` (+ `asset.test.ts`, 6 tests); **terrain, buildings, surface mesh, volume heatmap** all cut over to the binary route; tsc + eslint clean, web unit 52 green. *E2E* — `web/e2e/asset-transport.spec.ts` green (surface mesh over `/api/asset`: 200 + octet-stream + ETag → 304; unauth → 401), run against the rebuilt local api container. **Remaining 1a:** computed-blob migration (deferred) + base64-field removal (P6).
 
-### Phase 1b — quantization
+### Phase 1b — quantization ✅
 
-- [ ] New quantized mesh encoding in `surface/mod.rs` (version-bumped magic): positions 16-bit bbox-relative (u16), plus the bbox as f64 for dequant; indices u16 when V ≤ 65535 else u32; carry per-vertex dz (SVOL) / rgb (ESOL) quantized to u8/u16. Keep f64 deserialize for back-compat during rollout.
-- [ ] Web: `dequantize` decoders (DataView) → `BufferGeometry`; version-switch on the magic so old + new blobs both decode.
+- [x] Quantized encodings in `surface/mod.rs` — positions 16-bit bbox-relative (u16), reusing/adding the header bbox for dequant; indices stay u32. **STIN v2** (pos u16), **SVOL v3** (pos u16 + dz u16 over `[min_dz,max_dz]`, adds a pos bbox), **ESOL v1** (pos u16 + rgb u8, adds version + bbox). Shared `quantize`/`dequantize` helpers.
+- [x] Back-compat: `deserialize_mesh` reads STIN v1+v2 (stored surfaces predate v2); web decoders version-switch — `buildSurfaceGeometry` (v1/v2), `buildHeatmapGeometry` (v2/v3), `readHeatmapRange` (header unchanged). ESOL is computed fresh (no legacy).
+- [x] Web `dequantize` decoders → `BufferGeometry`; version guard rejects unknown versions.
+
+> **1b COMPLETE.** ~4× smaller mesh vertices before gzip (STIN 24→6 B/vtx, SVOL 32→8, ESOL 48→9). Tests: Rust `mod.rs` (v1 back-compat + v2 roundtrip + v3 header); web `surface-mesh.test.ts` (4) + `volume-heatmap.test.ts` (5) — decoder coverage gap filled. Full suite green: 201 lib + 133 integration + web unit 61; fmt/clippy/eslint/tsc clean. Note: ESOL still rides base64-GraphQL (transport deferred with the other computed blobs); quantization shrinks that payload too.
 
 ### Tests
 

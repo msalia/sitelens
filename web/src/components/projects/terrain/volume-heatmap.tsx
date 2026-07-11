@@ -64,7 +64,7 @@ export function readHeatmapRange(buffer: ArrayBuffer): HeatmapRange | null {
  * follows the surface outline exactly and shades smoothly (red cut → blue fill),
  * lifted slightly so it reads over the surface. Layout: see `api/src/surface/mod.rs`.
  */
-function buildHeatmapGeometry(
+export function buildHeatmapGeometry(
   buf: ArrayBuffer,
   frame: Frame,
   graded: boolean,
@@ -77,6 +77,10 @@ function buildHeatmapGeometry(
   if (magic !== 'SVOL') {
     return null;
   }
+  const version = dv.getUint32(4, true);
+  if (version !== 2 && version !== 3) {
+    return null;
+  }
   const minDz = dv.getFloat64(8, true);
   const maxDz = dv.getFloat64(16, true);
   const vCount = dv.getUint32(24, true);
@@ -86,17 +90,43 @@ function buildHeatmapGeometry(
   }
   const scale = Math.max(Math.abs(minDz), Math.abs(maxDz)) || 1;
 
+  // v3 adds a 48-byte position bbox after the header and quantizes each vertex to
+  // 4×u16 (lat, lon, h, dz); v2 stored 4×f64. dz dequantizes over [min_dz, max_dz].
+  const quantized = version === 3;
+  if (quantized && buf.byteLength < 80) {
+    return null;
+  }
+  const minLat = quantized ? dv.getFloat64(32, true) : 0;
+  const minLon = quantized ? dv.getFloat64(40, true) : 0;
+  const minH = quantized ? dv.getFloat64(48, true) : 0;
+  const maxLat = quantized ? dv.getFloat64(56, true) : 0;
+  const maxLon = quantized ? dv.getFloat64(64, true) : 0;
+  const maxH = quantized ? dv.getFloat64(72, true) : 0;
+  const dq = (q: number, mn: number, mx: number) => (mx <= mn ? mn : mn + (q / 65535) * (mx - mn));
+
   const positions = new Float32Array(vCount * 3);
   // RGBA: alpha fades out near-zero Δz so only the actual cut/fill regions paint
   // over the terrain (a "boolean" overlay) — untouched ground shows through.
   const colors = new Float32Array(vCount * 4);
-  let off = 32;
+  const stride = quantized ? 8 : 32;
+  let off = quantized ? 80 : 32;
   for (let i = 0; i < vCount; i++) {
-    const lat = dv.getFloat64(off, true);
-    const lon = dv.getFloat64(off + 8, true);
-    const h = dv.getFloat64(off + 16, true);
-    const dz = dv.getFloat64(off + 24, true);
-    off += 32;
+    let lat: number;
+    let lon: number;
+    let h: number;
+    let dz: number;
+    if (quantized) {
+      lat = dq(dv.getUint16(off, true), minLat, maxLat);
+      lon = dq(dv.getUint16(off + 2, true), minLon, maxLon);
+      h = dq(dv.getUint16(off + 4, true), minH, maxH);
+      dz = dq(dv.getUint16(off + 6, true), minDz, maxDz);
+    } else {
+      lat = dv.getFloat64(off, true);
+      lon = dv.getFloat64(off + 8, true);
+      h = dv.getFloat64(off + 16, true);
+      dz = dv.getFloat64(off + 24, true);
+    }
+    off += stride;
     // `graded` lifts each vertex by Δz to the finished (post-earthwork) grade, so
     // the mesh shows what the cut/fill would actually look like on the ground.
     const [x, y, z] = toLocal(frame, lat, lon, h + (graded ? dz : 0) + LIFT);

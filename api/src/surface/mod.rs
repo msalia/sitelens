@@ -64,13 +64,18 @@ pub const SCTR_VERSION: u32 = 1;
 
 /// Magic prefix identifying a SiteLens volume-heatmap blob.
 pub const SVOL_MAGIC: &[u8; 4] = b"SVOL";
-/// Current volume-heatmap-blob format version. v2 carries the base surface mesh
-/// with a per-vertex Δz (so the heatmap follows the surface outline exactly).
-pub const SVOL_VERSION: u32 = 2;
+/// Current volume-heatmap-blob format version. v2 carried f64 positions; **v3**
+/// quantizes positions to `u16` over a header bbox and Δz to `u16` over
+/// `[min_dz, max_dz]` (4× smaller). The client decodes both.
+pub const SVOL_VERSION: u32 = 3;
 /// Earthwork solid mesh — a clean cut/fill volume clipped to the design footprint,
-/// for display (vertical walls + straight edges). Layout: `ESOL` magic, vCount u32,
-/// tCount u32, then vCount × (lat,lon,z,r,g,b as f64), then tCount × 3 u32.
+/// for display (vertical walls + straight edges). **v1** layout: `ESOL` magic,
+/// version u32, vCount u32, tCount u32, bbox (6 × f64), then vCount × (lat,lon,z as
+/// 3 × u16 quantized over bbox + r,g,b as 3 × u8), then tCount × 3 u32. Computed
+/// fresh per request (never stored), so there is no legacy layout to read.
 pub const ESOL_MAGIC: &[u8; 4] = b"ESOL";
+/// Current earthwork-solid format version (added with quantization).
+pub const ESOL_VERSION: u32 = 1;
 
 /// An indexed mesh decoded from a blob: `(vertices [x/lat, y/lon, z], triangles)`.
 pub type MeshData = (Vec<[f64; 3]>, Vec<[u32; 3]>);
@@ -211,12 +216,14 @@ pub fn serialize_contours(levels: &[contour::ContourLevel]) -> Vec<u8> {
 /// ```text
 /// offset  bytes  field
 /// 0       4      magic "SVOL"
-/// 4       4      version (u32)
+/// 4       4      version (u32) — 2 (legacy f64) or 3 (quantized)
 /// 8       8      min_dz (f64)
 /// 16      8      max_dz (f64)
 /// 24      4      vertex_count V (u32)
 /// 28      4      triangle_count T (u32)
-/// 32      V*32   vertices: [lat, lon, height, dz] (4 x f64) each
+/// 32      48     v3: bbox min_lat,min_lon,min_h,max_lat,max_lon,max_h (6 x f64)
+/// 80      V*8    v3: vertices [lat, lon, h, dz] (4 x u16; pos via bbox, dz via min/max_dz)
+/// 32      V*32   v2: vertices [lat, lon, height, dz] (4 x f64) each
 /// ...     T*12   triangles: [a, b, c] (3 x u32) each
 /// ```
 pub fn serialize_volume_heatmap(
@@ -226,18 +233,34 @@ pub fn serialize_volume_heatmap(
     min_dz: f64,
     max_dz: f64,
 ) -> Vec<u8> {
-    let mut buf = Vec::with_capacity(32 + vertices.len() * 32 + indices.len() * 12);
+    let mut min = [f64::INFINITY; 3];
+    let mut max = [f64::NEG_INFINITY; 3];
+    for v in vertices {
+        for k in 0..3 {
+            min[k] = min[k].min(v[k]);
+            max[k] = max[k].max(v[k]);
+        }
+    }
+    if vertices.is_empty() {
+        min = [0.0; 3];
+        max = [0.0; 3];
+    }
+
+    let mut buf = Vec::with_capacity(80 + vertices.len() * 8 + indices.len() * 12);
     buf.extend_from_slice(SVOL_MAGIC);
     buf.extend_from_slice(&SVOL_VERSION.to_le_bytes());
     buf.extend_from_slice(&min_dz.to_le_bytes());
     buf.extend_from_slice(&max_dz.to_le_bytes());
     buf.extend_from_slice(&(vertices.len() as u32).to_le_bytes());
     buf.extend_from_slice(&(indices.len() as u32).to_le_bytes());
+    for v in [min[0], min[1], min[2], max[0], max[1], max[2]] {
+        buf.extend_from_slice(&v.to_le_bytes());
+    }
     for (v, d) in vertices.iter().zip(dz) {
-        for c in v {
-            buf.extend_from_slice(&c.to_le_bytes());
+        for k in 0..3 {
+            buf.extend_from_slice(&quantize(v[k], min[k], max[k]).to_le_bytes());
         }
-        buf.extend_from_slice(&d.to_le_bytes());
+        buf.extend_from_slice(&quantize(*d, min_dz, max_dz).to_le_bytes());
     }
     for tri in indices {
         for i in tri {
@@ -254,16 +277,34 @@ pub fn serialize_earthwork_solid(
     colors: &[[f64; 3]],
     indices: &[[u32; 3]],
 ) -> Vec<u8> {
-    let mut buf = Vec::with_capacity(12 + vertices.len() * 48 + indices.len() * 12);
+    let mut min = [f64::INFINITY; 3];
+    let mut max = [f64::NEG_INFINITY; 3];
+    for v in vertices {
+        for k in 0..3 {
+            min[k] = min[k].min(v[k]);
+            max[k] = max[k].max(v[k]);
+        }
+    }
+    if vertices.is_empty() {
+        min = [0.0; 3];
+        max = [0.0; 3];
+    }
+
+    let mut buf = Vec::with_capacity(28 + 48 + vertices.len() * 9 + indices.len() * 12);
     buf.extend_from_slice(ESOL_MAGIC);
+    buf.extend_from_slice(&ESOL_VERSION.to_le_bytes());
     buf.extend_from_slice(&(vertices.len() as u32).to_le_bytes());
     buf.extend_from_slice(&(indices.len() as u32).to_le_bytes());
+    for v in [min[0], min[1], min[2], max[0], max[1], max[2]] {
+        buf.extend_from_slice(&v.to_le_bytes());
+    }
     for (v, c) in vertices.iter().zip(colors) {
-        for p in v {
-            buf.extend_from_slice(&p.to_le_bytes());
+        for k in 0..3 {
+            buf.extend_from_slice(&quantize(v[k], min[k], max[k]).to_le_bytes());
         }
+        // Colours are in [0,1]; pack each channel into a u8.
         for ch in c {
-            buf.extend_from_slice(&ch.to_le_bytes());
+            buf.push((ch.clamp(0.0, 1.0) * 255.0).round() as u8);
         }
     }
     for tri in indices {
@@ -424,14 +465,16 @@ mod tests {
         );
         assert_eq!(f64::from_le_bytes(blob[8..16].try_into().unwrap()), -3.0);
         assert_eq!(f64::from_le_bytes(blob[16..24].try_into().unwrap()), 2.5);
-        assert_eq!(u32::from_le_bytes(blob[24..28].try_into().unwrap()), 3);
-        assert_eq!(u32::from_le_bytes(blob[28..32].try_into().unwrap()), 1);
-        assert_eq!(blob.len(), 32 + 3 * 32 + 12);
-        // First vertex: lat 40.0 … dz -3.0 at offset 32+24.
+        assert_eq!(u32::from_le_bytes(blob[24..28].try_into().unwrap()), 3); // vCount
+        assert_eq!(u32::from_le_bytes(blob[28..32].try_into().unwrap()), 1); // tCount
+                                                                             // v3: 48-byte bbox header, then 3 verts × 8 bytes (4×u16) + 1 tri × 12.
+        assert_eq!(blob.len(), 80 + 3 * 8 + 12);
+        // bbox min_lat (40.0) and max_lat (40.1) at the start / mid of the bbox block.
         assert_eq!(f64::from_le_bytes(blob[32..40].try_into().unwrap()), 40.0);
-        assert_eq!(
-            f64::from_le_bytes(blob[32 + 24..32 + 32].try_into().unwrap()),
-            -3.0
-        );
+        assert_eq!(f64::from_le_bytes(blob[56..64].try_into().unwrap()), 40.1);
+        // First vertex: lat 40.0 = bbox-min → quantizes to 0.
+        assert_eq!(u16::from_le_bytes(blob[80..82].try_into().unwrap()), 0);
+        // Its dz -3.0 = min_dz → quantizes to 0 (the 4th u16 of vertex 0).
+        assert_eq!(u16::from_le_bytes(blob[86..88].try_into().unwrap()), 0);
     }
 }

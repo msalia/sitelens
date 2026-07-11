@@ -10,8 +10,9 @@ import { type Frame, toLocal } from '../terrain-frame';
  * clipped exactly to the design footprint, with straight edges + vertical walls,
  * coloured red (cut) / blue (fill). The clipping + colouring are done server-side
  * (authoritative), so the client just decodes and draws. Blob layout: see
- * `api/src/surface/mod.rs` — `ESOL` magic, vCount u32, tCount u32, then vCount ×
- * (lat, lon, z, r, g, b as f64), then tCount × 3 u32.
+ * `api/src/surface/mod.rs` — `ESOL` magic, version u32, vCount u32, tCount u32,
+ * bbox (6 × f64), then vCount × (lat, lon, z as 3 × u16 quantized + r, g, b as
+ * 3 × u8), then tCount × 3 u32.
  */
 export function VolumeSolid({
   frame,
@@ -34,7 +35,7 @@ export function VolumeSolid({
     } catch {
       return null;
     }
-    if (buf.byteLength < 12) {
+    if (buf.byteLength < 64) {
       return null;
     }
     const dv = new DataView(buf);
@@ -47,22 +48,34 @@ export function VolumeSolid({
     if (magic !== 'ESOL') {
       return null;
     }
-    const vCount = dv.getUint32(4, true);
-    const tCount = dv.getUint32(8, true);
+    if (dv.getUint32(4, true) !== 1) {
+      return null;
+    }
+    const vCount = dv.getUint32(8, true);
+    const tCount = dv.getUint32(12, true);
     if (vCount === 0 || tCount === 0) {
       return null;
     }
+    // bbox [min_lat, min_lon, min_z, max_lat, max_lon, max_z] (6 × f64 from offset 16).
+    const minLat = dv.getFloat64(16, true);
+    const minLon = dv.getFloat64(24, true);
+    const minZ = dv.getFloat64(32, true);
+    const maxLat = dv.getFloat64(40, true);
+    const maxLon = dv.getFloat64(48, true);
+    const maxZ = dv.getFloat64(56, true);
+    const dq = (q: number, mn: number, mx: number) =>
+      mx <= mn ? mn : mn + (q / 65535) * (mx - mn);
     const positions = new Float32Array(vCount * 3);
     const colors = new Float32Array(vCount * 3);
-    let off = 12;
+    let off = 64;
     for (let i = 0; i < vCount; i++) {
-      const lat = dv.getFloat64(off, true);
-      const lon = dv.getFloat64(off + 8, true);
-      const z = dv.getFloat64(off + 16, true);
-      const r = dv.getFloat64(off + 24, true);
-      const g = dv.getFloat64(off + 32, true);
-      const b = dv.getFloat64(off + 40, true);
-      off += 48;
+      const lat = dq(dv.getUint16(off, true), minLat, maxLat);
+      const lon = dq(dv.getUint16(off + 2, true), minLon, maxLon);
+      const z = dq(dv.getUint16(off + 4, true), minZ, maxZ);
+      const r = dv.getUint8(off + 6) / 255;
+      const g = dv.getUint8(off + 7) / 255;
+      const b = dv.getUint8(off + 8) / 255;
+      off += 9;
       const [x, y, zz] = toLocal(frame, lat, lon, z);
       positions[i * 3] = x;
       positions[i * 3 + 1] = y;

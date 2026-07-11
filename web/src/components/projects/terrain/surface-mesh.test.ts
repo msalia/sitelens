@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Frame } from '../terrain-frame';
+
 import { buildSurfaceGeometry } from './surface-mesh';
 
 const FRAME: Frame = {
