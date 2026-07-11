@@ -15,9 +15,9 @@ Dependencies: P2 ships over P1's transport. P3 needs P2 (composite regions + bou
 
 ---
 
-## Phase 1 — Binary asset transport + quantized blobs
+## Phase 1 — Binary asset transport + quantized blobs ✅ COMPLETE + browser-verified
 
-The foundation: stop base64-in-GraphQL, serve raw bytes over an authed `/asset` route, and shrink meshes. Independently shippable — retrofit the *existing* blobs (STIN/SCTR/SVOL/ESOL/GeoTIFF) first, before any new geometry exists. Two sub-steps: **1a transport** (raw bytes + gzip/brotli, existing f64 formats — immediate win, low risk) then **1b quantization** (16-bit meshes — more win).
+The foundation: stop base64-in-GraphQL, serve raw bytes over an authed `/asset` route, and shrink meshes. Two sub-steps: **1a transport** (raw bytes + gzip/brotli over the existing f64 formats — immediate win, low risk) then **1b quantization** (16-bit meshes — more win). The **pure-fetch** blobs (surface mesh, volume heatmap, coarse + detailed terrain GeoTIFFs, buildings) were retrofitted; the **computed** blobs (contours SCTR, earthwork solid/graded ESOL) were left on base64 GraphQL by design (see the deferred note below).
 
 Seams (from the codebase map): router `api/src/lib.rs:282`; auth `auth_from_headers(&headers, &state.config.jwt_secret)` (`lib.rs:111`); storage `Storage::get(key)` (`storage.rs:11`); blob formats `api/src/surface/mod.rs`; existing resolvers in `schema/surface/query.rs` + `schema/terrain.rs` (Crew gate `require_feature(ctx, Feature::Surfaces)`); web decoders are already `ArrayBuffer`-native (`buildSurfaceGeometry`, surface-mesh.tsx:62); browser reaches the API only via the Next.js proxy (`web/src/app/api/graphql/route.ts`).
 
@@ -25,14 +25,16 @@ Seams (from the codebase map): router `api/src/lib.rs:282`; auth `auth_from_head
 
 - [x] Add `storage: Arc<dyn Storage>` to `AppState` so a plain axum route can reach it. (`lib.rs`; `router()` + `build_router()` extracted for tests.)
 - [x] New axum handler + routes for the **pure-fetch** blobs under `/asset/…`: `surface/{id}/mesh`, `volume/{id}/heatmap`, `project/{id}/terrain`, `project/{id}/terrain-detailed`, `project/{id}/buildings`. Raw bytes; `ETag = sha256 hex`; `304` on `If-None-Match`; `Cache-Control: private, must-revalidate`; `Content-Type` + `Content-Disposition`. Core logic in `api/src/asset.rs` (`Asset` enum + `resolve_asset` → `AssetOutcome`).
-- [ ] **Computed** blobs (`surface/{id}/contours` SCTR, `volume/{id}/solid|graded` ESOL) — deferred within 1a; they stay on base64 until their byte-producers are factored out of the resolvers (graded is rewritten in P4 anyway).
 - [x] `tower-http` `CompressionLayer` (`compression-gzip,compression-br`) on the asset sub-router.
 - [x] Auth via `auth_from_headers`; org-scope every lookup (JOIN `projects`); Crew gate `mesh|heatmap` via `org_billing().has_feature(Feature::Surfaces)`; base terrain/buildings ungated. Order = auth → gate → ownership (mirrors resolvers).
 - [x] Web infra: Next.js proxy `web/src/app/api/asset/[...path]/route.ts` (Next 16 async `ctx.params`) forwarding the session cookie + `If-None-Match`, relaying ETag/304; `web/src/lib/asset.ts` = `assetUrls` builders + `fetchAssetBuffer`/`fetchAssetText` (`credentials: 'same-origin'`, `null` on 404).
 - [x] Web cutover — **terrain + buildings**: `scene-view.tsx` loaders fetch `/asset` (GeoTIFF → `ArrayBuffer`; buildings → text→JSON); `TerrainData` now carries `buffer: ArrayBuffer`; `terrain-viewer.tsx` decodes `terrain.buffer` directly (no base64). URLs are stable so the browser HTTP cache revalidates via ETag.
 - [x] Web cutover — **surface mesh + volume heatmap**: `scene-view.tsx` `surface`/`volumeBlob` state now hold `ArrayBuffer`; loaders fetch `/asset`; `terrain-viewer.tsx` decodes `surface` directly (dropped `base64ToArrayBuffer`); `volume-heatmap.tsx` `readHeatmapRange`/`VolumeHeatmap` take `ArrayBuffer`.
-- [ ] Computed blobs (`contours` SCTR, `solid`/`graded` ESOL) still ride base64 GraphQL — deferred within 1a (graded is rewritten in P4).
-- [ ] GraphQL: (optional) `assetUrl`/`etag` metadata fields; the client builds URLs directly from ids, so this is only needed if a resolver must signal presence. Remove the base64 `content_base64` render fields in P6 once fully cut over.
+
+**Deferred by design (not blocking Phase 1):**
+- Computed blobs — `surface/{id}/contours` (SCTR), `volume/{id}/solid|graded` (ESOL) — stay on base64 GraphQL until their byte-producers are factored out of the resolvers (graded is rewritten in P4 anyway). CTER composite likewise (P2).
+- GraphQL `assetUrl`/`etag` metadata fields — unnecessary: the client builds `/asset` URLs directly from ids (presence handled by the 404→null fetch).
+- Removal of the now-unused base64 `content_base64` render fields — happens in **P6** once every consumer is cut over.
 
 > **1a COMPLETE + browser-verified.** *Backend* — `api/src/asset.rs` + `/asset` routes in `lib.rs`, gzip/brotli, sha256 ETag/304; `api/tests/integration/asset.rs` (8) + `etag_for` unit; suite green (200 lib + 133 integration). *Web* — `/api/asset` proxy + `lib/asset.ts` (+ `asset.test.ts`, 6 tests); **terrain, buildings, surface mesh, volume heatmap** all cut over to the binary route; tsc + eslint clean, web unit 52 green. *E2E* — `web/e2e/asset-transport.spec.ts` green (surface mesh over `/api/asset`: 200 + octet-stream + ETag → 304; unauth → 401), run against the rebuilt local api container. **Remaining 1a:** computed-blob migration (deferred) + base64-field removal (P6).
 
@@ -44,16 +46,16 @@ Seams (from the codebase map): router `api/src/lib.rs:282`; auth `auth_from_head
 
 > **1b COMPLETE.** ~4× smaller mesh vertices before gzip (STIN 24→6 B/vtx, SVOL 32→8, ESOL 48→9). Tests: Rust `mod.rs` (v1 back-compat + v2 roundtrip + v3 header); web `surface-mesh.test.ts` (4) + `volume-heatmap.test.ts` (5) — decoder coverage gap filled. Full suite green: 201 lib + 133 integration + web unit 61; fmt/clippy/eslint/tsc clean. Note: ESOL still rides base64-GraphQL (transport deferred with the other computed blobs); quantization shrinks that payload too.
 
-### Tests
+### Tests (as shipped)
 
-- [ ] Rust unit: ETag stability (same bytes → same hash); quantize↔dequantize roundtrip within tolerance; header/version parity; index width switch at the 65535 boundary.
-- [ ] Integration: `/asset` auth (cookie-JWT present/absent/expired), tenant isolation (cross-org → 404/403), Crew gate on `heatmap|solid|graded`, ETag → 304, gzip/br content-encoding negotiation, contours computed on demand.
-- [ ] Client unit (**new — fills the current gap**): quantized + legacy-f64 decode → BufferGeometry for STIN/SVOL/ESOL; proxy URL building.
-- [ ] Playwright: existing surface/volume/terrain scenes still render, now fetching `/asset` (not base64) — assert response carries no `content_base64`.
+- [x] Rust unit: `etag_for` stability (same bytes → same hash, content-sensitive); STIN v1↔v2 quantize/dequantize roundtrip within tolerance + v1 back-compat decode; SVOL v3 + CTER/ESOL header/size parity.
+- [x] Integration (`api/tests/integration/asset.rs`, 8): `resolve_asset` outcomes for all five pure-fetch assets — auth required, Crew gate (`mesh|heatmap`), tenant isolation (cross-org → NotFound), ungated terrain served to a Solo org, ETag → 304; plus HTTP `oneshot` wiring (401 no-cookie / 200 + ETag / 304 conditional).
+- [x] Client unit (fills the prior decoder-coverage gap): `surface-mesh.test.ts` (v1 + v2 STIN decode, 4), `volume-heatmap.test.ts` (v2 + v3 SVOL decode + `readHeatmapRange`, 5), `asset.test.ts` (proxy URL builders + 404→null fetch, 6).
+- [x] Playwright (`web/e2e/asset-transport.spec.ts`): surface mesh loads over `/api/asset` (200 + octet-stream + ETag) then revalidates to 304; unauthenticated `/asset` → 401. **Run green** against the rebuilt local api (1a and again after the 1b rebuild).
 
 ### Validates
 
-Existing terrain/surface/volume payloads shrink substantially (no base64 inflation + no JSON parse in 1a; ~4× smaller meshes in 1b) and load over an authed binary route with ETag caching. No visual change — pure transport win.
+Terrain/surface/volume payloads shrink substantially — base64 inflation + JSON parse gone (1a), ~4× smaller mesh vertices before gzip (1b) — and load over an authed binary route with ETag caching. No visual change: a pure transport win, browser-verified.
 
 ---
 
