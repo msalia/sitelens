@@ -1,11 +1,12 @@
-//! A minimal single-band float32 **GeoTIFF** writer (classic little-endian TIFF),
-//! enough to export a surface sampled to a DEM raster. Hand-rolled to avoid a
-//! TIFF dependency (the repo parses GeoTIFF client-side with geotiff.js; only the
-//! export side needs to *write* one).
+//! A single-band float32 **GeoTIFF** codec. The writer ([`write_geotiff`], classic
+//! little-endian TIFF, one uncompressed strip, `SampleFormat = IEEE float`,
+//! geo-tagged with `ModelPixelScale` + `ModelTiepoint` + a `GeoKeyDirectory`) is
+//! used to export a surface sampled to a DEM raster.
 //!
-//! One uncompressed strip, `SampleFormat = IEEE float`, geo-tagged with
-//! `ModelPixelScale` + `ModelTiepoint` + a `GeoKeyDirectory` (Projected CS = the
-//! surface's EPSG). Cells outside the surface carry a NODATA value.
+//! The reader ([`read_geotiff`], via the pure-Rust `tiff` crate) decodes a fetched
+//! DEM (e.g. USGS 3DEP, EPSG:4326) into a [`DecodedDem`] grid for the terrain
+//! composite — recovering origin/pixel from the geo tags, EPSG from the
+//! GeoKeyDirectory, and the NODATA sentinel.
 
 /// A regular DEM raster to serialize. Row 0 is the **north** edge; `data` is
 /// row-major `width * height` in projected CRS units (meters).
@@ -136,6 +137,101 @@ pub fn write_geotiff(g: &DemGrid) -> Vec<u8> {
     out
 }
 
+/// A decoded single-band DEM raster. Node `(row, col)` sits at world
+/// `(origin_x + col*pixel_x, origin_y - row*pixel_y)`; row 0 is the **north** edge
+/// (`data` is row-major, top-to-bottom). For a 3DEP EPSG:4326 tiff, world x/y are
+/// lon/lat and `pixel_*` are in degrees.
+#[derive(Debug, Clone)]
+pub struct DecodedDem {
+    pub width: usize,
+    pub height: usize,
+    pub origin_x: f64,
+    pub origin_y: f64,
+    pub pixel_x: f64,
+    pub pixel_y: f64,
+    pub epsg: Option<u32>,
+    pub nodata: Option<f64>,
+    pub data: Vec<f32>,
+}
+
+/// Parses the EPSG code out of a GeoKeyDirectory (flat `u16` array): a 4-word
+/// header (`version, rev, minor, key_count`) then 4-word keys
+/// (`id, location, count, value`). We return the ProjectedCSType (3072) or
+/// GeographicType (2048) when stored inline (`location == 0`).
+fn epsg_from_geokeys(keys: &[u16]) -> Option<u32> {
+    if keys.len() < 4 {
+        return None;
+    }
+    let n = keys[3] as usize;
+    for i in 0..n {
+        let o = 4 + i * 4;
+        if o + 3 >= keys.len() {
+            break;
+        }
+        let (id, location, value) = (keys[o], keys[o + 1], keys[o + 3]);
+        if (id == 3072 || id == 2048) && location == 0 && value != 0 && value != 32767 {
+            return Some(value as u32);
+        }
+    }
+    None
+}
+
+/// Decodes a single-band float32 GeoTIFF into a [`DecodedDem`]. Requires the
+/// `ModelPixelScale` + `ModelTiepoint` geo tags (present on 3DEP output and on
+/// anything [`write_geotiff`] produced). Returns an error for non-float or
+/// ungeoreferenced tiffs.
+pub fn read_geotiff(bytes: &[u8]) -> Result<DecodedDem, String> {
+    use tiff::decoder::{Decoder, DecodingResult};
+    use tiff::tags::Tag;
+
+    let mut d = Decoder::new(std::io::Cursor::new(bytes)).map_err(|e| e.to_string())?;
+    let (w, h) = d.dimensions().map_err(|e| e.to_string())?;
+
+    let scale = d
+        .get_tag_f64_vec(Tag::ModelPixelScaleTag)
+        .map_err(|e| format!("GeoTIFF ModelPixelScale: {e}"))?;
+    let tie = d
+        .get_tag_f64_vec(Tag::ModelTiepointTag)
+        .map_err(|e| format!("GeoTIFF ModelTiepoint: {e}"))?;
+    if scale.len() < 2 || tie.len() < 6 {
+        return Err("GeoTIFF missing ModelPixelScale/ModelTiepoint".into());
+    }
+    let (pixel_x, pixel_y) = (scale[0], scale[1]);
+    // Tiepoint maps raster (tie[0], tie[1]) → world (tie[3], tie[4]); back out the
+    // world origin at raster (0, 0). +row (south) steps world y by -pixel_y.
+    let origin_x = tie[3] - tie[0] * pixel_x;
+    let origin_y = tie[4] + tie[1] * pixel_y;
+
+    let epsg = d
+        .get_tag_u16_vec(Tag::GeoKeyDirectoryTag)
+        .ok()
+        .and_then(|keys| epsg_from_geokeys(&keys));
+    let nodata = d
+        .get_tag_ascii_string(Tag::GdalNodata)
+        .ok()
+        .and_then(|s| s.trim_end_matches('\0').trim().parse::<f64>().ok());
+
+    let data = match d.read_image().map_err(|e| e.to_string())? {
+        DecodingResult::F32(v) => v,
+        _ => return Err("GeoTIFF is not single-band float32".into()),
+    };
+    if data.len() != (w as usize) * (h as usize) {
+        return Err("GeoTIFF raster size mismatch".into());
+    }
+
+    Ok(DecodedDem {
+        width: w as usize,
+        height: h as usize,
+        origin_x,
+        origin_y,
+        pixel_x,
+        pixel_y,
+        epsg,
+        nodata,
+        data,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -178,5 +274,39 @@ mod tests {
             f32::from_le_bytes(b[strip_off..strip_off + 4].try_into().unwrap()),
             10.0
         );
+    }
+
+    #[test]
+    fn read_geotiff_roundtrips_the_writer() {
+        let g = DemGrid {
+            width: 3,
+            height: 2,
+            origin_e: 188_500.0,
+            origin_n: 215_050.0,
+            pixel: 2.0,
+            epsg: 32111,
+            nodata: -9999.0,
+            data: vec![10.0, 11.0, 12.0, 10.5, 11.5, 12.5],
+        };
+        let dem = read_geotiff(&write_geotiff(&g)).unwrap();
+
+        assert_eq!((dem.width, dem.height), (3, 2));
+        assert_eq!(dem.origin_x, 188_500.0);
+        assert_eq!(dem.origin_y, 215_050.0);
+        assert_eq!(dem.pixel_x, 2.0);
+        assert_eq!(dem.pixel_y, 2.0);
+        assert_eq!(dem.epsg, Some(32111));
+        assert_eq!(dem.nodata, Some(-9999.0));
+        // Row 0 is north, row-major, values intact.
+        assert_eq!(dem.data, vec![10.0, 11.0, 12.0, 10.5, 11.5, 12.5]);
+        // Node (row 1, col 2) sits at the expected world coordinate.
+        let (r, c) = (1.0, 2.0);
+        assert_eq!(dem.origin_x + c * dem.pixel_x, 188_504.0);
+        assert_eq!(dem.origin_y - r * dem.pixel_y, 215_048.0);
+    }
+
+    #[test]
+    fn read_geotiff_rejects_non_tiff() {
+        assert!(read_geotiff(b"not a tiff").is_err());
     }
 }

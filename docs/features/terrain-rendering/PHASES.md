@@ -61,6 +61,13 @@ Existing terrain/surface/volume payloads shrink substantially (no base64 inflati
 
 The core rework. Server clips both DEMs to the property boundary, adaptively decimates the detail, stitches the seam, and ships one `CTER` blob; the client renders it as a seamless ground with lighting-driven relief, replacing current terrain when a boundary exists.
 
+> **Build notes (from the Phase 2 seam map):**
+> - **No server-side GeoTIFF decoder exists** (`geotiff.rs` only *writes*). Add one — decision: the **pure-Rust `tiff` crate** (robust vs 3DEP encoding variants; no C/C++). New `read_geotiff(bytes) -> DecodedDem` in `geotiff.rs`, validated by a write→read roundtrip against the existing `write_geotiff`.
+> - **3DEP tiffs are EPSG:4326** — nodes are lon/lat directly, so terrain skips the Helmert `SiteRotation` (use the `dem_node_to_geographic` 4326 shortcut). Boundary polygon is projected `[e,n]` (`projects.boundary` jsonb) → convert to lon/lat for masking, or mask in projected space via `geographic_to_projected` on DEM nodes.
+> - **`refresh_detailed_terrain` already requires + fetches** the 1 m AOI (clipped to the boundary *bbox*); Phase 2 adds the actual **polygon** masking. Both DEMs come from `fetch_3dep_geotiff` and are stored (`terrain/{id}.tif`, `terrain-detailed/{id}.tif`).
+> - **`build_graded_terrain_blob` (shared.rs:715-874) is the template**: OUTSIDE = base retriangulated with the footprint as a `hole` constraint (`tin::triangulate_constrained`); INSIDE = fill; WALLS = ring-walk seam stitch (subdivide to `TARGET_M`, sample both surfaces). Reuse `geom::point_in_polygon`, `MetricFrame`, `SurfaceSampler`, `quantize`/`dequantize`.
+> - Implementation sub-slices: **2a** server GeoTIFF decoder → **2b** composite (mask + clip + seam + `CTER` blob + resolver) → **2c** web `CompositeTerrain`.
+
 ### Deliverables
 
 - [ ] `api/src/surface/terrain_composite.rs`: decode coarse + detail GeoTIFFs; clip coarse **outside** / detail **inside** the boundary (`geom.rs` PIP, centroid classification); **adaptive slope-aware decimation** of detail to the vertex budget (~250k tris); **seam stitch** (bridge coarse-ring ↔ detail-ring, elevation skirt); per-vertex normals; emit `CTER` (regions `coarse|detail|seam`), 16-bit-quantized, cached by hash.
