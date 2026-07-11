@@ -17,7 +17,7 @@ import type {
 } from './terrain-shared';
 
 import { CameraRig, presetFor, RenderGate, SnapshotBridge } from './terrain-camera';
-import { base64ToArrayBuffer, makeFrame, type Sampler } from './terrain-frame';
+import { makeFrame, type Sampler } from './terrain-frame';
 import { buildTerrainGeometry, type TerrainMesh } from './terrain-mesh';
 import {
   BUILDING_COLOR,
@@ -136,8 +136,8 @@ export interface TerrainViewerProps {
   showUtilities?: boolean;
   /** Whether to draw the volume cut/fill heatmap. */
   showVolume?: boolean;
-  /** Active surface's STIN mesh blob (base64), or null when none is selected. */
-  surface?: { contentBase64: string } | null;
+  /** Active surface's STIN mesh bytes (from `/asset`), or null when none is selected. */
+  surface?: ArrayBuffer | null;
   /** How to shade the TIN surface: elevation ramp, slope, or QC wireframe. */
   surfaceMode?: SurfaceMode;
   terrain?: TerrainData | null;
@@ -157,8 +157,8 @@ export interface TerrainViewerProps {
   volumeGraded?: boolean;
   /** Active volume's clean graded-terrain surface (ESOL base64), or null. */
   volumeGradedMesh?: string | null;
-  /** Active volume's cut/fill grid (SVOL base64), or null when none selected. */
-  volumeHeatmap?: { contentBase64: string } | null;
+  /** Active volume's cut/fill grid (SVOL bytes from `/asset`), or null when none selected. */
+  volumeHeatmap?: ArrayBuffer | null;
   /** Active volume's clean earthwork solid (ESOL base64), or null. */
   volumeSolid?: string | null;
 }
@@ -272,19 +272,19 @@ export function TerrainViewer(props: TerrainViewerProps) {
   // is ready (no flicker on rebuild), dispose the superseded one via cleanup.
   const [surfaceGeom, setSurfaceGeom] = useState<SurfaceGeometry | null>(null);
   useEffect(() => {
-    if (!surface?.contentBase64) {
+    if (!surface) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSurfaceGeom(null);
       return;
     }
     try {
-      const built = buildSurfaceGeometry(base64ToArrayBuffer(surface.contentBase64), frame);
+      const built = buildSurfaceGeometry(surface, frame);
 
       setSurfaceGeom(built);
     } catch {
       /* a bad blob just renders nothing */
     }
-  }, [surface?.contentBase64, frame]);
+  }, [surface, frame]);
 
   // Dispose the surface geometry when it's replaced / the viewer unmounts.
   useEffect(() => () => surfaceGeom?.geometry.dispose(), [surfaceGeom]);

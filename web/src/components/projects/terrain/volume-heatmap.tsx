@@ -38,17 +38,12 @@ export interface HeatmapRange {
 
 /** Reads just the SVOL header (Δz range), for a legend without decoding the whole
  *  mesh. Returns null for an empty/invalid blob. */
-export function readHeatmapRange(contentBase64: string): HeatmapRange | null {
+export function readHeatmapRange(buffer: ArrayBuffer): HeatmapRange | null {
   try {
-    const bin = atob(contentBase64);
-    if (bin.length < 24) {
+    if (buffer.byteLength < 24) {
       return null;
     }
-    const bytes = new Uint8Array(24);
-    for (let i = 0; i < 24; i++) {
-      bytes[i] = bin.charCodeAt(i);
-    }
-    const dv = new DataView(bytes.buffer);
+    const dv = new DataView(buffer, 0, 24);
     if (
       String.fromCharCode(dv.getUint8(0), dv.getUint8(1), dv.getUint8(2), dv.getUint8(3)) !== 'SVOL'
     ) {
@@ -139,29 +134,24 @@ function buildHeatmapGeometry(
  *  vertex is lifted to the finished grade (base + Δz) so it reads as the shaped
  *  ground; otherwise it drapes on the base surface as a flat-position heatmap. */
 export function VolumeHeatmap({
-  contentBase64,
+  buffer,
   frame,
   graded = false,
 }: {
-  contentBase64: string | null;
+  buffer: ArrayBuffer | null;
   frame: Frame;
   graded?: boolean;
 }) {
   const geometry = useMemo(() => {
-    if (!contentBase64) {
+    if (!buffer) {
       return null;
     }
     try {
-      const bin = atob(contentBase64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) {
-        bytes[i] = bin.charCodeAt(i);
-      }
-      return buildHeatmapGeometry(bytes.buffer, frame, graded);
+      return buildHeatmapGeometry(buffer, frame, graded);
     } catch {
       return null;
     }
-  }, [contentBase64, frame, graded]);
+  }, [buffer, frame, graded]);
 
   if (!geometry) {
     return null;

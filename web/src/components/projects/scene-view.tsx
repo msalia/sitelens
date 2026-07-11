@@ -46,10 +46,8 @@ import {
   type ContourSettings,
   DEFAULT_CONTOURS,
   SURFACE_CONTOURS,
-  SURFACE_MESH,
   VOLUME_EARTHWORK_SOLID,
   VOLUME_GRADED_TERRAIN,
-  VOLUME_HEATMAP,
 } from './surfaces-data';
 
 // The WebGL viewer is browser-only; load it lazily and never on the server.
@@ -150,9 +148,9 @@ export function SceneView({
   const [showUtilities, setShowUtilities] = useState(true);
   const [showSurface, setShowSurface] = useState(true);
   const [surfaceMode, setSurfaceMode] = useState<SurfaceMode>('ramp');
-  const [surface, setSurface] = useState<{ contentBase64: string } | null>(null);
+  const [surface, setSurface] = useState<ArrayBuffer | null>(null);
   const [contourBlob, setContourBlob] = useState<{ contentBase64: string } | null>(null);
-  const [volumeBlob, setVolumeBlob] = useState<{ contentBase64: string } | null>(null);
+  const [volumeBlob, setVolumeBlob] = useState<ArrayBuffer | null>(null);
   const [volumeSolid, setVolumeSolid] = useState<string | null>(null);
   const [volumeGradedBlob, setVolumeGradedBlob] = useState<string | null>(null);
   const [showVolume, setShowVolume] = useState(true);
@@ -216,8 +214,7 @@ export function SceneView({
       return;
     }
     try {
-      const { surfaceMesh } = await gql(SURFACE_MESH, { id: activeSurfaceId });
-      setSurface({ contentBase64: surfaceMesh.contentBase64 });
+      setSurface(await fetchAssetBuffer(assetUrls.surfaceMesh(activeSurfaceId)));
     } catch {
       setSurface(null);
     }
@@ -266,8 +263,7 @@ export function SceneView({
       return;
     }
     try {
-      const { volumeHeatmap } = await gql(VOLUME_HEATMAP, { id: activeVolumeId });
-      setVolumeBlob({ contentBase64: volumeHeatmap.contentBase64 });
+      setVolumeBlob(await fetchAssetBuffer(assetUrls.volumeHeatmap(activeVolumeId)));
     } catch {
       setVolumeBlob(null);
     }
@@ -292,7 +288,7 @@ export function SceneView({
 
   // Δz range (for the legend), read cheaply from the heatmap blob header.
   const volumeRange = useMemo(
-    () => (volumeBlob ? readHeatmapRange(volumeBlob.contentBase64) : null),
+    () => (volumeBlob ? readHeatmapRange(volumeBlob) : null),
     [volumeBlob],
   );
 
