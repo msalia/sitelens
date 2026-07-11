@@ -93,8 +93,9 @@ test.describe('Crew (paid) tier', () => {
     upgradeOrg(email);
     await page.goto('/settings/billing');
 
-    // `exact` so we hit the plan-name text, not the "…crew-bill…" email substring.
-    await expect(page.getByText('Crew', { exact: true })).toBeVisible();
+    // Scope to the plan card title (`Crew` + a `Paid plan` badge), not the
+    // "…crew-bill…" email in the header.
+    await expect(page.locator('[data-slot="card-title"]', { hasText: 'Crew' })).toBeVisible();
     await expect(page.getByText('Paid plan')).toBeVisible();
     await expect(page.getByText('Renews on')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Manage billing' })).toBeVisible();
