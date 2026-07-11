@@ -236,7 +236,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
   // the downloaded heightfield, with cleanup that disposes the GPU resource.
   useEffect(() => {
     let cancelled = false;
-    if (!terrain?.contentBase64) {
+    if (!terrain?.buffer) {
       // Terrain genuinely removed → clear it.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setTerrainMesh(null);
@@ -244,7 +244,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
     }
     (async () => {
       try {
-        const built = await buildTerrainGeometry(base64ToArrayBuffer(terrain.contentBase64), frame);
+        const built = await buildTerrainGeometry(terrain.buffer, frame);
         if (cancelled) {
           built.geometry.dispose();
         } else {
@@ -262,7 +262,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
     return () => {
       cancelled = true;
     };
-  }, [terrain?.contentBase64, frame]);
+  }, [terrain?.buffer, frame]);
 
   // Dispose the final geometry when the viewer unmounts / is replaced.
   useEffect(() => () => terrainMesh?.geometry.dispose(), [terrainMesh]);

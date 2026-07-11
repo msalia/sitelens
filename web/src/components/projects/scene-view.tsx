@@ -26,12 +26,12 @@ import { SceneStats } from '@/components/projects/scene-view/scene-stats';
 import { SceneToolbar } from '@/components/projects/scene-view/scene-toolbar';
 import { readHeatmapRange } from '@/components/projects/terrain/volume-heatmap';
 import { Card } from '@/components/ui/card';
+import { assetUrls, fetchAssetBuffer, fetchAssetText } from '@/lib/asset';
 import { gql } from '@/lib/graphql';
 import { subscribeProjectChanged } from '@/lib/scene-subscription';
 import { fromMeters, toMeters } from '@/lib/units';
 
 import {
-  BUILDINGS_CONTENT,
   FRESH_MS,
   OVERLAY_GEOMETRY,
   REFRESH_BUILDINGS,
@@ -40,7 +40,6 @@ import {
   SCENE_QUERY,
   sceneBbox,
   SPAM_COOLDOWN_MS,
-  TERRAIN_CONTENT,
 } from './scene-view-data';
 import {
   BREAKLINES,
@@ -321,21 +320,23 @@ export function SceneView({
     void loadConstraints();
   }, [loadConstraints, surfaceReload]);
 
-  // Loads the cached DEM bytes (no-op if there's no terrain row yet).
+  // Loads the cached DEM bytes over the binary /asset route (no-op if there's no
+  // terrain row yet → 404 → null).
   const loadTerrainContent = useCallback(async () => {
     try {
-      const { projectTerrainContent } = await gql(TERRAIN_CONTENT, { id: project.id });
-      setTerrain(projectTerrainContent ? { contentBase64: projectTerrainContent } : null);
+      const buffer = await fetchAssetBuffer(assetUrls.projectTerrain(project.id));
+      setTerrain(buffer ? { buffer } : null);
     } catch {
       setTerrain(null);
     }
   }, [project.id]);
 
-  // Loads + parses the cached OSM building footprints (no-op if none cached).
+  // Loads + parses the cached OSM building footprints over the /asset route
+  // (no-op if none cached → 404 → null).
   const loadBuildingsContent = useCallback(async () => {
     try {
-      const { projectBuildingsContent } = await gql(BUILDINGS_CONTENT, { id: project.id });
-      const parsed = JSON.parse(projectBuildingsContent) as BuildingFootprint[];
+      const text = await fetchAssetText(assetUrls.projectBuildings(project.id));
+      const parsed = text ? (JSON.parse(text) as BuildingFootprint[]) : [];
       setBuildings(Array.isArray(parsed) ? parsed : []);
     } catch {
       setBuildings([]);

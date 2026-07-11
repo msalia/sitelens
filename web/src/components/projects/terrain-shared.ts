@@ -20,8 +20,8 @@ export interface FocusTarget {
 
 /** The cached DEM, ready to mesh. */
 export interface TerrainData {
-  /** Base64-encoded GeoTIFF bytes (from `projectTerrainContent`). */
-  contentBase64: string;
+  /** Raw GeoTIFF bytes, fetched from the `/asset` route (no base64). */
+  buffer: ArrayBuffer;
 }
 
 /** An OSM building footprint (from `projectBuildingsContent`): a lat/lon ring
