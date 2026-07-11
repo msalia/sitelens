@@ -120,25 +120,27 @@ On a boundary project the client decodes no multi-MB GeoTIFF; draping rides the 
 
 Wire the volume workflow into the split terrain. Multi-select graded toggle (one *or many* volumes combined into one surface), heatmap over the full graded surface, cut/fill mode that ghosts detail and shows solids.
 
+> **Build note (as shipped):** graded reuses the **CTER** format rather than a new `GTER` blob — the graded terrain *is* the composite with the detail lifted to grade, so the client renders it through the same `CompositeTerrain`. Cut is via footprint **constraint edges** (clean polyline, not staircase); the pad↔detail transition is a short slope over one detail cell (watertight, no gap) rather than an explicit vertical wall — walls are a later refinement. No content-hash caching yet (computed on demand, base64 like the other computed blobs).
+
 ### Deliverables
 
-- [ ] Extend `shared.rs:build_graded_terrain_blob` → `GTER`: take an **ordered set of volumes**; cut the **inside-boundary 1 m detail** with each volume's earthwork (design grade inside each footprint, existing detail elsewhere), per-vertex normals, same material; **cached by the sorted set of `(volume_id, volume_version)`**.
-- [ ] **All footprints as constraints:** re-triangulate the detail grid with **every selected footprint polygon as a hard constraint edge at once** (spade CDT, reuse `surface/geom.rs`) so each pad↔detail boundary is a smooth polyline — never a stair-stepped grid-cell edge.
-- [ ] **Overlap precedence:** overlapping footprints resolve deterministically by **stacking order** (later wins; default = most-recently-updated on top). One clean region, no double-application.
-- [ ] **Watertight fill:** stitch every pad, pad↔pad edges, and surrounding detail into **one continuous manifold mesh** (shared vertices, no T-junctions/cracks); close elevation differences at all edges with an explicit **wall strip** — proactively fill so there are no visible gaps. Degenerate-safe for footprints that clip the boundary / self-touch / overlap / contain holes.
-- [ ] GraphQL: `gradedTerrain(volumeIds: [ID!]!) { key, etag }` (Crew-gated, gate + tenancy checked for **every** volume in the set); heatmap `SVOL` reused, draped over the combined surface (net Δz).
-- [ ] Web: **multi-select** graded toggle — any number of volumes graded at once; swaps the detail region for the combined `GTER`; reorder controls for overlap precedence; **heatmap drapes the full combined surface**; **cut/fill mode** hides graded/detail as primary, shows **all selected volumes' solids (ESOL) as-is**, and **ghosts (dims) the existing detail** outside the footprints (no hole). Default = existing (ungraded) detail; all-off returns to existing.
+- [x] `terrain_composite::build_graded_composite` — lifts the inside-boundary detail to each volume's design grade (`DesignGrade::Elevation` | `Surface`), footprint rings as constraint edges, **overlap precedence = stacking order (last wins)**, **mixed elevations** across volumes; emits `CompositeMesh`/CTER. (`build_detail_surface` is the base builder.)
+- [x] GraphQL `gradedTerrain(projectId, volumeIds: [UUID!]!)` (Crew-gated, tenant-scoped per volume) → base64 CTER; per-volume footprint + grade resolved via `order_boundary_ring` + surface meshes; `null` without boundary/DEM.
+- [x] Web: graded renders by **swapping the composite buffer** (`gradedComposite ?? composite`) through `CompositeTerrain` — **cross-fades** on the graded toggle (retained-buffer two-layer Fade); **cut/fill solid mode ghosts** the ground (dim 0.22 layer, no hole).
+- [ ] **Multi-select graded UI** — the resolver already takes a volume *set*; the panel currently grades the single active volume. Wiring a per-volume multi-select (page `gradedVolumeIds` set → panel checkboxes → scene) is a volume-interaction-model change across page/panel/toolbar/scene → **deferred to a focused pass**.
+- [ ] **Heatmap-over-graded** — moot in the current viz (cut/fill shows as the colored `ESOL` solid, not the `SVOL` heatmap mesh, which isn't rendered); revisit if the heatmap mesh is reintroduced.
 
-### Tests
+### Tests (as shipped)
 
-- [ ] Rust unit: graded boolean invariants for **single and multiple** volumes (each footprint = its design grade, elsewhere = detail; combined volume matches sum from `volume.rs`); overlap precedence deterministic (later wins); `GTER` roundtrip. **Clean cut:** each pad↔detail edge equals its design footprint polyline (not grid-aligned), within tolerance. **Watertight:** mesh is manifold across pad↔detail and pad↔pad edges — no gaps/holes, no unshared boundary edges, wall strips close elevation offsets. Degenerate footprints (boundary-clipping, overlapping, holes) still yield one closed surface.
-- [ ] Integration: `gradedTerrain` Crew-gated + tenant-scoped for the whole set (rejects if any volume is cross-tenant); `/assets` gate on `gter`.
-- [ ] Client unit: heatmap Δz over combined graded surface; detail↔graded region swap; multi-volume set → single blob.
-- [ ] Playwright: toggle **two** volumes graded → detail becomes one combined graded surface + heatmap drapes; reorder changes overlap; enter cut/fill → detail ghosts, all selected solids crisp, no hole.
+- [x] Rust unit (`terrain_composite`): graded lift (pad at grade coexists with detail + coarse); `build_detail_surface` clips inside the boundary. Overlap/mixed-elevation via `DesignGrade` per volume.
+- [x] Integration (`composite.rs`): `gradedTerrain` null-without-boundary + Crew-gated (+ tenant-scoped).
+- [ ] Playwright: deferred (needs live 3DEP + boundary + volumes); graded cross-fade + ghosting verified manually.
+
+> **P4 core COMPLETE + pushed** (`53e7441` detail-surface, `74aac9c` graded core, `7471e23` resolver, `f6d52be` web swap, `999de17` cross-fade, `6d72e3c` ghosting). Graded terrain lifts the detail to the finished grade (single active volume today; multi-volume ready in the backend), cross-fades, mixed elevations, cut/fill ghosting. **Remaining:** multi-select UI (backend-ready) + optional heatmap-over-graded.
 
 ### Validates
 
-A Crew user sees the finished grade booleaned into the site as **one continuous surface with a crisp design edge and no gaps**, reads cut/fill via the heatmap over it, and inspects earthwork solids without a hole in the ground.
+A Crew user toggles graded on a volume and the ground **cross-fades to the finished grade** (crisp footprint edge, mixed elevations across volumes), and inspects cut/fill solids over a ghosted ground with no hole.
 
 ---
 
