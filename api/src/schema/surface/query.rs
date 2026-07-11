@@ -3,6 +3,7 @@ use crate::models::{
     SurfaceExportFormat, Volume, VolumeReportFormat, VolumeUnit,
 };
 use crate::schema::*;
+use crate::surface::terrain_composite::{self, DesignGrade, GradedVolume};
 use crate::surface::{self, contour, export, geotiff};
 
 use super::shared::*;
@@ -52,6 +53,75 @@ async fn volume_surface_bytes(
         .await
         .map_err(async_graphql::Error::new)?;
     Ok(Some((base_bytes, cmp_bytes)))
+}
+
+/// Traces a geographic mesh's outer boundary into a `[lon, lat]` ring (mesh verts
+/// are `[lat, lon, h]`).
+fn boundary_ring_lonlat(verts: &[[f64; 3]], tris: &[[u32; 3]]) -> Result<Vec<[f64; 2]>> {
+    let ring = order_boundary_ring(tris)
+        .ok_or_else(|| async_graphql::Error::new("could not trace the volume footprint"))?;
+    Ok(ring.iter().map(|&i| [verts[i][1], verts[i][0]]).collect())
+}
+
+/// Loads a surface's decoded geographic mesh (STIN → `[lat,lon,h]` + tris), org-scoped.
+async fn surface_mesh_geo(
+    ctx: &Context<'_>,
+    org_id: Uuid,
+    sid: Uuid,
+) -> Result<crate::surface::MeshData> {
+    let pool = pool(ctx)?;
+    let r: Option<(Option<String>,)> = sqlx::query_as(
+        "SELECT s.storage_key FROM surfaces s JOIN projects p ON p.id = s.project_id \
+         WHERE s.id = $1 AND p.org_id = $2",
+    )
+    .bind(sid)
+    .bind(org_id)
+    .fetch_optional(pool)
+    .await?;
+    let key = found_in_org(r, "surface")?
+        .0
+        .ok_or_else(|| async_graphql::Error::new("surface has no mesh"))?;
+    let bytes = storage(ctx)?
+        .get(&key)
+        .await
+        .map_err(async_graphql::Error::new)?;
+    surface::deserialize_mesh(&bytes)
+        .ok_or_else(|| async_graphql::Error::new("surface mesh is unreadable"))
+}
+
+/// Resolves one volume into a [`GradedVolume`] (footprint + design grade),
+/// org-scoped. surface-to-elevation → base footprint + flat reference elevation;
+/// surface-to-surface → the compare surface's footprint + the compare mesh.
+async fn graded_volume(ctx: &Context<'_>, org_id: Uuid, id: Uuid) -> Result<GradedVolume> {
+    let pool = pool(ctx)?;
+    let row: Option<(String, Uuid, Option<Uuid>, Option<f64>)> = sqlx::query_as(
+        "SELECT v.comparison, v.base_surface_id, v.compare_surface_id, v.reference_elev \
+         FROM volumes v JOIN projects p ON p.id = v.project_id \
+         WHERE v.id = $1 AND p.org_id = $2",
+    )
+    .bind(id)
+    .bind(org_id)
+    .fetch_optional(pool)
+    .await?;
+    let (comparison, base_id, compare_id, ref_elev) = found_in_org(row, "volume")?;
+    if comparison == "surface_to_elevation" {
+        let e = ref_elev
+            .ok_or_else(|| async_graphql::Error::new("volume missing reference elevation"))?;
+        let (verts, tris) = surface_mesh_geo(ctx, org_id, base_id).await?;
+        Ok(GradedVolume {
+            footprint_lonlat: boundary_ring_lonlat(&verts, &tris)?,
+            grade: DesignGrade::Elevation(e),
+        })
+    } else {
+        let cid = compare_id
+            .ok_or_else(|| async_graphql::Error::new("volume missing a design surface"))?;
+        let (verts, tris) = surface_mesh_geo(ctx, org_id, cid).await?;
+        let ring = boundary_ring_lonlat(&verts, &tris)?;
+        Ok(GradedVolume {
+            footprint_lonlat: ring,
+            grade: DesignGrade::Surface((verts, tris)),
+        })
+    }
 }
 
 /// Base64-encodes bytes off the async runtime.
@@ -349,6 +419,99 @@ impl SurfaceQuery {
                 .await
                 .map_err(|e| async_graphql::Error::new(format!("graded task failed: {e}")))?
                 .map_err(async_graphql::Error::new)?;
+        Ok(Some(encode_base64(blob).await?))
+    }
+
+    /// The **combined graded terrain** (base64 CTER): the boundary-split composite
+    /// with the inside-boundary detail lifted to each selected volume's design grade
+    /// (overlaps resolve by list order). Rendered by the client's `CompositeTerrain`
+    /// exactly like the plain composite. `null` when the project has no boundary or
+    /// is missing a DEM. Crew-gated.
+    async fn graded_terrain(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+        volume_ids: Vec<Uuid>,
+    ) -> Result<Option<String>> {
+        require_feature(ctx, Feature::Surfaces).await?;
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+
+        // Boundary → geographic [lon, lat] (matches the composite path).
+        let row: Option<(Option<serde_json::Value>, i32)> = sqlx::query_as(
+            "SELECT boundary, epsg_code FROM projects WHERE id = $1 AND org_id = $2",
+        )
+        .bind(project_id)
+        .bind(auth.org_id)
+        .fetch_optional(pool)
+        .await?;
+        let (boundary, epsg) = found_in_org(row, "project")?;
+        let Some(boundary) = boundary else {
+            return Ok(None);
+        };
+        let pts: Vec<[f64; 2]> = serde_json::from_value(boundary)
+            .map_err(|e| async_graphql::Error::new(format!("invalid boundary geometry: {e}")))?;
+        let boundary_lonlat: Vec<[f64; 2]> = pts
+            .iter()
+            .filter_map(|[e, n]| crate::crs::projected_to_geographic(epsg, *e, *n))
+            .map(|(lat, lon)| [lon, lat])
+            .collect();
+        if boundary_lonlat.len() < 3 {
+            return Ok(None);
+        }
+
+        // Both DEMs must be cached.
+        let ckey: Option<(String,)> =
+            sqlx::query_as("SELECT storage_key FROM project_terrain WHERE project_id = $1")
+                .bind(project_id)
+                .fetch_optional(pool)
+                .await?;
+        let dkey: Option<(String,)> = sqlx::query_as(
+            "SELECT storage_key FROM project_detailed_terrain WHERE project_id = $1",
+        )
+        .bind(project_id)
+        .fetch_optional(pool)
+        .await?;
+        let (Some((ckey,)), Some((dkey,))) = (ckey, dkey) else {
+            return Ok(None);
+        };
+
+        // Resolve each volume's footprint + grade (org-scoped).
+        let mut grades: Vec<GradedVolume> = Vec::with_capacity(volume_ids.len());
+        for id in &volume_ids {
+            grades.push(graded_volume(ctx, auth.org_id, *id).await?);
+        }
+
+        let storage = storage(ctx)?;
+        let coarse_bytes = storage
+            .get(&ckey)
+            .await
+            .map_err(async_graphql::Error::new)?;
+        let detail_bytes = storage
+            .get(&dkey)
+            .await
+            .map_err(async_graphql::Error::new)?;
+
+        let blob = tokio::task::spawn_blocking(move || -> std::result::Result<Vec<u8>, String> {
+            let coarse = geotiff::read_geotiff(&coarse_bytes)?;
+            let detail = geotiff::read_geotiff(&detail_bytes)?;
+            let mesh = terrain_composite::build_graded_composite(
+                &coarse,
+                &detail,
+                &boundary_lonlat,
+                &grades,
+            )?;
+            Ok(surface::serialize_composite(
+                &mesh.vertices,
+                &mesh.alpha,
+                &mesh.coarse_tris,
+                &mesh.detail_tris,
+            ))
+        })
+        .await
+        .map_err(|e| async_graphql::Error::new(format!("graded task failed: {e}")))?
+        .map_err(async_graphql::Error::new)?;
         Ok(Some(encode_base64(blob).await?))
     }
 

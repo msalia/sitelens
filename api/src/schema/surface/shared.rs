@@ -668,7 +668,7 @@ pub(super) fn build_earthwork_solid_blob(
 /// Orders a mesh's boundary (edges used by a single triangle) into a ring of
 /// vertex indices. Returns the first ring found (the outer boundary for a simple
 /// footprint). None if there's no closed boundary loop.
-fn order_boundary_ring(tris: &[[u32; 3]]) -> Option<Vec<usize>> {
+pub(super) fn order_boundary_ring(tris: &[[u32; 3]]) -> Option<Vec<usize>> {
     use std::collections::HashMap;
     let mut count: HashMap<(u32, u32), i32> = HashMap::new();
     for t in tris {

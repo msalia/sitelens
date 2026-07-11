@@ -1500,6 +1500,14 @@ type QueryRoot {
 	"""
 	volumeGradedTerrain(id: UUID!): String
 	"""
+	The **combined graded terrain** (base64 CTER): the boundary-split composite
+	with the inside-boundary detail lifted to each selected volume's design grade
+	(overlaps resolve by list order). Rendered by the client's `CompositeTerrain`
+	exactly like the plain composite. `null` when the project has no boundary or
+	is missing a DEM. Crew-gated.
+	"""
+	gradedTerrain(projectId: UUID!, volumeIds: [UUID!]!): String
+	"""
 	Exports a surface as LandXML, DXF (3DFACE + optional contour layers), or a
 	GeoTIFF DEM. `contour_interval` (meters) adds contour layers to DXF;
 	`cell_size` (meters) sets the GeoTIFF raster resolution (default 1 m).
