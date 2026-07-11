@@ -10,8 +10,18 @@ const SAMP_NODATA = 0xffff;
 
 export type SampleFn = (lat: number, lon: number) => number | null;
 
+/** A decoded draping sampler: the bilinear `sample` plus the grid's geographic
+ *  extent (so callers can derive a local cull radius, e.g. for buildings). */
+export interface TerrainSampler {
+  maxLat: number;
+  maxLon: number;
+  minLat: number;
+  minLon: number;
+  sample: SampleFn;
+}
+
 /** Builds a sampler from a SAMP blob; returns null for an empty/invalid blob. */
-export function buildSampler(buf: ArrayBuffer): SampleFn | null {
+export function buildSampler(buf: ArrayBuffer): TerrainSampler | null {
   if (buf.byteLength < 64) {
     return null;
   }
@@ -39,7 +49,7 @@ export function buildSampler(buf: ArrayBuffer): SampleFn | null {
     return q === SAMP_NODATA ? null : deq(q);
   };
 
-  return (lat: number, lon: number): number | null => {
+  const sample: SampleFn = (lat: number, lon: number): number | null => {
     if (maxLon <= minLon || maxLat <= minLat) {
       return null;
     }
@@ -65,4 +75,6 @@ export function buildSampler(buf: ArrayBuffer): SampleFn | null {
     const bot = v10 + (v11 - v10) * fx;
     return top + (bot - top) * fy;
   };
+
+  return { maxLat, maxLon, minLat, minLon, sample };
 }

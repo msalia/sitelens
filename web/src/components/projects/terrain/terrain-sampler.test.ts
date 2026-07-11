@@ -39,7 +39,7 @@ describe('buildSampler', () => {
   it('bilinear-samples the grid at nodes and midpoints', () => {
     // 2×2 grid; row 0 = north (lat 41), row 1 = south (lat 40).
     // heights: NW=10, NE=20, SW=30, SE=40.
-    const s = buildSampler(samp(2, 2, BBOX, [10, 20, 30, 40]))!;
+    const s = buildSampler(samp(2, 2, BBOX, [10, 20, 30, 40]))!.sample;
     expect(s).not.toBeNull();
     expect(s(41, -74)!).toBeCloseTo(10, 3); // NW corner
     expect(s(41, -73)!).toBeCloseTo(20, 3); // NE corner
@@ -48,13 +48,13 @@ describe('buildSampler', () => {
   });
 
   it('returns null outside the grid extent', () => {
-    const s = buildSampler(samp(2, 2, BBOX, [10, 20, 30, 40]))!;
+    const s = buildSampler(samp(2, 2, BBOX, [10, 20, 30, 40]))!.sample;
     expect(s(42, -73.5)).toBeNull(); // north of extent
     expect(s(40.5, -72)).toBeNull(); // east of extent
   });
 
   it('returns null over a nodata corner and rejects bad magic', () => {
-    const s = buildSampler(samp(2, 2, BBOX, [10, null, 30, 40]))!;
+    const s = buildSampler(samp(2, 2, BBOX, [10, null, 30, 40]))!.sample;
     expect(s(40.5, -73.5)).toBeNull(); // a corner is nodata
     expect(buildSampler(new ArrayBuffer(64))).toBeNull();
   });

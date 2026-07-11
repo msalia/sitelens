@@ -17,7 +17,7 @@ import type {
 } from './terrain-shared';
 
 import { CameraRig, presetFor, RenderGate, SnapshotBridge } from './terrain-camera';
-import { makeFrame, type Sampler } from './terrain-frame';
+import { makeFrame, type Sampler, toLocal } from './terrain-frame';
 import { buildTerrainGeometry, type TerrainMesh } from './terrain-mesh';
 import {
   BUILDING_COLOR,
@@ -303,8 +303,47 @@ export function TerrainViewer(props: TerrainViewerProps) {
   // Draping sampler: prefer the compact server SAMP heightfield (detail inside the
   // boundary, coarse outside — no GeoTIFF decode); fall back to the plain terrain
   // mesh's sampler when there's no SAMP blob yet.
-  const sampleFn = useMemo(() => (samplerBlob ? buildSampler(samplerBlob) : null), [samplerBlob]);
+  const samp = useMemo(() => (samplerBlob ? buildSampler(samplerBlob) : null), [samplerBlob]);
+  const sampleFn = samp?.sample ?? null;
   const sampler: Sampler = projectOnTerrain ? (sampleFn ?? terrainMesh?.sample ?? null) : null;
+
+  // Building drape + cull extent. Prefer the plain terrain mesh's centre/radius;
+  // otherwise (composite path, no terrainMesh) derive a local extent from the SAMP
+  // grid's geographic bounds so buildings still drape + fade to the tile edge.
+  const sampExtent = useMemo(() => {
+    if (!samp) {
+      return null;
+    }
+    const corners: [number, number][] = [
+      [samp.minLat, samp.minLon],
+      [samp.minLat, samp.maxLon],
+      [samp.maxLat, samp.minLon],
+      [samp.maxLat, samp.maxLon],
+    ];
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    for (const [lat, lon] of corners) {
+      const [x, , z] = toLocal(frame, lat, lon, 0);
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minZ = Math.min(minZ, z);
+      maxZ = Math.max(maxZ, z);
+    }
+    return {
+      cx: (minX + maxX) / 2,
+      cz: (minZ + maxZ) / 2,
+      radius: Math.hypot((maxX - minX) / 2, (maxZ - minZ) / 2) || 1,
+    };
+  }, [samp, frame]);
+  const buildingSample = sampleFn ?? terrainMesh?.sample ?? null;
+  const buildingCenter = terrainMesh
+    ? { x: terrainMesh.cx, z: terrainMesh.cz }
+    : sampExtent
+      ? { x: sampExtent.cx, z: sampExtent.cz }
+      : null;
+  const buildingRadius = terrainMesh?.radius ?? sampExtent?.radius ?? null;
 
   // Volume view mode: `volumeGraded` on ⇒ carve the terrain to the finished grade;
   // off ⇒ show the cut/fill as solid 3D masses over a ghosted terrain.
@@ -511,10 +550,11 @@ export function TerrainViewer(props: TerrainViewerProps) {
             color={buildingColor}
             frame={frame}
             // Buildings always sit on the terrain surface (independent of the
-            // point/grid projection toggle) and are culled/faded to its extent.
-            sample={terrainMesh?.sample ?? null}
-            center={terrainMesh ? { x: terrainMesh.cx, z: terrainMesh.cz } : null}
-            radius={terrainMesh?.radius ?? null}
+            // point/grid projection toggle) and are culled/faded to its extent —
+            // via the SAMP sampler + its bounds on the composite path.
+            sample={buildingSample}
+            center={buildingCenter}
+            radius={buildingRadius}
           />
         </Fade>
       ) : null}
