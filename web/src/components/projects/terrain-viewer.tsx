@@ -449,6 +449,12 @@ export function TerrainViewer(props: TerrainViewerProps) {
               />
             </Fade>
           ) : null}
+          {/* Cut/fill solid mode: ghost the existing ground (dim) under the solids
+              so there's no hole. A dedicated low-opacity layer (Fade owns opacity,
+              so it captures 0.22 as the base and fades to it). */}
+          <Fade visible={showTerrain && volumeSolidActive} cull>
+            <CompositeTerrain buffer={composite} frame={frame} color={palette.clay} opacity={0.22} />
+          </Fade>
         </>
       ) : terrainMesh ? (
         // `cull`: terrain is one heavy mesh kept resident in state anyway, so
