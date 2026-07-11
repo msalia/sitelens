@@ -35,7 +35,7 @@ const DETAIL_VERTEX_BUDGET: usize = 120_000;
 
 /// Whether a raster sample is real ground (finite, not a ±3.4e38 / declared
 /// nodata sentinel). Mirrors `dem::is_valid`.
-fn valid(v: f32, nodata: Option<f64>) -> bool {
+pub(crate) fn valid(v: f32, nodata: Option<f64>) -> bool {
     let v = v as f64;
     if !v.is_finite() || v.abs() > 1e30 {
         return false;
@@ -56,15 +56,21 @@ fn node_lonlat(dem: &DecodedDem, row: usize, col: usize) -> (f64, f64) {
 
 /// Bilinear sample of a DEM at `(lon, lat)`; `None` outside the grid or over
 /// nodata corners.
-fn sample(dem: &DecodedDem, lon: f64, lat: f64) -> Option<f64> {
+pub(crate) fn sample(dem: &DecodedDem, lon: f64, lat: f64) -> Option<f64> {
     if dem.width < 2 || dem.height < 2 || dem.pixel_x == 0.0 || dem.pixel_y == 0.0 {
         return None;
     }
+    let (w1, h1) = ((dem.width - 1) as f64, (dem.height - 1) as f64);
     let cf = (lon - dem.origin_x) / dem.pixel_x;
     let rf = (dem.origin_y - lat) / dem.pixel_y;
-    if cf < 0.0 || rf < 0.0 || cf > (dem.width - 1) as f64 || rf > (dem.height - 1) as f64 {
+    // Reject clearly-outside; clamp the tiny float overshoot at the far/near edges
+    // (a node landing at exactly width-1 can round just past it).
+    const EPS: f64 = 1e-6;
+    if cf < -EPS || rf < -EPS || cf > w1 + EPS || rf > h1 + EPS {
         return None;
     }
+    let cf = cf.clamp(0.0, w1);
+    let rf = rf.clamp(0.0, h1);
     let (c0, r0) = (cf.floor() as usize, rf.floor() as usize);
     let c1 = (c0 + 1).min(dem.width - 1);
     let r1 = (r0 + 1).min(dem.height - 1);

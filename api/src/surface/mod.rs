@@ -31,6 +31,7 @@ pub mod dem;
 pub mod export;
 pub mod geom;
 pub mod geotiff;
+pub mod sampler;
 pub mod terrain_composite;
 pub mod tin;
 pub mod volume;
@@ -77,6 +78,14 @@ pub const SVOL_VERSION: u32 = 3;
 pub const ESOL_MAGIC: &[u8; 4] = b"ESOL";
 /// Current earthwork-solid format version (added with quantization).
 pub const ESOL_VERSION: u32 = 1;
+
+/// Magic prefix for a draping-sampler heightfield blob.
+pub const SAMP_MAGIC: &[u8; 4] = b"SAMP";
+/// Sampler-blob format version. `u16`-quantized heights over `[min_h, max_h]`;
+/// `0xFFFF` marks a nodata node.
+pub const SAMP_VERSION: u32 = 1;
+/// Sentinel quantized value for a nodata sampler node.
+pub const SAMP_NODATA: u16 = 0xFFFF;
 
 /// Magic prefix for a composite-terrain blob (boundary-split coarse + detail).
 pub const CTER_MAGIC: &[u8; 4] = b"CTER";
@@ -387,9 +396,87 @@ pub fn serialize_composite(
     buf
 }
 
+/// Serializes a [`sampler::SamplerGrid`] into the **SAMP** blob. Heights quantize
+/// to `u16` over `[min_h, max_h]`; NaN nodes become [`SAMP_NODATA`].
+///
+/// ```text
+/// offset  bytes  field
+/// 0       4      magic "SAMP"
+/// 4       4      version (u32)
+/// 8       4      width W (u32)
+/// 12      4      height H (u32)
+/// 16      8      min_h (f64)
+/// 24      8      max_h (f64)
+/// 32      32     bbox: min_lat, min_lon, max_lat, max_lon (4 x f64)
+/// 64      W*H*2  heights (u16 quantized; 0xFFFF = nodata), row-major, row 0 = north
+/// ```
+pub fn serialize_sampler(g: &sampler::SamplerGrid) -> Vec<u8> {
+    let (mut min_h, mut max_h) = (f64::INFINITY, f64::NEG_INFINITY);
+    for &z in &g.heights {
+        if z.is_finite() {
+            min_h = min_h.min(z as f64);
+            max_h = max_h.max(z as f64);
+        }
+    }
+    if !min_h.is_finite() {
+        min_h = 0.0;
+        max_h = 0.0;
+    }
+
+    let mut buf = Vec::with_capacity(64 + g.heights.len() * 2);
+    buf.extend_from_slice(SAMP_MAGIC);
+    buf.extend_from_slice(&SAMP_VERSION.to_le_bytes());
+    buf.extend_from_slice(&(g.width as u32).to_le_bytes());
+    buf.extend_from_slice(&(g.height as u32).to_le_bytes());
+    buf.extend_from_slice(&min_h.to_le_bytes());
+    buf.extend_from_slice(&max_h.to_le_bytes());
+    for v in [g.min_lat, g.min_lon, g.max_lat, g.max_lon] {
+        buf.extend_from_slice(&v.to_le_bytes());
+    }
+    for &z in &g.heights {
+        let q = if !z.is_finite() {
+            SAMP_NODATA
+        } else if max_h <= min_h {
+            0
+        } else {
+            (((z as f64 - min_h) / (max_h - min_h)).clamp(0.0, 1.0) * 65534.0).round() as u16
+        };
+        buf.extend_from_slice(&q.to_le_bytes());
+    }
+    buf
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sampler_blob_roundtrips_header_and_flags_nodata() {
+        let g = sampler::SamplerGrid {
+            width: 2,
+            height: 2,
+            min_lat: 40.0,
+            min_lon: -74.0,
+            max_lat: 40.1,
+            max_lon: -73.9,
+            heights: vec![10.0, 20.0, f32::NAN, 15.0],
+        };
+        let blob = serialize_sampler(&g);
+        assert_eq!(&blob[0..4], SAMP_MAGIC);
+        assert_eq!(
+            u32::from_le_bytes(blob[4..8].try_into().unwrap()),
+            SAMP_VERSION
+        );
+        assert_eq!(u32::from_le_bytes(blob[8..12].try_into().unwrap()), 2);
+        assert_eq!(u32::from_le_bytes(blob[12..16].try_into().unwrap()), 2);
+        assert_eq!(f64::from_le_bytes(blob[16..24].try_into().unwrap()), 10.0); // min_h
+        assert_eq!(f64::from_le_bytes(blob[24..32].try_into().unwrap()), 20.0); // max_h
+        assert_eq!(blob.len(), 64 + 4 * 2);
+        let hq = |i: usize| u16::from_le_bytes(blob[64 + i * 2..66 + i * 2].try_into().unwrap());
+        assert_eq!(hq(0), 0); // 10 == min_h → 0
+        assert_eq!(hq(1), 65534); // 20 == max_h → full
+        assert_eq!(hq(2), SAMP_NODATA); // NaN → sentinel
+    }
 
     #[test]
     fn composite_blob_has_expected_header_and_size() {
