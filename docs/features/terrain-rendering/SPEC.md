@@ -22,7 +22,7 @@ This feature makes the ground **survey-grade where it matters and cheap everywhe
 - When a **property boundary** exists, the ground becomes a **composite**: coarse 10 m DEM outside the boundary, **1 m detail inside**, both clipped to the boundary polygon and **stitched with bridging faces** into one continuous, seamless surface. Same flat-clay material + lighting-driven relief on both, so it reads as a single ground.
 - The inside-boundary detail can be **booleaned with the earthwork** to show the **graded** surface — the finished grade — for **one or many volumes at once**, with a **clean cut along each design edge and no gaps** (proactively filled into one continuous surface), carrying the same material, with the cut/fill **heatmap draped over the full graded surface**.
 - The inside-boundary detail is **one adaptively-decimated, budgeted mesh**; the coarse backdrop is a single clipped mesh.
-- Everything ships over a **binary asset endpoint** (raw bytes, gzip/brotli, ETag) with **Draco/quantized** mesh compression, and the client **stops decoding GeoTIFFs for draping** — a **compact server-side sampler** replaces that.
+- Everything ships over a **binary asset endpoint** (raw bytes, gzip/brotli, ETag) with **16-bit-quantized** meshes, and the client **stops decoding GeoTIFFs for draping** — a **compact server-side sampler** replaces that.
 
 Critically, this rides the **existing Three.js / R3F renderer** — *not* Cesium (the Ion token in config is a dead stub). Heavy geometry (clip, stitch, decimate, boolean, tile) runs **server-side in Rust**; the client renders ready-made indexed meshes.
 
@@ -32,7 +32,7 @@ Critically, this rides the **existing Three.js / R3F renderer** — *not* Cesium
 - **Detail where the work is.** 1 m only inside the property boundary; coarse everywhere else. No boundary → coarse only (current behavior, unchanged).
 - **Graded is the detail booleaned with earthwork.** Reuse the existing graded-terrain pipeline; the heatmap drapes the full graded surface. Cut/fill volume solids are unchanged.
 - **Compute in Rust, render in Three.js.** Clip / stitch / decimate / boolean server-side; the client renders indexed meshes. No Cesium, no client CSG.
-- **Cheap on the wire.** Binary transport (no base64-in-JSON), Draco/quantized meshes, server precompute + versioned cache, and a compact sampler so the client stops decoding multi-MB GeoTIFFs.
+- **Cheap on the wire.** Binary transport (no base64-in-JSON), 16-bit-quantized meshes + gzip/brotli, server precompute + versioned cache, and a compact sampler so the client stops decoding multi-MB GeoTIFFs.
 - **Reuse before rebuild.** Lean on the 3DEP fetch, the ENU frame + `toLocal`, `spade`/`geom.rs`, the volume engine, `build_graded_terrain_blob`, Storage, and the existing blob formats.
 
 ---
@@ -79,7 +79,7 @@ Each derived artifact is a Storage blob keyed by a stable hash so identical inpu
                         │  • adaptive-decimate detail to vertex budget           │
                         │  • stitch seam: bridge coarse-ring ↔ detail-ring faces │
                         │  • per-vertex normals (lighting-driven relief)         │
-                        │  • quantize + Draco-compress                           │
+                        │  • quantize positions/normals (16-bit, bbox-relative)  │
                         └──────────────────────────────────────────────────────┘
                                 │ CTER blob (regions: coarse | detail | seam)     ▲
                                 ▼                                                 │ cached (Storage, §3.1)
@@ -98,7 +98,7 @@ Each derived artifact is a Storage blob keyed by a stable hash so identical inpu
                                 │ ArrayBuffer fetch (no base64, no JSON parse)
                                 ▼
         ┌──────────────────── Client (React Three Fiber) ───────────────────────┐
-        │  Draco/quantized decode → BufferGeometry                               │
+        │  dequantize (DataView) → BufferGeometry                                │
         │  • CompositeTerrain: coarse mesh + detail mesh + seam                  │
         │  • GradedTerrain: swaps detail region when a volume is "graded"        │
         │  • VolumeHeatmap: SVOL Δz draped over graded detail                    │
@@ -125,7 +125,7 @@ All heavy geometry runs in Rust in `api/src/surface/` (new `terrain_composite.rs
 3. **Adaptive-decimate** the detail grid — dense on slopes/breaks, sparse on flats — down to a **fixed vertex budget** (see §7), so a small site keeps native 1 m and a large one degrades gracefully into one mesh.
 4. **Stitch the seam:** the coarse boundary ring and the detail boundary ring have non-matching vertices (different resolutions); generate a **bridging triangle strip** between the two rings so there is no gap. Where boundary elevations differ slightly (both are 3DEP, so cm–dm), the strip forms a thin skirt.
 5. Compute **per-vertex normals** for lighting-driven relief (no baked hillshade).
-6. Quantize positions/normals + Draco-compress; emit `CTER` with `coarse|detail|seam` region ranges.
+6. Quantize positions/normals (16-bit, bbox-relative); emit `CTER` with `coarse|detail|seam` region ranges (gzip/brotli applied by the `/assets` compression layer).
 
 ### 5.2 Graded terrain (`GTER`) — multi-volume from the start
 
@@ -150,22 +150,34 @@ A small downsampled heightfield (coarse full-extent + detail inside boundary) th
 
 ### 6.1 Binary asset endpoint
 
-New axum route, **outside** the GraphQL base64 path:
+New axum routes under `/asset/…`, **outside** the GraphQL base64 path, served from a new axum handler on `AppState` (which gains `storage: Arc<dyn Storage>` so a plain route can reach it). Auth reuses `auth_from_headers(&headers, &state.config.jwt_secret) -> Option<AuthContext>` (already the GraphQL seam, `lib.rs:111`); the browser reaches these through a **Next.js proxy route** that forwards the session cookie (mirroring `web/src/app/api/graphql/route.ts`) — the Rust API is on the internal network and is never hit directly.
 
-```
-GET /assets/:kind/:key      kind ∈ { cter, gter, samp, stin, sctr, svol, esol }
-→ 200 raw bytes (Draco/quantized where mesh), Content-Encoding: gzip|br,
-  ETag: <content-hash>, Cache-Control: private, immutable, max-age=…
-→ 304 on If-None-Match match
-```
+Two addressing schemes coexist:
 
-- **Auth:** Cookie-JWT (reuse existing session middleware). Per request: resolve the key → owning org/project, verify the caller's org matches, and **enforce the Crew gate** for `gter|svol|esol` (graded/volume artifacts). No signed URLs in v1 (route is designed so signed URLs can be added later without client changes).
-- **Discovery:** GraphQL still returns **metadata + asset keys/ETags** (not bytes) — e.g. `projectCompositeTerrain { key, etag, regions{…}, vertexCount }`, `gradedTerrain(volumeIds: [ID!]!) { key, etag }` (accepts the ordered set of active volumes), `terrainSampler { key, etag }`. The client fetches bytes over `/assets`.
-- **Existing blobs retrofitted:** STIN/SCTR/SVOL/ESOL move to `/assets` too (the base64 GraphQL content fields are deprecated, then removed once the client is cut over).
+- **Domain-identity (existing blobs, v1):** existing resources are keyed by domain id (`surface/{project_id}/{id}.bin`, `volumes.heatmap_key`, `terrain/{project_id}.tif`), org-scoped by JOIN to `projects`. Serve them by identity, mirroring today's resolvers' ownership + Crew checks:
+
+  ```
+  GET /asset/surface/{id}/mesh                → STIN
+  GET /asset/surface/{id}/contours?interval=… → SCTR   (computed on demand, as today)
+  GET /asset/volume/{id}/heatmap              → SVOL   (Crew)
+  GET /asset/volume/{id}/solid                → ESOL   (Crew)
+  GET /asset/volume/{id}/graded               → ESOL   (Crew)
+  GET /asset/project/{id}/terrain[-detailed]  → GeoTIFF
+  GET /asset/project/{id}/buildings           → JSON
+  → 200 raw bytes, Content-Encoding: gzip|br (tower-http CompressionLayer),
+    ETag: <sha256 hex of bytes>, Cache-Control: private, must-revalidate
+  → 304 on If-None-Match match
+  ```
+
+- **Content-hash keys (P2+ cached artifacts):** `GET /asset/cter/{hash}`, `/asset/gter/{hash}`, `/asset/samp/{hash}` — opaque content hashes minted by the composite/graded/sampler resolvers (§3.1), still tenancy-checked + Crew-gated on every request.
+
+- **Auth:** per request, resolve the resource → owning org/project, verify the caller's org matches, and **enforce the Crew gate** for `heatmap|solid|graded|gter|svol|esol`. No key secrecy assumption. No signed URLs in v1 (route designed to add them later without client changes).
+- **Discovery:** GraphQL still returns **metadata + asset URLs/ETags** (not bytes) — e.g. `projectCompositeTerrain { url, etag, regions{…}, vertexCount }`, `gradedTerrain(volumeIds: [ID!]!) { url, etag }`, `terrainSampler { url, etag }`. The client fetches bytes over `/asset`.
+- **Existing blobs retrofitted:** STIN/SCTR/SVOL/ESOL/GeoTIFF move to `/asset` (the base64 GraphQL `content_base64` fields are deprecated, then removed once the client is cut over).
 
 ### 6.2 Mesh compression
 
-Positions/normals **quantized** (16-bit, bbox-relative) and **Draco-compressed** server-side; client decodes via Draco (drei/three `DRACOLoader` or a wasm decoder). Falls back to quantized-only if Draco decode is unavailable.
+Positions/normals **quantized** (16-bit, bbox-relative) server-side, then the whole `/assets` response is **gzip/brotli-compressed** via `tower-http`'s `CompressionLayer`. The client decodes the quantized bytes directly into a `BufferGeometry` (trivial `DataView` read + dequantize) — **no Draco**. This is a deliberate deviation from the original "Draco" wording: Draco is a C++ library and would drag a C++ toolchain into the Rust Docker image (against the repo's no-heavy-deps philosophy and the known-painful Rust Docker rebuild). Quantize→16-bit is ~4× smaller than the current f64 blobs before compression, and gzip/brotli on the repetitive integer stream adds more — capturing the large majority of the win with zero heavy deps. **Draco is deferred** (see §12) as an optional later enhancement if ratios need it.
 
 ---
 
@@ -173,7 +185,7 @@ Positions/normals **quantized** (16-bit, bbox-relative) and **Draco-compressed**
 
 - **Detail budget:** one mesh, **adaptive slope-aware decimation** to a fixed vertex/triangle budget (target ~250k tris). Native 1 m where the boundary is small; graceful degradation when large. No client GeoTIFF decode (sampler replaces it).
 - **Coarse:** a single clipped mesh (outside the boundary), decimated to a budget like today's terrain — no runtime tiling.
-- **Transport:** binary + gzip/brotli + Draco (5–10× smaller than base64 mesh), immutable caching by content hash (repeat loads = 304 / cache hit), server precompute so nothing recomputes per request.
+- **Transport:** binary + 16-bit quantize + gzip/brotli (multiple× smaller than the current base64 f64 blobs), ETag caching (repeat loads = 304 / cache hit), server precompute so nothing recomputes per request.
 - **Render:** keep existing wins — `RenderGate` demand frameloop, in-place geometry swap + dispose, precomputed-normal morph, `<Fade cull>`. Detail is a separate mesh so graded-swap / cut-fill-ghost never re-tessellate coarse.
 
 ---
@@ -201,14 +213,14 @@ Follows the repo pattern (Rust unit + closed-form geometry, integration resolver
 
 - **Rust unit:** boundary clip (inside/outside classification), **seam stitch** (no gaps, ring bridging, elevation skirt), adaptive decimation (budget respected, slope preservation), graded boolean (detail ⊕ volume matches existing `build_graded_terrain_blob` invariants; clean footprint edges, no gaps), sampler correctness (detail-inside / coarse-outside), `CTER`/`GTER`/`SAMP` blob header + roundtrip.
 - **Integration:** `/assets` route — cookie-JWT auth, tenant isolation, Crew gate on `gter|svol|esol`, ETag/304, content-encoding; GraphQL metadata resolvers return keys/etags.
-- **Client unit (new — fills the gap):** Draco/quantized decoders, `CTER` region parsing into BufferGeometry, sampler draping (detail inside / coarse outside), heatmap-over-graded.
+- **Client unit (new — fills the gap):** quantized-mesh decoders, `CTER` region parsing into BufferGeometry, sampler draping (detail inside / coarse outside), heatmap-over-graded.
 - **Playwright e2e:** boundary present → seamless composite renders; per-volume graded toggle swaps detail + heatmap drapes; cut/fill mode ghosts detail + shows solids; no boundary → coarse-only; asset requests hit `/assets` (not base64).
 
 ---
 
 ## 11. Deployment
 
-- New axum `/assets` route + static/compression middleware; Draco decoder shipped with the web bundle.
+- New axum `/asset` routes + `tower-http` `CompressionLayer`; Next.js proxy route forwarding the session cookie; quantized-mesh decode in the web bundle (no Draco).
 - Likely **no migration** (Storage-key caching); if a cache index is needed → **0019**.
 - `algo_version` bump on deploy invalidates stale composite/graded/tile/sampler caches automatically.
 - Rust image rebuild only if a new migration lands (per the `sqlx::migrate!` compile-time bake note); otherwise a normal deploy.
@@ -217,11 +229,12 @@ Follows the repo pattern (Rust unit + closed-form geometry, integration resolver
 
 ## 12. Scope Boundaries
 
-**In v1:** boundary split composite (coarse + detail, clipped + seam-stitched), lighting-driven relief, per-volume graded boolean + heatmap-over-graded, cut/fill ghosting, binary asset endpoint (+ retrofit existing blobs), Draco/quantized compression, **adaptive detail decimation**, **compact server-side sampler**, server precompute + versioned cache.
+**In v1:** boundary split composite (coarse + detail, clipped + seam-stitched), lighting-driven relief, per-volume graded boolean + heatmap-over-graded, cut/fill ghosting, binary asset endpoint (+ retrofit existing blobs), quantized meshes + gzip/brotli compression, **adaptive detail decimation**, **compact server-side sampler**, server precompute + versioned cache.
 
 **Deferred (post-v1):**
 
 - **Aerial / satellite imagery drape** (photoreal orthoimagery) — clay + lighting-driven relief chosen instead.
+- **Draco mesh compression** — quantize + gzip/brotli for v1 (no C++ in the Docker build); Draco is an optional later enhancement if compression ratios demand it.
 - **Signed short-lived asset URLs / CDN** — cookie-JWT for v1; route designed to add them later without client changes.
 - **Baked cartographic hillshade** (fixed-sun shaded relief) — lighting-driven only for v1.
 - **Surface-model (TIN) as the inside-boundary source** — v1 uses the 1 m 3DEP DEM inside the boundary; surfaces remain a separate layer.

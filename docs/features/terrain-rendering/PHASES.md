@@ -6,7 +6,7 @@ Feature within the existing SiteLens project. Each phase ends in a working, ship
 Phase 1 ─► Phase 2 ─► Phase 3 ─► Phase 4 ─► Phase 5
 (binary    (split      (compact   (graded    (docs +
  transport  composite   sampler +  boolean +  coverage +
- + Draco)   coarse+     draping)   heatmap +  acceptance)
+ +quantize) coarse+     draping)   heatmap +  acceptance)
             detail                 cut/fill
             + seam)                ghosting)
 ```
@@ -15,29 +15,36 @@ Dependencies: P2 ships over P1's transport. P3 needs P2 (composite regions + bou
 
 ---
 
-## Phase 1 — Binary asset transport + Draco/quantized blobs
+## Phase 1 — Binary asset transport + quantized blobs
 
-The foundation: stop base64-in-GraphQL, serve raw bytes over an authed `/assets` route, and compress meshes. Independently shippable — retrofit the *existing* blobs (STIN/SCTR/SVOL/ESOL) first for an immediate payload win, before any new geometry exists.
+The foundation: stop base64-in-GraphQL, serve raw bytes over an authed `/asset` route, and shrink meshes. Independently shippable — retrofit the *existing* blobs (STIN/SCTR/SVOL/ESOL/GeoTIFF) first, before any new geometry exists. Two sub-steps: **1a transport** (raw bytes + gzip/brotli, existing f64 formats — immediate win, low risk) then **1b quantization** (16-bit meshes — more win).
 
-### Deliverables
+Seams (from the codebase map): router `api/src/lib.rs:282`; auth `auth_from_headers(&headers, &state.config.jwt_secret)` (`lib.rs:111`); storage `Storage::get(key)` (`storage.rs:11`); blob formats `api/src/surface/mod.rs`; existing resolvers in `schema/surface/query.rs` + `schema/terrain.rs` (Crew gate `require_feature(ctx, Feature::Surfaces)`); web decoders are already `ArrayBuffer`-native (`buildSurfaceGeometry`, surface-mesh.tsx:62); browser reaches the API only via the Next.js proxy (`web/src/app/api/graphql/route.ts`).
 
-- [ ] New axum route `GET /assets/:kind/:key` → raw bytes, gzip/brotli, `ETag`/`Cache-Control: private, immutable`, `304` on `If-None-Match`.
-- [ ] Cookie-JWT auth on the route: resolve key → org/project, verify ownership, enforce Crew gate for `svol|esol` (and future `gter`). Tenant isolation.
-- [ ] Storage-key content-hash scheme (§3.1) + `algo_version` invalidation on deploy.
-- [ ] Server-side **quantization** (16-bit bbox-relative) + **Draco** compression for mesh blobs.
-- [ ] GraphQL: metadata resolvers return `{ key, etag, … }` for existing blobs (deprecate the base64 content fields).
-- [ ] Web: `/assets` `ArrayBuffer` fetch helper + Draco decoder (`DRACOLoader`/wasm) with quantized-only fallback; cut STIN/SCTR/SVOL/ESOL renderers over to it.
+### Phase 1a — transport (raw bytes, no quantization)
+
+- [ ] Add `storage: Arc<dyn Storage>` to `AppState` so a plain axum route can reach it.
+- [ ] New axum handler + routes under `/asset/…` (domain-identity): `surface/{id}/mesh`, `surface/{id}/contours`, `volume/{id}/heatmap|solid|graded`, `project/{id}/terrain[-detailed]|buildings`. Raw bytes; `ETag = sha256 hex` of bytes; `304` on `If-None-Match`; `Cache-Control: private, must-revalidate`.
+- [ ] `tower-http` `CompressionLayer` (add `compression-gzip,compression-br` features) on the asset route.
+- [ ] Auth via `auth_from_headers`; org-scope every lookup (JOIN `projects`), Crew gate `heatmap|solid|graded` with `require_feature`/`Feature::Surfaces`; mirror each existing resolver's checks + on-demand compute (contours).
+- [ ] GraphQL: add `assetUrl`/`etag` metadata fields (or `…Url` variants) alongside the existing `content_base64` fields; mark base64 fields deprecated (remove in P6).
+- [ ] Web: Next.js proxy `web/src/app/api/asset/[...path]/route.ts` forwarding the session cookie + streaming bytes; `fetchAssetBuffer(url)` helper (`credentials: 'same-origin'` → `arrayBuffer()`); cut `buildSurfaceGeometry`/SCTR/SVOL/ESOL/terrain fetch sites from `base64ToArrayBuffer(content_base64)` to the raw fetch. Decoders unchanged (already `ArrayBuffer`).
+
+### Phase 1b — quantization
+
+- [ ] New quantized mesh encoding in `surface/mod.rs` (version-bumped magic): positions 16-bit bbox-relative (u16), plus the bbox as f64 for dequant; indices u16 when V ≤ 65535 else u32; carry per-vertex dz (SVOL) / rgb (ESOL) quantized to u8/u16. Keep f64 deserialize for back-compat during rollout.
+- [ ] Web: `dequantize` decoders (DataView) → `BufferGeometry`; version-switch on the magic so old + new blobs both decode.
 
 ### Tests
 
-- [ ] Rust unit: quantize/Draco roundtrip within tolerance; blob header parity with the pre-Draco format.
-- [ ] Integration: `/assets` auth (cookie-JWT), tenant isolation, Crew gate on `svol|esol`, ETag → 304, content-encoding negotiation.
-- [ ] Client unit (**new — fills the current gap**): Draco/quantized decode → BufferGeometry for STIN/SVOL/ESOL.
-- [ ] Playwright: existing surface/volume scenes still render, now fetching `/assets` (not base64) — assert no base64 content in the GraphQL response.
+- [ ] Rust unit: ETag stability (same bytes → same hash); quantize↔dequantize roundtrip within tolerance; header/version parity; index width switch at the 65535 boundary.
+- [ ] Integration: `/asset` auth (cookie-JWT present/absent/expired), tenant isolation (cross-org → 404/403), Crew gate on `heatmap|solid|graded`, ETag → 304, gzip/br content-encoding negotiation, contours computed on demand.
+- [ ] Client unit (**new — fills the current gap**): quantized + legacy-f64 decode → BufferGeometry for STIN/SVOL/ESOL; proxy URL building.
+- [ ] Playwright: existing surface/volume/terrain scenes still render, now fetching `/asset` (not base64) — assert response carries no `content_base64`.
 
 ### Validates
 
-Existing terrain/surface/volume payloads shrink 5–10× and load over an authed binary route with immutable caching. No visual change, pure transport win.
+Existing terrain/surface/volume payloads shrink substantially (no base64 inflation + no JSON parse in 1a; ~4× smaller meshes in 1b) and load over an authed binary route with ETag caching. No visual change — pure transport win.
 
 ---
 
@@ -47,7 +54,7 @@ The core rework. Server clips both DEMs to the property boundary, adaptively dec
 
 ### Deliverables
 
-- [ ] `api/src/surface/terrain_composite.rs`: decode coarse + detail GeoTIFFs; clip coarse **outside** / detail **inside** the boundary (`geom.rs` PIP, centroid classification); **adaptive slope-aware decimation** of detail to the vertex budget (~250k tris); **seam stitch** (bridge coarse-ring ↔ detail-ring, elevation skirt); per-vertex normals; emit `CTER` (regions `coarse|detail|seam`), quantized + Draco, cached by hash.
+- [ ] `api/src/surface/terrain_composite.rs`: decode coarse + detail GeoTIFFs; clip coarse **outside** / detail **inside** the boundary (`geom.rs` PIP, centroid classification); **adaptive slope-aware decimation** of detail to the vertex budget (~250k tris); **seam stitch** (bridge coarse-ring ↔ detail-ring, elevation skirt); per-vertex normals; emit `CTER` (regions `coarse|detail|seam`), 16-bit-quantized, cached by hash.
 - [ ] GraphQL: `projectCompositeTerrain { key, etag, regions{coarse,detail,seam}, vertexCount }`; falls back to null (coarse-only) when no boundary.
 - [ ] Web: `CompositeTerrain` component — decode `CTER`, render coarse + seam as one mesh and **detail as a separate, independently-toggleable mesh**; flat-clay `meshStandardMaterial` + normals (lighting-driven relief); place via `toLocal`. Replaces the current single terrain mesh when a boundary is present; coarse-only path unchanged otherwise.
 
