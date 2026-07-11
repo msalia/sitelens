@@ -394,7 +394,10 @@ impl TerrainQuery {
         .await?;
 
         let storage = storage(ctx)?;
-        let coarse_bytes = storage.get(&ckey).await.map_err(async_graphql::Error::new)?;
+        let coarse_bytes = storage
+            .get(&ckey)
+            .await
+            .map_err(async_graphql::Error::new)?;
         let detail_bytes = match dkey {
             Some((k,)) => Some(storage.get(&k).await.map_err(async_graphql::Error::new)?),
             None => None,

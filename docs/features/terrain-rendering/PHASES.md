@@ -98,19 +98,21 @@ Drop client GeoTIFF decode. Server ships a small heightfield; the client drapes 
 
 ### Deliverables
 
-- [ ] `api/src/surface/sampler.rs`: build `SAMP` — downsampled heightfield (coarse full extent + detail inside boundary), cached by hash.
-- [ ] GraphQL: `terrainSampler { key, etag, … }`.
-- [ ] Web: `SAMP` sampler over `/assets`; replace the client GeoTIFF `sample()` used for draping with **detail-inside / coarse-outside** selection; remove the client-side GeoTIFF decode for the render/drape path.
+- [x] `api/src/surface/sampler.rs`: `build_sampler()` — a downsampled lat/lon heightfield over the coarse extent, detail elevation inside the boundary + coarse outside. New `SAMP` blob (`serialize_sampler`, `u16`-quantized over `[min_h,max_h]`, `0xFFFF` nodata).
+- [x] GraphQL: `terrainSampler(projectId) -> base64 SAMP` (computed on demand; `null` until terrain is cached).
+- [x] Web: `terrain/terrain-sampler.ts` decodes `SAMP` → bilinear `(lat,lon)->m` sampler; `scene-view` fetches it; `terrain-viewer` drapes via it and **skips the client GeoTIFF decode when the composite is present** (detail-inside/coarse-outside is baked into the grid server-side).
 
 ### Tests
 
-- [ ] Rust unit: sampler correctness (bilinear; detail inside boundary, coarse outside; nodata fallback).
-- [ ] Client unit (extends `terrain.test.ts`): draping picks detail vs coarse by boundary membership; parity with prior GeoTIFF-sampled heights within tolerance.
-- [ ] Playwright: points/grid/buildings sit on the rendered surface at and across the seam (no float/sink).
+- [x] Rust unit: sampler detail-inside / coarse-outside; no-boundary all-coarse; `SAMP` blob header/quantize/nodata roundtrip. Also `sample()` far-edge epsilon-clamp.
+- [x] Client unit (`terrain-sampler.test.ts`, 3): bilinear at nodes + midpoints; null outside extent; null over a nodata corner; bad-magic rejected.
+- [ ] Playwright: deferred (needs live 3DEP + boundary, like P2); draping verified manually.
+
+> **P3 COMPLETE** (`57f32cc` sampler core, `fe83faf` resolver + web + composite **Fade** fix). On the boundary path the client no longer runs geotiff.js — the composite renders + the SAMP grid drapes. Also restored the terrain toggle's fade (composite wrapped in `<Fade cull>`). Rust 209 lib + integration green; web unit 66. **Follow-ups:** adaptive/finer detail inside the boundary (sampler is uniform over the coarse extent); move computed CTER/SAMP blobs off base64 onto `/asset` + content-hash cache.
 
 ### Validates
 
-The client no longer decodes multi-MB GeoTIFFs; draping is correct against whatever terrain is rendered beneath each object.
+On a boundary project the client decodes no multi-MB GeoTIFF; draping rides the compact SAMP grid (detail inside, coarse outside).
 
 ---
 
