@@ -124,6 +124,12 @@ export const BUILDINGS_CONTENT = graphql(`
   }
 `);
 
+export const COMPOSITE_TERRAIN = graphql(`
+  query CompositeTerrain($id: UUID!) {
+    projectCompositeTerrain(projectId: $id)
+  }
+`);
+
 export const OVERLAY_GEOMETRY = graphql(`
   query OverlayGeometry($id: UUID!) {
     cadOverlayGeometry(id: $id) {

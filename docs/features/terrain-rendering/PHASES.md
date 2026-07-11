@@ -70,16 +70,19 @@ The core rework. Server clips both DEMs to the property boundary, adaptively dec
 
 ### Deliverables
 
-- [ ] `api/src/surface/terrain_composite.rs`: decode coarse + detail GeoTIFFs; clip coarse **outside** / detail **inside** the boundary (`geom.rs` PIP, centroid classification); **adaptive slope-aware decimation** of detail to the vertex budget (~250k tris); **seam stitch** (bridge coarse-ring ↔ detail-ring, elevation skirt); per-vertex normals; emit `CTER` (regions `coarse|detail|seam`), 16-bit-quantized, cached by hash.
-- [ ] GraphQL: `projectCompositeTerrain { key, etag, regions{coarse,detail,seam}, vertexCount }`; falls back to null (coarse-only) when no boundary.
-- [ ] Web: `CompositeTerrain` component — decode `CTER`, render coarse + seam as one mesh and **detail as a separate, independently-toggleable mesh**; flat-clay `meshStandardMaterial` + normals (lighting-driven relief); place via `toLocal`. Replaces the current single terrain mesh when a boundary is present; coarse-only path unchanged otherwise.
+- [x] `api/src/surface/terrain_composite.rs` — `build_composite()`: decode coarse + detail (P2a decoder); mask nodes by `geom::point_in_polygon` (coarse outside / detail inside); insert the **shared boundary ring as a breakline constraint** (both sides align to it → watertight, no separate seam walls); triangulate (spade, isotropic planar frame `lon·cos lat0`); tag triangles coarse/detail by centroid; emit geographic `[lat,lon,h]`. **Uniform** stride decimation to a 120k-vertex budget (adaptive/slope-aware = follow-up).
+- [x] `CTER` blob (`serialize_composite`, 16-bit-quantized, `coarse` then `detail` triangle ranges). Seam is implicit (shared ring vertices), so regions are `coarse|detail` (no separate seam range).
+- [x] GraphQL `projectCompositeTerrain(projectId) -> base64 CTER` (computed on demand via `spawn_blocking`); null when no boundary or a DEM is missing. Ungated.
+- [x] Web `CompositeTerrain` — decode `CTER`, render coarse + detail as two meshes sharing one position+normal buffer (normals over the full mesh → continuous seam shading); flat-clay `meshStandardMaterial`; `toLocal`. Replaces the plain terrain when `composite` is present (`scene-view` fetches it; `terrainMesh` still built as the drape sampler until P3).
 
 ### Tests
 
-- [ ] Rust unit: inside/outside clip classification; **seam has no gaps** (every boundary-ring edge bridged); decimation respects budget + preserves slope/breaks; `CTER` region-range roundtrip.
-- [ ] Integration: composite resolver returns keys + region metadata; no-boundary → null; tenant scope.
-- [ ] Client unit: `CTER` region parsing → three BufferGeometry ranges; detail mesh is separable.
-- [ ] Playwright: project **with** boundary renders seamless composite (coarse + detail visible, no visible seam gap); project **without** boundary renders coarse-only.
+- [x] Rust unit (`terrain_composite`): inside/outside split; **watertight** (coarse+detail share ring vertices); geographic output; degenerate-boundary rejection. `CTER` header/size unit.
+- [x] Integration (`composite.rs`): resolver null without boundary / without a DEM; tenant-scoped.
+- [x] Client unit (`composite-terrain.test.ts`): `CTER` → two geometries sharing position+normal buffers; bad magic/version rejected.
+- [ ] Playwright: deferred — a real composite needs a boundary + live 3DEP fetch (US-only, non-deterministic); covered by unit + integration instead. Existing scene/surfaces specs still pass (composite is null without boundary+DEMs).
+
+> **2b + 2c shipped.** Backend `c5d7aa3` (composite core + CTER + resolver, 209 lib + 136 integration). Web: `composite-terrain.tsx` (+ test) wired through `scene-view`/`terrain-viewer`; tsc + eslint clean, web unit 63. **Follow-ups:** adaptive decimation (uniform for now); move CTER off base64 GraphQL onto `/asset` + content-hash cache (it's a computed blob like graded/solid — the biggest remaining transport win). **Not yet browser-verified** on a real boundary site.
 
 ### Validates
 

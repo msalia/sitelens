@@ -35,6 +35,7 @@ import { type AlignMarker, AlignPointsOverlay } from './terrain/align-points-ove
 import { AnalysisOverlay, type AnalysisPath } from './terrain/analysis-overlay';
 import { type AnalysisResult, AnalysisResultOverlay } from './terrain/analysis-result-overlay';
 import { BoundaryOverlay } from './terrain/boundary-overlay';
+import { CompositeTerrain } from './terrain/composite-terrain';
 import { type SceneConstraint, SurfaceConstraints } from './terrain/surface-constraints';
 import { SurfaceContours } from './terrain/surface-contours';
 import {
@@ -85,6 +86,9 @@ export interface TerrainViewerProps {
   categories: PointCategory[];
   /** As-built QC comparison markers + leader lines (null/empty draws nothing). */
   comparison?: ComparisonMarker[] | null;
+  /** Boundary-split composite terrain (CTER bytes): coarse outside + 1m detail
+   *  inside, one seamless mesh. When present it replaces the plain terrain. */
+  composite?: ArrayBuffer | null;
   /** Surface constraints (breaklines / boundary / holes) to overlay. */
   constraints?: SceneConstraint[];
   /** Draw elevation labels on major contours. */
@@ -174,6 +178,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
     captureRef,
     categories,
     comparison,
+    composite,
     constraints,
     contourLabels = true,
     contours,
@@ -357,7 +362,19 @@ export function TerrainViewer(props: TerrainViewerProps) {
           fully hidden, so a toggled-off layer costs nothing. Grid + pins are
           lightweight and fade in place (grid via its own lerp; pins exit via the
           presence hook when passed an empty list). */}
-      {terrainMesh ? (
+      {composite ? (
+        // Boundary present → the server-composited coarse+detail surface replaces
+        // the plain terrain mesh. Kept mounted; visibility toggles like the plain
+        // terrain (hidden while a volume solid/carve is shown). `terrainMesh` is
+        // still built (below is skipped) purely as the drape sampler until Phase 3.
+        <CompositeTerrain
+          buffer={composite}
+          frame={frame}
+          color={palette.clay}
+          visible={showTerrain && !volumeCarve && !volumeSolidActive}
+          opacity={underground ? 0.18 : 1}
+        />
+      ) : terrainMesh ? (
         // `cull`: terrain is one heavy mesh kept resident in state anyway, so
         // keep it mounted + warm when hidden (no remount shader-recompile hitch
         // on fade-in) and just stop drawing it. TerrainSurface morphs the vertex

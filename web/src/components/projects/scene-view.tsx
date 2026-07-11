@@ -32,6 +32,7 @@ import { subscribeProjectChanged } from '@/lib/scene-subscription';
 import { fromMeters, toMeters } from '@/lib/units';
 
 import {
+  COMPOSITE_TERRAIN,
   FRESH_MS,
   OVERLAY_GEOMETRY,
   REFRESH_BUILDINGS,
@@ -49,6 +50,7 @@ import {
   VOLUME_EARTHWORK_SOLID,
   VOLUME_GRADED_TERRAIN,
 } from './surfaces-data';
+import { base64ToArrayBuffer } from './terrain-frame';
 
 // The WebGL viewer is browser-only; load it lazily and never on the server.
 const TerrainViewer = dynamic(
@@ -120,6 +122,7 @@ export function SceneView({
 }) {
   const [scene, setScene] = useState<SceneData | null>(null);
   const [terrain, setTerrain] = useState<TerrainData | null>(null);
+  const [composite, setComposite] = useState<ArrayBuffer | null>(null);
   const [terrainMeta, setTerrainMeta] = useState<{ fetchedAt: string; demtype: string } | null>(
     null,
   );
@@ -327,6 +330,18 @@ export function SceneView({
     }
   }, [project.id]);
 
+  // Loads the boundary-split composite terrain (coarse outside + 1m detail inside,
+  // one seamless mesh). Null when the project has no boundary / no detail DEM — the
+  // viewer then falls back to the plain coarse terrain.
+  const loadComposite = useCallback(async () => {
+    try {
+      const { projectCompositeTerrain } = await gql(COMPOSITE_TERRAIN, { id: project.id });
+      setComposite(projectCompositeTerrain ? base64ToArrayBuffer(projectCompositeTerrain) : null);
+    } catch {
+      setComposite(null);
+    }
+  }, [project.id]);
+
   // Loads + parses the cached OSM building footprints over the /asset route
   // (no-op if none cached → 404 → null).
   const loadBuildingsContent = useCallback(async () => {
@@ -404,12 +419,14 @@ export function SceneView({
       } else {
         setBuildings([]);
       }
+      // Composite terrain (server decides: null unless boundary + both DEMs exist).
+      void loadComposite();
       void loadOverlays(data.cadOverlays);
       setGroups(data.pointGroups);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load scene');
     }
-  }, [project.id, loadTerrainContent, loadBuildingsContent, loadOverlays]);
+  }, [project.id, loadTerrainContent, loadBuildingsContent, loadComposite, loadOverlays]);
 
   // The 3D view is always present — load on mount and when the parent bumps
   // `reloadNonce` (e.g. after a DXF overlay is uploaded, or a georeference save).
@@ -501,6 +518,8 @@ export function SceneView({
         failed.push('detailed terrain');
       }
     }
+    // Rebuild the split composite from whatever DEMs are now cached.
+    await loadComposite();
     setRefreshing(false);
     // Anti-spam: any attempt (success or failure) holds the button for 30 min.
     setCooldownUntil(Date.now() + SPAM_COOLDOWN_MS);
@@ -519,6 +538,7 @@ export function SceneView({
     buildingsMeta,
     loadTerrainContent,
     loadBuildingsContent,
+    loadComposite,
   ]);
 
   const onSelectPoint = useCallback(
@@ -629,6 +649,7 @@ export function SceneView({
             boundary={boundary}
             boundaryDraft={boundaryDraft}
             terrain={terrain}
+            composite={composite}
             buildings={buildings}
             showBuildings={showBuildings}
             categories={categories}
