@@ -16,6 +16,7 @@
 use crate::surface::geom::point_in_polygon;
 use crate::surface::geotiff::DecodedDem;
 use crate::surface::tin::{triangulate_constrained, Constraint, InputPoint};
+use crate::surface::volume::SurfaceSampler;
 
 /// A composite mesh: geographic vertices `[lat, lon, h]` plus triangles split into
 /// the coarse (outside-boundary) and detail (inside-boundary) regions.
@@ -32,6 +33,38 @@ pub struct CompositeMesh {
 /// Target vertex count for the inside-boundary detail region; larger boundaries
 /// uniformly decimate to fit (adaptive/slope-aware decimation is a refinement).
 const DETAIL_VERTEX_BUDGET: usize = 120_000;
+
+/// The finished grade a volume imposes inside its footprint (Phase 4 graded).
+pub enum DesignGrade {
+    /// A flat reference elevation (surface-to-elevation volume).
+    Elevation(f64),
+    /// A design surface (surface-to-surface): geographic `([lat,lon,h], tris)`.
+    Surface(crate::surface::MeshData),
+}
+
+/// One volume's earthwork applied to the graded composite: its design footprint
+/// (ordered `[lon, lat]` ring) and the grade to lift the detail to inside it.
+pub struct GradedVolume {
+    pub footprint_lonlat: Vec<[f64; 2]>,
+    pub grade: DesignGrade,
+}
+
+/// A volume's grade resolved into the planar working frame: its footprint ring +
+/// an elevation lookup at a planar `(x, y)`.
+struct GradeCtx {
+    ring: Vec<[f64; 2]>,
+    elev: Option<f64>,
+    surface: Option<SurfaceSampler>,
+}
+
+impl GradeCtx {
+    fn grade_at(&self, x: f64, y: f64) -> Option<f64> {
+        match self.elev {
+            Some(e) => Some(e),
+            None => self.surface.as_ref().and_then(|s| s.sample(x, y)),
+        }
+    }
+}
 
 /// Whether a raster sample is real ground (finite, not a ±3.4e38 / declared
 /// nodata sentinel). Mirrors `dem::is_valid`.
@@ -85,13 +118,35 @@ pub(crate) fn sample(dem: &DecodedDem, lon: f64, lat: f64) -> Option<f64> {
     Some(top + (bot - top) * fy)
 }
 
-/// Builds the boundary-split composite. `boundary_lonlat` is the ordered property
-/// ring as `[lon, lat]` (projected→geographic done by the caller). Errors if the
-/// ring is degenerate or nothing triangulates.
+/// Builds the boundary-split composite (coarse outside + detail inside). The ring
+/// is `[lon, lat]` (projected→geographic done by the caller).
 pub fn build_composite(
     coarse: &DecodedDem,
     detail: &DecodedDem,
     boundary_lonlat: &[[f64; 2]],
+) -> Result<CompositeMesh, String> {
+    composite_impl(coarse, detail, boundary_lonlat, &[])
+}
+
+/// Builds the **graded** composite: like [`build_composite`], but inside each
+/// volume's footprint the detail is lifted to the design grade, with the footprint
+/// rings added as clean constraint edges. Overlapping footprints resolve by
+/// stacking order (later wins). Output reuses the `CompositeMesh`/CTER format, so
+/// the client renders it through the same `CompositeTerrain` path.
+pub fn build_graded_composite(
+    coarse: &DecodedDem,
+    detail: &DecodedDem,
+    boundary_lonlat: &[[f64; 2]],
+    grades: &[GradedVolume],
+) -> Result<CompositeMesh, String> {
+    composite_impl(coarse, detail, boundary_lonlat, grades)
+}
+
+fn composite_impl(
+    coarse: &DecodedDem,
+    detail: &DecodedDem,
+    boundary_lonlat: &[[f64; 2]],
+    grades: &[GradedVolume],
 ) -> Result<CompositeMesh, String> {
     if boundary_lonlat.len() < 3 {
         return Err("boundary needs at least 3 vertices".into());
@@ -113,6 +168,43 @@ pub fn build_composite(
     if coarse_step == 0.0 {
         return Err("coarse DEM has zero pixel size".into());
     }
+
+    // Resolve each graded volume into the planar frame. Design surfaces are
+    // geographic [lat,lon,h] → planar [lon·cos0, lat, h] for the sampler.
+    let grade_ctx: Vec<GradeCtx> = grades
+        .iter()
+        .map(|g| {
+            let ring = g
+                .footprint_lonlat
+                .iter()
+                .map(|p| to_planar(p[0], p[1]))
+                .collect();
+            match &g.grade {
+                DesignGrade::Elevation(e) => GradeCtx {
+                    ring,
+                    elev: Some(*e),
+                    surface: None,
+                },
+                DesignGrade::Surface((verts, tris)) => {
+                    let pv: Vec<[f64; 3]> =
+                        verts.iter().map(|v| [v[1] * cos0, v[0], v[2]]).collect();
+                    GradeCtx {
+                        ring,
+                        elev: None,
+                        surface: SurfaceSampler::new(pv, tris.clone()),
+                    }
+                }
+            }
+        })
+        .collect();
+    // Grade elevation at a planar point — the last footprint containing it wins.
+    let grade_at = |x: f64, y: f64| -> Option<f64> {
+        grade_ctx
+            .iter()
+            .rev()
+            .find(|c| point_in_polygon([x, y], &c.ring))
+            .and_then(|c| c.grade_at(x, y))
+    };
 
     let mut points: Vec<InputPoint> = Vec::new();
 
@@ -146,10 +238,12 @@ pub fn build_composite(
             let (lon, lat) = node_lonlat(detail, row, col);
             let p = to_planar(lon, lat);
             if point_in_polygon(p, &ring_planar) {
+                // Inside a volume footprint → lift to the design grade; else ground.
+                let z = grade_at(p[0], p[1]).unwrap_or(v as f64);
                 inside.push(InputPoint {
                     e: p[0],
                     n: p[1],
-                    z: v as f64,
+                    z,
                 });
             }
         }
@@ -186,18 +280,50 @@ pub fn build_composite(
     }
     points.extend(ring_verts.iter().copied());
 
+    // Boundary ring as a closed breakline (constraint edges, NOT a clip): forces
+    // the mesh to align to the boundary so coarse + detail share it. Each graded
+    // footprint ring is added likewise (at the design grade) so pads get a clean
+    // edge instead of a grid staircase.
+    let mut breaklines = vec![Constraint {
+        verts: ring_verts,
+        closed: true,
+    }];
+    let detail_step = (detail.pixel_x * cos0)
+        .abs()
+        .max(detail.pixel_y.abs())
+        .max(1e-9);
+    for c in &grade_ctx {
+        let mut fverts: Vec<InputPoint> = Vec::new();
+        let m = c.ring.len();
+        for i in 0..m {
+            let a = c.ring[i];
+            let b = c.ring[(i + 1) % m];
+            let seg = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+            let steps = ((seg / detail_step).ceil() as usize).clamp(1, 256);
+            for s in 0..steps {
+                let t = s as f64 / steps as f64;
+                let x = a[0] + (b[0] - a[0]) * t;
+                let y = a[1] + (b[1] - a[1]) * t;
+                let z = c
+                    .grade_at(x, y)
+                    .unwrap_or_else(|| sample(detail, x / cos0, y).unwrap_or(0.0));
+                fverts.push(InputPoint { e: x, n: y, z });
+            }
+        }
+        if fverts.len() >= 3 {
+            points.extend(fverts.iter().copied());
+            breaklines.push(Constraint {
+                verts: fverts,
+                closed: true,
+            });
+        }
+    }
+
     if points.len() < 3 {
         return Err("no valid DEM samples inside/around the boundary".into());
     }
-
-    // Ring as a closed breakline (constraint edges, NOT a clip): forces the mesh to
-    // align to the boundary so coarse + detail share it.
-    let ring_constraint = Constraint {
-        verts: ring_verts,
-        closed: true,
-    };
     let max_edge = coarse_step * 4.0;
-    let mesh = triangulate_constrained(&points, &[ring_constraint], None, &[], Some(max_edge))?;
+    let mesh = triangulate_constrained(&points, &breaklines, None, &[], Some(max_edge))?;
 
     // Classify each triangle by centroid: inside boundary → detail, else coarse.
     // Emit geographic [lat, lon, h] (planar → lon = x/cos0, lat = y).
@@ -477,6 +603,45 @@ mod tests {
         let coarse = flat_dem(-74.01, 40.0, 0.02, 5, 10.0);
         let detail = flat_dem(-74.005, 40.005, 0.01, 11, 12.0);
         assert!(build_composite(&coarse, &detail, &[[-74.0, 40.0], [-73.99, 40.0]]).is_err());
+    }
+
+    #[test]
+    fn graded_composite_lifts_detail_to_the_design_grade() {
+        let coarse = flat_dem(-74.01, 40.0, 0.02, 9, 10.0);
+        let detail = flat_dem(-74.005, 40.005, 0.01, 41, 12.0);
+        let boundary = [
+            [-74.004, 40.006],
+            [-73.996, 40.006],
+            [-73.996, 40.014],
+            [-74.004, 40.014],
+        ];
+        // A smaller footprint graded flat to elevation 20.
+        let footprint = vec![
+            [-74.002, 40.008],
+            [-73.998, 40.008],
+            [-73.998, 40.012],
+            [-74.002, 40.012],
+        ];
+        let vols = vec![GradedVolume {
+            footprint_lonlat: footprint,
+            grade: DesignGrade::Elevation(20.0),
+        }];
+        let m = build_graded_composite(&coarse, &detail, &boundary, &vols).unwrap();
+
+        // All three surfaces coexist: graded pad (20) inside the footprint, detail
+        // (12) elsewhere inside the boundary, coarse (10) outside.
+        assert!(
+            m.vertices.iter().any(|v| (v[2] - 20.0).abs() < 1e-6),
+            "footprint lifted to the design grade (20)"
+        );
+        assert!(
+            m.vertices.iter().any(|v| (v[2] - 12.0).abs() < 1e-6),
+            "detail (12) remains outside the footprint"
+        );
+        assert!(
+            m.vertices.iter().any(|v| (v[2] - 10.0).abs() < 1e-6),
+            "coarse (10) remains outside the boundary"
+        );
     }
 
     #[test]
