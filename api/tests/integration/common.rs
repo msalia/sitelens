@@ -24,7 +24,7 @@ fn test_config() -> AuthConfig {
     }
 }
 
-fn test_storage() -> Arc<dyn Storage> {
+pub(crate) fn test_storage() -> Arc<dyn Storage> {
     Arc::new(LocalStorage::new(
         std::env::temp_dir().join("sitelens-test-uploads"),
     ))

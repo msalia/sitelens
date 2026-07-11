@@ -5,6 +5,7 @@
 mod common;
 
 mod analysis;
+mod asset;
 mod auth;
 mod billing;
 mod coords;

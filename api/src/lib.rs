@@ -1,5 +1,6 @@
 pub mod analysis;
 pub mod archive;
+pub mod asset;
 pub mod auth;
 pub mod billing;
 pub mod convert;
@@ -30,7 +31,7 @@ use async_graphql::{Data, Schema};
 use async_graphql_axum::{GraphQLProtocol, GraphQLRequest, GraphQLResponse, GraphQLWebSocket};
 use axum::{
     body::Bytes,
-    extract::{ws::WebSocketUpgrade, DefaultBodyLimit, FromRequestParts, Request, State},
+    extract::{ws::WebSocketUpgrade, DefaultBodyLimit, FromRequestParts, Path, Request, State},
     http::{header, HeaderMap, StatusCode},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
@@ -38,6 +39,10 @@ use axum::{
 };
 use serde_json::json;
 use sqlx::PgPool;
+use tower_http::compression::CompressionLayer;
+use uuid::Uuid;
+
+use crate::asset::{resolve_asset, Asset, AssetOutcome};
 
 use crate::auth::{auth_context_from_token, session_token_from_cookie_header, AuthConfig};
 use crate::billing::StripeConfig;
@@ -104,6 +109,9 @@ struct AppState {
     config: AuthConfig,
     pool: PgPool,
     stripe: StripeConfig,
+    /// Blob store, held directly on state so the plain `/asset` routes can reach
+    /// it (the schema also gets its own `Arc` clone via `.data(storage)`).
+    storage: Arc<dyn Storage>,
 }
 
 /// Derives the authenticated principal (if any) from the request's session
@@ -215,6 +223,139 @@ async fn stripe_webhook(
     StatusCode::OK
 }
 
+/// Resolves an [`Asset`] request against session auth + `If-None-Match`, mapping
+/// the [`AssetOutcome`] to an HTTP response. `tower-http`'s `CompressionLayer`
+/// gzip/brotli-compresses the body on the way out.
+async fn serve_asset(state: &AppState, headers: &HeaderMap, asset: Asset) -> Response {
+    let auth = auth_from_headers(headers, &state.config.jwt_secret);
+    let inm = headers
+        .get(header::IF_NONE_MATCH)
+        .and_then(|v| v.to_str().ok());
+    match resolve_asset(
+        &state.pool,
+        state.storage.as_ref(),
+        auth.as_ref(),
+        asset,
+        inm,
+    )
+    .await
+    {
+        Ok(AssetOutcome::Unauthorized) => StatusCode::UNAUTHORIZED.into_response(),
+        Ok(AssetOutcome::Forbidden) => StatusCode::FORBIDDEN.into_response(),
+        Ok(AssetOutcome::NotFound) => StatusCode::NOT_FOUND.into_response(),
+        Ok(AssetOutcome::NotModified) => StatusCode::NOT_MODIFIED.into_response(),
+        Ok(AssetOutcome::Found {
+            bytes,
+            etag,
+            content_type,
+            filename,
+        }) => (
+            [
+                (header::CONTENT_TYPE, content_type.to_string()),
+                (header::ETAG, etag),
+                (
+                    header::CACHE_CONTROL,
+                    "private, must-revalidate".to_string(),
+                ),
+                (
+                    header::CONTENT_DISPOSITION,
+                    format!("inline; filename=\"{filename}\""),
+                ),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Err(e) => {
+            eprintln!("asset error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+async fn asset_surface_mesh(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    serve_asset(&s, &headers, Asset::SurfaceMesh(id)).await
+}
+
+async fn asset_volume_heatmap(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    serve_asset(&s, &headers, Asset::VolumeHeatmap(id)).await
+}
+
+async fn asset_project_terrain(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    serve_asset(&s, &headers, Asset::ProjectTerrain(id)).await
+}
+
+async fn asset_project_detailed_terrain(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    serve_asset(&s, &headers, Asset::ProjectDetailedTerrain(id)).await
+}
+
+async fn asset_project_buildings(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    serve_asset(&s, &headers, Asset::ProjectBuildings(id)).await
+}
+
+/// Assembles the full axum app from an [`AppState`]. Shared by `run()` and tests.
+fn router(state: AppState) -> Router {
+    // Compression only wraps the asset routes: mesh/GeoTIFF blobs are large and
+    // repetitive; GraphQL JSON already goes through the Next.js proxy.
+    let assets = Router::new()
+        .route("/asset/surface/{id}/mesh", get(asset_surface_mesh))
+        .route("/asset/volume/{id}/heatmap", get(asset_volume_heatmap))
+        .route("/asset/project/{id}/terrain", get(asset_project_terrain))
+        .route(
+            "/asset/project/{id}/terrain-detailed",
+            get(asset_project_detailed_terrain),
+        )
+        .route(
+            "/asset/project/{id}/buildings",
+            get(asset_project_buildings),
+        )
+        .layer(CompressionLayer::new());
+
+    Router::new()
+        .route("/", get(|| async { "SiteLens API" }))
+        .route("/health", get(health))
+        .route("/graphql", get(graphql_get).post(graphql_handler))
+        .route("/stripe/webhook", post(stripe_webhook))
+        .merge(assets)
+        // Axum defaults to a 2 MB request body; a 10 MB DXF (plus JSON-string
+        // escaping) needs headroom, so lift the cap well above MAX_DXF_BYTES.
+        .layer(DefaultBodyLimit::max(32 * 1024 * 1024))
+        .with_state(state)
+}
+
+/// Builds the full app (schema + `/asset` routes) with an in-memory rate limiter.
+/// For tests that need to drive the HTTP surface (e.g. via `tower::oneshot`).
+pub fn build_router(pool: PgPool, config: AuthConfig, storage: Arc<dyn Storage>) -> Router {
+    let schema = build_schema(pool.clone(), config.clone(), storage.clone());
+    let state = AppState {
+        schema,
+        config,
+        pool,
+        stripe: StripeConfig::from_env(),
+        storage,
+    };
+    router(state)
+}
+
 async fn connect_with_retry(database_url: &str) -> PgPool {
     let mut attempt = 0;
     loop {
@@ -271,23 +412,16 @@ pub async fn run() {
         }
         _ => RateLimiter::memory(rl_max() as usize, Duration::from_secs(rl_window_secs())),
     };
-    let schema = build_schema_with(pool.clone(), config.clone(), storage, limiter);
+    let schema = build_schema_with(pool.clone(), config.clone(), storage.clone(), limiter);
     let state = AppState {
         schema,
         config,
         pool,
         stripe: StripeConfig::from_env(),
+        storage,
     };
 
-    let app = Router::new()
-        .route("/", get(|| async { "SiteLens API" }))
-        .route("/health", get(health))
-        .route("/graphql", get(graphql_get).post(graphql_handler))
-        .route("/stripe/webhook", post(stripe_webhook))
-        // Axum defaults to a 2 MB request body; a 10 MB DXF (plus JSON-string
-        // escaping) needs headroom, so lift the cap well above MAX_DXF_BYTES.
-        .layer(DefaultBodyLimit::max(32 * 1024 * 1024))
-        .with_state(state);
+    let app = router(state);
 
     let addr = "0.0.0.0:4000";
     let listener = tokio::net::TcpListener::bind(addr)

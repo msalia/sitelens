@@ -23,12 +23,15 @@ Seams (from the codebase map): router `api/src/lib.rs:282`; auth `auth_from_head
 
 ### Phase 1a — transport (raw bytes, no quantization)
 
-- [ ] Add `storage: Arc<dyn Storage>` to `AppState` so a plain axum route can reach it.
-- [ ] New axum handler + routes under `/asset/…` (domain-identity): `surface/{id}/mesh`, `surface/{id}/contours`, `volume/{id}/heatmap|solid|graded`, `project/{id}/terrain[-detailed]|buildings`. Raw bytes; `ETag = sha256 hex` of bytes; `304` on `If-None-Match`; `Cache-Control: private, must-revalidate`.
-- [ ] `tower-http` `CompressionLayer` (add `compression-gzip,compression-br` features) on the asset route.
-- [ ] Auth via `auth_from_headers`; org-scope every lookup (JOIN `projects`), Crew gate `heatmap|solid|graded` with `require_feature`/`Feature::Surfaces`; mirror each existing resolver's checks + on-demand compute (contours).
-- [ ] GraphQL: add `assetUrl`/`etag` metadata fields (or `…Url` variants) alongside the existing `content_base64` fields; mark base64 fields deprecated (remove in P6).
-- [ ] Web: Next.js proxy `web/src/app/api/asset/[...path]/route.ts` forwarding the session cookie + streaming bytes; `fetchAssetBuffer(url)` helper (`credentials: 'same-origin'` → `arrayBuffer()`); cut `buildSurfaceGeometry`/SCTR/SVOL/ESOL/terrain fetch sites from `base64ToArrayBuffer(content_base64)` to the raw fetch. Decoders unchanged (already `ArrayBuffer`).
+- [x] Add `storage: Arc<dyn Storage>` to `AppState` so a plain axum route can reach it. (`lib.rs`; `router()` + `build_router()` extracted for tests.)
+- [x] New axum handler + routes for the **pure-fetch** blobs under `/asset/…`: `surface/{id}/mesh`, `volume/{id}/heatmap`, `project/{id}/terrain`, `project/{id}/terrain-detailed`, `project/{id}/buildings`. Raw bytes; `ETag = sha256 hex`; `304` on `If-None-Match`; `Cache-Control: private, must-revalidate`; `Content-Type` + `Content-Disposition`. Core logic in `api/src/asset.rs` (`Asset` enum + `resolve_asset` → `AssetOutcome`).
+- [ ] **Computed** blobs (`surface/{id}/contours` SCTR, `volume/{id}/solid|graded` ESOL) — deferred within 1a; they stay on base64 until their byte-producers are factored out of the resolvers (graded is rewritten in P4 anyway).
+- [x] `tower-http` `CompressionLayer` (`compression-gzip,compression-br`) on the asset sub-router.
+- [x] Auth via `auth_from_headers`; org-scope every lookup (JOIN `projects`); Crew gate `mesh|heatmap` via `org_billing().has_feature(Feature::Surfaces)`; base terrain/buildings ungated. Order = auth → gate → ownership (mirrors resolvers).
+- [ ] GraphQL: add `assetUrl`/`etag` metadata fields alongside the existing `content_base64` fields; mark base64 fields deprecated (remove in P6).
+- [ ] Web: Next.js proxy `web/src/app/api/asset/[...path]/route.ts` forwarding the session cookie + streaming bytes; `fetchAssetBuffer(url)` helper (`credentials: 'same-origin'` → `arrayBuffer()`); cut `buildSurfaceGeometry`/SVOL/terrain fetch sites from `base64ToArrayBuffer(content_base64)` to the raw fetch. Decoders unchanged (already `ArrayBuffer`).
+
+> **Shipped so far (1a backend):** `api/src/asset.rs` + `/asset` routes wired in `lib.rs`, gzip/brotli compression, sha256 ETag/304. Tests: `api/tests/integration/asset.rs` — 8 tests (core outcomes for all 5 pure-fetch assets: auth/gate/tenancy/etag/304, ungated-terrain, Crew-heatmap, + HTTP `oneshot` wiring for 401/200/304) and a unit test for `etag_for`. Full suite green: 200 lib + 133 integration. **Remaining 1a:** GraphQL metadata fields + the web proxy/fetch cutover.
 
 ### Phase 1b — quantization
 
