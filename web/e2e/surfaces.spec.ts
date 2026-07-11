@@ -26,7 +26,7 @@ test('build a TIN from points → renders, then toggle ramp/wireframe', async ({
   await gotoTab(page, 'Surfaces');
 
   // Build a TIN from all design points.
-  await page.getByLabel('Name').fill('Existing grade');
+  await page.locator('#surf-name').fill('Existing grade');
   await page.getByRole('button', { name: 'Build surface' }).click();
 
   // It appears in the surfaces list, reporting its triangle count (a square → 2).
@@ -72,7 +72,7 @@ test('auto boundary → rebuild bumps the version, and slope shading is offered'
   );
 
   await gotoTab(page, 'Surfaces');
-  await page.getByLabel('Name').fill('Grade');
+  await page.locator('#surf-name').fill('Grade');
   await page.getByRole('button', { name: 'Build surface' }).click();
   await expect(page.getByText('Grade', { exact: true })).toBeVisible();
   await expect(page.getByText('v1', { exact: true })).toBeVisible();
@@ -105,7 +105,7 @@ test('enable contours → the API returns iso-lines and the controls appear', as
   );
 
   await gotoTab(page, 'Surfaces');
-  await page.getByLabel('Name').fill('Grade');
+  await page.locator('#surf-name').fill('Grade');
   await page.getByRole('button', { name: 'Build surface' }).click();
   await expect(page.getByText('Grade', { exact: true })).toBeVisible();
 
@@ -142,7 +142,7 @@ test('compute a surface-to-elevation volume → totals appear + heatmap loads', 
   );
 
   await gotoTab(page, 'Surfaces');
-  await page.getByLabel('Name').fill('Grade');
+  await page.locator('#surf-name').fill('Grade');
   await page.getByRole('button', { name: 'Build surface' }).click();
   await expect(page.getByText('Grade', { exact: true })).toBeVisible();
 
@@ -182,7 +182,7 @@ test('export a surface as LandXML from the surfaces list', async ({ page }) => {
   );
 
   await gotoTab(page, 'Surfaces');
-  await page.getByLabel('Name').fill('Existing Grade');
+  await page.locator('#surf-name').fill('Existing Grade');
   await page.getByRole('button', { name: 'Build surface' }).click();
   await expect(page.getByText('Existing Grade', { exact: true })).toBeVisible();
 

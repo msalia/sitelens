@@ -106,9 +106,10 @@ test('run a parking analysis → tiled stalls + count badge', async ({ page }) =
   };
   expect(body.data.runParkingAnalysis.result).toContain('"stallCount":11');
 
-  // The completed analysis shows its stall-count badge in the list.
+  // The completed analysis shows its stall-count badge in the list. `exact` so we
+  // match the badge, not the "11 stalls tiled" toast.
   await expect(page.getByText('Lot A')).toBeVisible();
-  await expect(page.getByText('11 stalls')).toBeVisible();
+  await expect(page.getByText('11 stalls', { exact: true }).first()).toBeVisible();
 });
 
 test('Solo plan gates the Analysis tab behind the upgrade dialog', async ({ page }) => {

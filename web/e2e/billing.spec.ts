@@ -93,7 +93,8 @@ test.describe('Crew (paid) tier', () => {
     upgradeOrg(email);
     await page.goto('/settings/billing');
 
-    await expect(page.getByText('Crew')).toBeVisible();
+    // `exact` so we hit the plan-name text, not the "…crew-bill…" email substring.
+    await expect(page.getByText('Crew', { exact: true })).toBeVisible();
     await expect(page.getByText('Paid plan')).toBeVisible();
     await expect(page.getByText('Renews on')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Manage billing' })).toBeVisible();
