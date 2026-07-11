@@ -299,6 +299,93 @@ fn tri_centroid_planar(verts: &[[f64; 3]], tri: &[u32; 3]) -> [f64; 2] {
     [(a[0] + b[0] + c[0]) / 3.0, (a[1] + b[1] + c[1]) / 3.0]
 }
 
+/// Triangulates the high-res **detail** DEM clipped to the property boundary into
+/// a geographic mesh `([lat, lon, h], triangles)` — the base surface that Phase 4
+/// graded terrain cuts each volume's earthwork into. The boundary ring is the
+/// outer clip (triangles kept by centroid); vertices ship geographic so the mesh
+/// can be serialized as STIN and fed to the existing graded builder.
+pub fn build_detail_surface(
+    detail: &DecodedDem,
+    boundary_lonlat: &[[f64; 2]],
+) -> Result<crate::surface::MeshData, String> {
+    if boundary_lonlat.len() < 3 {
+        return Err("boundary needs at least 3 vertices".into());
+    }
+    let lat0 = boundary_lonlat.iter().map(|p| p[1]).sum::<f64>() / boundary_lonlat.len() as f64;
+    let cos0 = lat0.to_radians().cos().max(1e-6);
+    let to_planar = |lon: f64, lat: f64| [lon * cos0, lat];
+    let ring_planar: Vec<[f64; 2]> = boundary_lonlat
+        .iter()
+        .map(|p| to_planar(p[0], p[1]))
+        .collect();
+    let step = (detail.pixel_x * cos0).abs().max(detail.pixel_y.abs());
+    if step == 0.0 {
+        return Err("detail DEM has zero pixel size".into());
+    }
+
+    // Detail nodes inside the boundary, uniformly strided to the vertex budget.
+    let mut inside: Vec<InputPoint> = Vec::new();
+    for row in 0..detail.height {
+        for col in 0..detail.width {
+            let v = detail.data[row * detail.width + col];
+            if !valid(v, detail.nodata) {
+                continue;
+            }
+            let (lon, lat) = node_lonlat(detail, row, col);
+            let p = to_planar(lon, lat);
+            if point_in_polygon(p, &ring_planar) {
+                inside.push(InputPoint {
+                    e: p[0],
+                    n: p[1],
+                    z: v as f64,
+                });
+            }
+        }
+    }
+    let stride = (inside.len() / DETAIL_VERTEX_BUDGET).max(1);
+    let mut points: Vec<InputPoint> = inside.iter().step_by(stride).copied().collect();
+
+    // Boundary ring (z sampled from the detail), used as the outer clip.
+    let mut ring_verts: Vec<InputPoint> = Vec::new();
+    let n = boundary_lonlat.len();
+    for i in 0..n {
+        let a = boundary_lonlat[i];
+        let b = boundary_lonlat[(i + 1) % n];
+        let ap = to_planar(a[0], a[1]);
+        let bp = to_planar(b[0], b[1]);
+        let seg = ((bp[0] - ap[0]).powi(2) + (bp[1] - ap[1]).powi(2)).sqrt();
+        let steps = ((seg / step).ceil() as usize).max(1);
+        for s in 0..steps {
+            let t = s as f64 / steps as f64;
+            let lon = a[0] + (b[0] - a[0]) * t;
+            let lat = a[1] + (b[1] - a[1]) * t;
+            let z = sample(detail, lon, lat).unwrap_or(0.0);
+            let p = to_planar(lon, lat);
+            ring_verts.push(InputPoint {
+                e: p[0],
+                n: p[1],
+                z,
+            });
+        }
+    }
+    points.extend(ring_verts.iter().copied());
+    if points.len() < 3 {
+        return Err("no detail samples inside the boundary".into());
+    }
+
+    let boundary = Constraint {
+        verts: ring_verts,
+        closed: true,
+    };
+    let mesh = triangulate_constrained(&points, &[], Some(&boundary), &[], None)?;
+    let vertices = mesh
+        .vertices
+        .iter()
+        .map(|v| [v[1], v[0] / cos0, v[2]])
+        .collect();
+    Ok((vertices, mesh.indices))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -390,5 +477,35 @@ mod tests {
         let coarse = flat_dem(-74.01, 40.0, 0.02, 5, 10.0);
         let detail = flat_dem(-74.005, 40.005, 0.01, 11, 12.0);
         assert!(build_composite(&coarse, &detail, &[[-74.0, 40.0], [-73.99, 40.0]]).is_err());
+    }
+
+    #[test]
+    fn detail_surface_triangulates_inside_the_boundary() {
+        let detail = flat_dem(-74.005, 40.005, 0.01, 21, 12.0);
+        let boundary = [
+            [-74.004, 40.006],
+            [-73.996, 40.006],
+            [-73.996, 40.014],
+            [-74.004, 40.014],
+        ];
+        let (verts, tris) = build_detail_surface(&detail, &boundary).unwrap();
+        assert!(!verts.is_empty() && !tris.is_empty());
+        // Geographic [lat, lon, h] within the detail extent, at the flat elevation.
+        for v in &verts {
+            assert!((40.005..=40.015).contains(&v[0]), "lat {}", v[0]);
+            assert!((-74.005..=-73.995).contains(&v[1]), "lon {}", v[1]);
+            assert!((v[2] - 12.0).abs() < 1e-3);
+        }
+        // Every triangle centroid is inside the boundary (clipped to it).
+        let cos0 = (40.01_f64).to_radians().cos();
+        let ring: Vec<[f64; 2]> = boundary.iter().map(|p| [p[0] * cos0, p[1]]).collect();
+        for t in &tris {
+            let c = [
+                (verts[t[0] as usize][1] + verts[t[1] as usize][1] + verts[t[2] as usize][1]) / 3.0
+                    * cos0,
+                (verts[t[0] as usize][0] + verts[t[1] as usize][0] + verts[t[2] as usize][0]) / 3.0,
+            ];
+            assert!(point_in_polygon(c, &ring), "triangle outside boundary");
+        }
     }
 }
