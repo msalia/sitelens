@@ -13,8 +13,8 @@ const FRAME: Frame = {
 
 type V = [number, number, number];
 
-/** Builds a CTER blob, mirroring `serialize_composite`. */
-function cter(verts: V[], coarse: V[], detail: V[]): ArrayBuffer {
+/** Builds a CTER blob, mirroring `serialize_composite`. `alpha` is per-vertex 0..1. */
+function cter(verts: V[], coarse: V[], detail: V[], alpha?: number[]): ArrayBuffer {
   const min = [Infinity, Infinity, Infinity];
   const max = [-Infinity, -Infinity, -Infinity];
   for (const v of verts) {
@@ -25,7 +25,7 @@ function cter(verts: V[], coarse: V[], detail: V[]): ArrayBuffer {
   }
   const q = (v: number, mn: number, mx: number) =>
     mx <= mn ? 0 : Math.round(((v - mn) / (mx - mn)) * 65535);
-  const buf = new ArrayBuffer(68 + verts.length * 6 + (coarse.length + detail.length) * 12);
+  const buf = new ArrayBuffer(68 + verts.length * 7 + (coarse.length + detail.length) * 12);
   const dv = new DataView(buf);
   for (let i = 0; i < 4; i++) {
     dv.setUint8(i, 'CTER'.charCodeAt(i));
@@ -43,6 +43,10 @@ function cter(verts: V[], coarse: V[], detail: V[]): ArrayBuffer {
       dv.setUint16(off, q(v[k], min[k], max[k]), true);
       off += 2;
     }
+  }
+  for (let i = 0; i < verts.length; i++) {
+    dv.setUint8(off, Math.round((alpha?.[i] ?? 1) * 255));
+    off += 1;
   }
   for (const t of [...coarse, ...detail]) {
     for (const i of t) {
@@ -68,7 +72,7 @@ describe('buildCompositeGeometry', () => {
   ];
 
   it('splits coarse + detail regions sharing one position buffer', () => {
-    const g = buildCompositeGeometry(cter(verts, coarse, detail), FRAME)!;
+    const g = buildCompositeGeometry(cter(verts, coarse, detail, [1, 0.5, 0, 0, 1]), FRAME)!;
     expect(g).not.toBeNull();
     expect(g.coarse.getIndex()!.count).toBe(3); // 1 tri
     expect(g.detail.getIndex()!.count).toBe(6); // 2 tris
@@ -77,6 +81,14 @@ describe('buildCompositeGeometry', () => {
     expect(g.detail.attributes.position).toBe(g.coarse.attributes.position);
     expect(g.detail.attributes.normal).toBe(g.coarse.attributes.normal);
     expect(g.coarse.attributes.normal.count).toBe(5);
+
+    // Fade: RGBA color attribute (shared), alpha read from the blob's per-vertex u8.
+    const col = g.coarse.attributes.color;
+    expect(col.itemSize).toBe(4);
+    expect(g.detail.attributes.color).toBe(col);
+    const alpha = (i: number) => (col.array as Float32Array)[i * 4 + 3];
+    expect(alpha(0)).toBeGreaterThan(0.99); // alpha 1.0 → opaque
+    expect(alpha(2)).toBeLessThan(0.01); // alpha 0.0 → transparent
   });
 
   it('rejects a bad magic / version', () => {

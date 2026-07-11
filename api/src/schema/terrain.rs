@@ -338,6 +338,7 @@ impl TerrainQuery {
             )?;
             let blob = crate::surface::serialize_composite(
                 &mesh.vertices,
+                &mesh.alpha,
                 &mesh.coarse_tris,
                 &mesh.detail_tris,
             );

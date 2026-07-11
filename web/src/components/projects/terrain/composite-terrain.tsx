@@ -56,6 +56,19 @@ export function buildCompositeGeometry(buf: ArrayBuffer, frame: Frame): Composit
     positions[i * 3 + 2] = z;
   }
 
+  // Per-vertex RGBA: white RGB (the material tints it to clay) + the server's
+  // boundary-aware fade alpha (u8) — opaque inside the boundary, dissolving across
+  // the coarse surround so the context tile has no hard edge.
+  const colors = new Float32Array(vCount * 4);
+  for (let i = 0; i < vCount; i++) {
+    colors[i * 4] = 1;
+    colors[i * 4 + 1] = 1;
+    colors[i * 4 + 2] = 1;
+    colors[i * 4 + 3] = dv.getUint8(off) / 255;
+    off += 1;
+  }
+  const colorAttr = new THREE.BufferAttribute(colors, 4);
+
   const readTris = (count: number) => {
     const idx = new Uint32Array(count * 3);
     for (let i = 0; i < count * 3; i++) {
@@ -82,6 +95,7 @@ export function buildCompositeGeometry(buf: ArrayBuffer, frame: Frame): Composit
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', posAttr); // shared buffers
     g.setAttribute('normal', normalAttr);
+    g.setAttribute('color', colorAttr);
     g.setIndex(new THREE.BufferAttribute(idx, 1));
     return g;
   };
@@ -125,24 +139,25 @@ export function CompositeTerrain({
   if (!geo) {
     return null;
   }
-  const transparent = opacity < 1;
   return (
     <>
       <mesh geometry={geo.coarse} visible={visible}>
         <meshStandardMaterial
           color={color}
+          vertexColors
           roughness={1}
           metalness={0}
-          transparent={transparent}
+          transparent
           opacity={opacity}
         />
       </mesh>
       <mesh geometry={geo.detail} visible={visible && showDetail}>
         <meshStandardMaterial
           color={color}
+          vertexColors
           roughness={1}
           metalness={0}
-          transparent={transparent}
+          transparent
           opacity={opacity}
         />
       </mesh>

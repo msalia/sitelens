@@ -22,6 +22,9 @@ use crate::surface::tin::{triangulate_constrained, Constraint, InputPoint};
 #[derive(Debug, Clone)]
 pub struct CompositeMesh {
     pub vertices: Vec<[f64; 3]>,
+    /// Per-vertex fade alpha (0..1): opaque inside the boundary, dissolving to the
+    /// coarse edge so the context tile has no hard silhouette. Index-aligned.
+    pub alpha: Vec<f32>,
     pub coarse_tris: Vec<[u32; 3]>,
     pub detail_tris: Vec<[u32; 3]>,
 }
@@ -207,11 +210,77 @@ pub fn build_composite(
             coarse_tris.push(*tri);
         }
     }
+
+    // Boundary-aware fade alpha: fully opaque inside the boundary (and a margin
+    // outside it), then fading to transparent across the coarse surround — so the
+    // property reads crisp while the context tile dissolves into the background
+    // with no hard edge. Distance is measured to the boundary ring (planar → m).
+    let dist_m: Vec<f64> = mesh
+        .vertices
+        .iter()
+        .map(|v| {
+            let p = [v[0], v[1]];
+            if point_in_polygon(p, &ring_planar) {
+                0.0
+            } else {
+                dist_point_to_ring(p, &ring_planar) * M_PER_PLANAR_UNIT
+            }
+        })
+        .collect();
+    let max_dist = dist_m.iter().cloned().fold(0.0_f64, f64::max);
+    let band = (max_dist - FADE_MARGIN_M) * FADE_BAND_FRAC;
+    let alpha: Vec<f32> = dist_m
+        .iter()
+        .map(|&d| {
+            if band <= 0.0 {
+                1.0
+            } else {
+                (1.0 - smoothstep((d - FADE_MARGIN_M) / band)) as f32
+            }
+        })
+        .collect();
+
     Ok(CompositeMesh {
         vertices,
+        alpha,
         coarse_tris,
         detail_tris,
     })
+}
+
+/// Meters per planar unit: planar coords are degrees (`y = lat`, `x = lon·cos lat0`),
+/// so both axes are ~degrees-of-latitude → × this ≈ meters.
+const M_PER_PLANAR_UNIT: f64 = 111_320.0;
+/// Opaque band (meters) just outside the boundary before the fade begins.
+const FADE_MARGIN_M: f64 = 30.0;
+/// Fraction of the outside span over which alpha ramps to 0 (0 beyond it).
+const FADE_BAND_FRAC: f64 = 0.6;
+
+/// Hermite smoothstep on a clamped `t`.
+fn smoothstep(t: f64) -> f64 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// Distance from `p` to the nearest edge of the closed ring (planar units).
+fn dist_point_to_ring(p: [f64; 2], ring: &[[f64; 2]]) -> f64 {
+    let n = ring.len();
+    (0..n).fold(f64::INFINITY, |best, i| {
+        best.min(dist_point_to_seg(p, ring[i], ring[(i + 1) % n]))
+    })
+}
+
+/// Distance from `p` to segment `a→b`.
+fn dist_point_to_seg(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> f64 {
+    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+    let len2 = dx * dx + dy * dy;
+    let t = if len2 == 0.0 {
+        0.0
+    } else {
+        (((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2).clamp(0.0, 1.0)
+    };
+    let (cx, cy) = (a[0] + t * dx, a[1] + t * dy);
+    ((p[0] - cx).powi(2) + (p[1] - cy).powi(2)).sqrt()
 }
 
 /// Planar centroid `[x, y]` of a triangle (planar mesh vertices are `[x, y, z]`).
@@ -292,6 +361,21 @@ mod tests {
         assert!(
             cset.intersection(&dset).count() > 0,
             "coarse + detail regions must share boundary-ring vertices"
+        );
+
+        // Boundary-aware fade: alpha is per-vertex; vertices inside the boundary are
+        // fully opaque, and at least one coarse (outside) vertex fades.
+        assert_eq!(m.alpha.len(), m.vertices.len());
+        for (v, &a) in m.vertices.iter().zip(&m.alpha) {
+            // v is geographic [lat, lon, h]; inside the boundary lon/lat ring → opaque.
+            let inside = crate::surface::geom::point_in_polygon([v[1], v[0]], &boundary);
+            if inside {
+                assert!(a > 0.99, "inside-boundary vertex must be opaque, got {a}");
+            }
+        }
+        assert!(
+            m.alpha.iter().any(|&a| a < 0.5),
+            "the coarse surround should fade toward transparent"
         );
     }
 

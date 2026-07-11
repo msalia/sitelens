@@ -325,7 +325,8 @@ pub fn serialize_earthwork_solid(
 
 /// Serializes a composite terrain into the **CTER** blob (little-endian).
 /// `vertices` are geographic `[lat, lon, h]`, `u16`-quantized over the bbox;
-/// triangles are the coarse (outside) range followed by the detail (inside) range.
+/// `alpha` is a per-vertex fade (0..1 → `u8`); triangles are the coarse (outside)
+/// range followed by the detail (inside) range.
 ///
 /// ```text
 /// offset  bytes  field
@@ -336,11 +337,13 @@ pub fn serialize_earthwork_solid(
 /// 16      4      detail_triangle_count D (u32)
 /// 20      48     bbox: min_lat,min_lon,min_h,max_lat,max_lon,max_h (6 x f64)
 /// 68      V*6    vertices [lat, lon, h] (3 x u16 quantized) each
+/// ...     V*1    per-vertex fade alpha (u8)
 /// ...     C*12   coarse triangles [a,b,c] (3 x u32)
 /// ...     D*12   detail triangles [a,b,c] (3 x u32)
 /// ```
 pub fn serialize_composite(
     vertices: &[[f64; 3]],
+    alpha: &[f32],
     coarse_tris: &[[u32; 3]],
     detail_tris: &[[u32; 3]],
 ) -> Vec<u8> {
@@ -358,7 +361,7 @@ pub fn serialize_composite(
     }
 
     let mut buf =
-        Vec::with_capacity(68 + vertices.len() * 6 + (coarse_tris.len() + detail_tris.len()) * 12);
+        Vec::with_capacity(68 + vertices.len() * 7 + (coarse_tris.len() + detail_tris.len()) * 12);
     buf.extend_from_slice(CTER_MAGIC);
     buf.extend_from_slice(&CTER_VERSION.to_le_bytes());
     buf.extend_from_slice(&(vertices.len() as u32).to_le_bytes());
@@ -371,6 +374,10 @@ pub fn serialize_composite(
         for k in 0..3 {
             buf.extend_from_slice(&quantize(v[k], min[k], max[k]).to_le_bytes());
         }
+    }
+    for i in 0..vertices.len() {
+        let a = alpha.get(i).copied().unwrap_or(1.0);
+        buf.push((a.clamp(0.0, 1.0) * 255.0).round() as u8);
     }
     for tri in coarse_tris.iter().chain(detail_tris) {
         for i in tri {
@@ -391,9 +398,10 @@ mod tests {
             [40.1, -74.0, 20.0],
             [40.0, -74.1, 30.0],
         ];
+        let alpha = [1.0f32, 0.5, 0.0];
         let coarse = [[0u32, 1, 2]];
         let detail = [[2u32, 1, 0], [0, 1, 2]];
-        let blob = serialize_composite(&verts, &coarse, &detail);
+        let blob = serialize_composite(&verts, &alpha, &coarse, &detail);
         assert_eq!(&blob[0..4], CTER_MAGIC);
         assert_eq!(
             u32::from_le_bytes(blob[4..8].try_into().unwrap()),
@@ -402,11 +410,15 @@ mod tests {
         assert_eq!(u32::from_le_bytes(blob[8..12].try_into().unwrap()), 3); // V
         assert_eq!(u32::from_le_bytes(blob[12..16].try_into().unwrap()), 1); // coarse
         assert_eq!(u32::from_le_bytes(blob[16..20].try_into().unwrap()), 2); // detail
-                                                                             // 68-byte header, 3 verts × 6, 3 tris × 12.
-        assert_eq!(blob.len(), 68 + 3 * 6 + 3 * 12);
+                                                                             // 68B header, 3 verts × (6 pos + 1 alpha), 3 tris × 12.
+        assert_eq!(blob.len(), 68 + 3 * 7 + 3 * 12);
         // bbox min_lat 40.0 / max_lat 40.1.
         assert_eq!(f64::from_le_bytes(blob[20..28].try_into().unwrap()), 40.0);
         assert_eq!(f64::from_le_bytes(blob[44..52].try_into().unwrap()), 40.1);
+        // Alpha block (u8) follows the 3×6 position bytes: 255, 128, 0.
+        let a_off = 68 + 3 * 6;
+        assert_eq!(blob[a_off], 255);
+        assert_eq!(blob[a_off + 2], 0);
     }
 
     #[test]
