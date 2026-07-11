@@ -453,7 +453,12 @@ export function TerrainViewer(props: TerrainViewerProps) {
               so there's no hole. A dedicated low-opacity layer (Fade owns opacity,
               so it captures 0.22 as the base and fades to it). */}
           <Fade visible={showTerrain && volumeSolidActive} cull>
-            <CompositeTerrain buffer={composite} frame={frame} color={palette.clay} opacity={0.22} />
+            <CompositeTerrain
+              buffer={composite}
+              frame={frame}
+              color={palette.clay}
+              opacity={0.22}
+            />
           </Fade>
         </>
       ) : terrainMesh ? (

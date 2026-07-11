@@ -27,7 +27,8 @@ function samp(
   dv.setFloat64(48, bbox.maxLat, true);
   dv.setFloat64(56, bbox.maxLon, true);
   heights.forEach((z, i) => {
-    const q = z === null ? 0xffff : maxH <= minH ? 0 : Math.round(((z - minH) / (maxH - minH)) * 65534);
+    const q =
+      z === null ? 0xffff : maxH <= minH ? 0 : Math.round(((z - minH) / (maxH - minH)) * 65534);
     dv.setUint16(64 + i * 2, q, true);
   });
   return buf;

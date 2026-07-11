@@ -7,8 +7,7 @@
  */
 export const assetUrls = {
   projectBuildings: (projectId: string) => `/api/asset/project/${projectId}/buildings`,
-  projectDetailedTerrain: (projectId: string) =>
-    `/api/asset/project/${projectId}/terrain-detailed`,
+  projectDetailedTerrain: (projectId: string) => `/api/asset/project/${projectId}/terrain-detailed`,
   projectTerrain: (projectId: string) => `/api/asset/project/${projectId}/terrain`,
   surfaceMesh: (surfaceId: string) => `/api/asset/surface/${surfaceId}/mesh`,
   volumeHeatmap: (volumeId: string) => `/api/asset/volume/${volumeId}/heatmap`,
