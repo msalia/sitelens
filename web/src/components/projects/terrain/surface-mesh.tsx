@@ -68,24 +68,44 @@ export function buildSurfaceGeometry(buf: ArrayBuffer, frame: Frame): SurfaceGeo
   if (magic !== 'STIN') {
     return null;
   }
+  const version = dv.getUint32(4, true);
+  if (version !== 1 && version !== 2) {
+    return null;
+  }
   const vCount = dv.getUint32(8, true);
   const tCount = dv.getUint32(12, true);
   if (vCount === 0 || tCount === 0) {
     return null;
   }
-  // bbox height range lives at floats [2] (min) and [5] (max) after the header.
-  const minH = dv.getFloat64(16 + 16, true);
-  const maxH = dv.getFloat64(16 + 40, true);
+  // bbox: [min_lat, min_lon, min_h, max_lat, max_lon, max_h] (6 × f64 from offset 16).
+  const minLat = dv.getFloat64(16, true);
+  const minLon = dv.getFloat64(24, true);
+  const minH = dv.getFloat64(32, true);
+  const maxLat = dv.getFloat64(40, true);
+  const maxLon = dv.getFloat64(48, true);
+  const maxH = dv.getFloat64(56, true);
   const span = maxH - minH || 1;
+  // v2 dequant: value = min + q/65535 · (max − min); degenerate axis → min.
+  const dq = (q: number, mn: number, mx: number) => (mx <= mn ? mn : mn + (q / 65535) * (mx - mn));
 
   const positions = new Float32Array(vCount * 3);
   const colors = new Float32Array(vCount * 3);
+  const stride = version === 1 ? 24 : 6;
   let off = 64;
   for (let i = 0; i < vCount; i++) {
-    const lat = dv.getFloat64(off, true);
-    const lon = dv.getFloat64(off + 8, true);
-    const h = dv.getFloat64(off + 16, true);
-    off += 24;
+    let lat: number;
+    let lon: number;
+    let h: number;
+    if (version === 1) {
+      lat = dv.getFloat64(off, true);
+      lon = dv.getFloat64(off + 8, true);
+      h = dv.getFloat64(off + 16, true);
+    } else {
+      lat = dq(dv.getUint16(off, true), minLat, maxLat);
+      lon = dq(dv.getUint16(off + 2, true), minLon, maxLon);
+      h = dq(dv.getUint16(off + 4, true), minH, maxH);
+    }
+    off += stride;
     const [x, y, z] = toLocal(frame, lat, lon, h);
     positions[i * 3] = x;
     positions[i * 3 + 1] = y;
