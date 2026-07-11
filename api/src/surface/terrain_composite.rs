@@ -252,7 +252,7 @@ pub fn build_composite(
 /// so both axes are ~degrees-of-latitude → × this ≈ meters.
 const M_PER_PLANAR_UNIT: f64 = 111_320.0;
 /// Opaque band (meters) just outside the boundary before the fade begins.
-const FADE_MARGIN_M: f64 = 30.0;
+const FADE_MARGIN_M: f64 = 10.0;
 /// Fraction of the outside span over which alpha ramps to 0 (0 beyond it).
 const FADE_BAND_FRAC: f64 = 0.6;
 
