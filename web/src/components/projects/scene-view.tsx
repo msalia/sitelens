@@ -41,6 +41,7 @@ import {
   SCENE_QUERY,
   sceneBbox,
   SPAM_COOLDOWN_MS,
+  TERRAIN_SAMPLER,
 } from './scene-view-data';
 import {
   BREAKLINES,
@@ -123,6 +124,7 @@ export function SceneView({
   const [scene, setScene] = useState<SceneData | null>(null);
   const [terrain, setTerrain] = useState<TerrainData | null>(null);
   const [composite, setComposite] = useState<ArrayBuffer | null>(null);
+  const [samplerBlob, setSamplerBlob] = useState<ArrayBuffer | null>(null);
   const [terrainMeta, setTerrainMeta] = useState<{ fetchedAt: string; demtype: string } | null>(
     null,
   );
@@ -342,6 +344,17 @@ export function SceneView({
     }
   }, [project.id]);
 
+  // Loads the compact draping heightfield (SAMP): detail inside the boundary,
+  // coarse outside. Replaces the client GeoTIFF decode for draping.
+  const loadSampler = useCallback(async () => {
+    try {
+      const { terrainSampler } = await gql(TERRAIN_SAMPLER, { id: project.id });
+      setSamplerBlob(terrainSampler ? base64ToArrayBuffer(terrainSampler) : null);
+    } catch {
+      setSamplerBlob(null);
+    }
+  }, [project.id]);
+
   // Loads + parses the cached OSM building footprints over the /asset route
   // (no-op if none cached → 404 → null).
   const loadBuildingsContent = useCallback(async () => {
@@ -419,14 +432,22 @@ export function SceneView({
       } else {
         setBuildings([]);
       }
-      // Composite terrain (server decides: null unless boundary + both DEMs exist).
+      // Composite terrain + draping sampler (server decides what applies).
       void loadComposite();
+      void loadSampler();
       void loadOverlays(data.cadOverlays);
       setGroups(data.pointGroups);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load scene');
     }
-  }, [project.id, loadTerrainContent, loadBuildingsContent, loadComposite, loadOverlays]);
+  }, [
+    project.id,
+    loadTerrainContent,
+    loadBuildingsContent,
+    loadComposite,
+    loadSampler,
+    loadOverlays,
+  ]);
 
   // The 3D view is always present — load on mount and when the parent bumps
   // `reloadNonce` (e.g. after a DXF overlay is uploaded, or a georeference save).
@@ -518,8 +539,9 @@ export function SceneView({
         failed.push('detailed terrain');
       }
     }
-    // Rebuild the split composite from whatever DEMs are now cached.
+    // Rebuild the split composite + draping sampler from whatever's now cached.
     await loadComposite();
+    await loadSampler();
     setRefreshing(false);
     // Anti-spam: any attempt (success or failure) holds the button for 30 min.
     setCooldownUntil(Date.now() + SPAM_COOLDOWN_MS);
@@ -539,6 +561,7 @@ export function SceneView({
     loadTerrainContent,
     loadBuildingsContent,
     loadComposite,
+    loadSampler,
   ]);
 
   const onSelectPoint = useCallback(
@@ -650,6 +673,7 @@ export function SceneView({
             boundaryDraft={boundaryDraft}
             terrain={terrain}
             composite={composite}
+            samplerBlob={samplerBlob}
             buildings={buildings}
             showBuildings={showBuildings}
             categories={categories}

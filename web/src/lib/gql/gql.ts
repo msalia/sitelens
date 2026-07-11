@@ -88,6 +88,7 @@ type Documents = {
     "\n  mutation RefreshDetailedTerrain($id: UUID!, $force: Boolean) {\n    refreshDetailedTerrain(projectId: $id, force: $force) {\n      demtype\n      fetchedAt\n    }\n  }\n": typeof types.RefreshDetailedTerrainDocument,
     "\n  query BuildingsContent($id: UUID!) {\n    projectBuildingsContent(projectId: $id)\n  }\n": typeof types.BuildingsContentDocument,
     "\n  query CompositeTerrain($id: UUID!) {\n    projectCompositeTerrain(projectId: $id)\n  }\n": typeof types.CompositeTerrainDocument,
+    "\n  query TerrainSampler($id: UUID!) {\n    terrainSampler(projectId: $id)\n  }\n": typeof types.TerrainSamplerDocument,
     "\n  query OverlayGeometry($id: UUID!) {\n    cadOverlayGeometry(id: $id) {\n      layers\n      polylines {\n        layer\n        points {\n          x\n          y\n        }\n      }\n    }\n  }\n": typeof types.OverlayGeometryDocument,
     "\n  mutation RefreshTerrain(\n    $id: UUID!\n    $south: Float!\n    $north: Float!\n    $west: Float!\n    $east: Float!\n    $force: Boolean\n  ) {\n    refreshTerrain(\n      projectId: $id\n      south: $south\n      north: $north\n      west: $west\n      east: $east\n      force: $force\n    ) {\n      demtype\n      fetchedAt\n    }\n  }\n": typeof types.RefreshTerrainDocument,
     "\n  mutation RefreshBuildings(\n    $id: UUID!\n    $south: Float!\n    $north: Float!\n    $west: Float!\n    $east: Float!\n    $force: Boolean\n  ) {\n    refreshBuildings(\n      projectId: $id\n      south: $south\n      north: $north\n      west: $west\n      east: $east\n      force: $force\n    ) {\n      count\n      fetchedAt\n    }\n  }\n": typeof types.RefreshBuildingsDocument,
@@ -214,6 +215,7 @@ const documents: Documents = {
     "\n  mutation RefreshDetailedTerrain($id: UUID!, $force: Boolean) {\n    refreshDetailedTerrain(projectId: $id, force: $force) {\n      demtype\n      fetchedAt\n    }\n  }\n": types.RefreshDetailedTerrainDocument,
     "\n  query BuildingsContent($id: UUID!) {\n    projectBuildingsContent(projectId: $id)\n  }\n": types.BuildingsContentDocument,
     "\n  query CompositeTerrain($id: UUID!) {\n    projectCompositeTerrain(projectId: $id)\n  }\n": types.CompositeTerrainDocument,
+    "\n  query TerrainSampler($id: UUID!) {\n    terrainSampler(projectId: $id)\n  }\n": types.TerrainSamplerDocument,
     "\n  query OverlayGeometry($id: UUID!) {\n    cadOverlayGeometry(id: $id) {\n      layers\n      polylines {\n        layer\n        points {\n          x\n          y\n        }\n      }\n    }\n  }\n": types.OverlayGeometryDocument,
     "\n  mutation RefreshTerrain(\n    $id: UUID!\n    $south: Float!\n    $north: Float!\n    $west: Float!\n    $east: Float!\n    $force: Boolean\n  ) {\n    refreshTerrain(\n      projectId: $id\n      south: $south\n      north: $north\n      west: $west\n      east: $east\n      force: $force\n    ) {\n      demtype\n      fetchedAt\n    }\n  }\n": types.RefreshTerrainDocument,
     "\n  mutation RefreshBuildings(\n    $id: UUID!\n    $south: Float!\n    $north: Float!\n    $west: Float!\n    $east: Float!\n    $force: Boolean\n  ) {\n    refreshBuildings(\n      projectId: $id\n      south: $south\n      north: $north\n      west: $west\n      east: $east\n      force: $force\n    ) {\n      count\n      fetchedAt\n    }\n  }\n": types.RefreshBuildingsDocument,
@@ -559,6 +561,10 @@ export function graphql(source: "\n  query BuildingsContent($id: UUID!) {\n    p
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query CompositeTerrain($id: UUID!) {\n    projectCompositeTerrain(projectId: $id)\n  }\n"): typeof import('./graphql').CompositeTerrainDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query TerrainSampler($id: UUID!) {\n    terrainSampler(projectId: $id)\n  }\n"): typeof import('./graphql').TerrainSamplerDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

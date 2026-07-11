@@ -1013,6 +1013,13 @@ export type CompositeTerrainQueryVariables = Exact<{
 
 export type CompositeTerrainQuery = { projectCompositeTerrain: string | null };
 
+export type TerrainSamplerQueryVariables = Exact<{
+  id: string;
+}>;
+
+
+export type TerrainSamplerQuery = { terrainSampler: string | null };
+
 export type OverlayGeometryQueryVariables = Exact<{
   id: string;
 }>;
@@ -2330,6 +2337,11 @@ export const CompositeTerrainDocument = new TypedDocumentString(`
   projectCompositeTerrain(projectId: $id)
 }
     `) as unknown as TypedDocumentString<CompositeTerrainQuery, CompositeTerrainQueryVariables>;
+export const TerrainSamplerDocument = new TypedDocumentString(`
+    query TerrainSampler($id: UUID!) {
+  terrainSampler(projectId: $id)
+}
+    `) as unknown as TypedDocumentString<TerrainSamplerQuery, TerrainSamplerQueryVariables>;
 export const OverlayGeometryDocument = new TypedDocumentString(`
     query OverlayGeometry($id: UUID!) {
   cadOverlayGeometry(id: $id) {

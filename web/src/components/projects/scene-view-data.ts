@@ -130,6 +130,12 @@ export const COMPOSITE_TERRAIN = graphql(`
   }
 `);
 
+export const TERRAIN_SAMPLER = graphql(`
+  query TerrainSampler($id: UUID!) {
+    terrainSampler(projectId: $id)
+  }
+`);
+
 export const OVERLAY_GEOMETRY = graphql(`
   query OverlayGeometry($id: UUID!) {
     cadOverlayGeometry(id: $id) {

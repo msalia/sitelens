@@ -1359,6 +1359,13 @@ type QueryRoot {
 	"""
 	projectCompositeTerrain(projectId: UUID!): String
 	"""
+	A compact draping heightfield (base64 **SAMP** blob): a small lat/lon grid
+	over the coarse extent, detail elevation inside the property boundary and
+	coarse outside. The client bilinear-samples it to drape points/grid/
+	buildings — no client GeoTIFF decode. `null` until terrain is cached.
+	"""
+	terrainSampler(projectId: UUID!): String
+	"""
 	Converts a coordinate (given in `unit`, in the named `space`) into every
 	derivable representation: grid, projected (grid + ground), and geographic.
 	"""

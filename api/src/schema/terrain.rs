@@ -350,6 +350,79 @@ impl TerrainQuery {
         .map_err(async_graphql::Error::new)?;
         Ok(Some(b64))
     }
+
+    /// A compact draping heightfield (base64 **SAMP** blob): a small lat/lon grid
+    /// over the coarse extent, detail elevation inside the property boundary and
+    /// coarse outside. The client bilinear-samples it to drape points/grid/
+    /// buildings — no client GeoTIFF decode. `null` until terrain is cached.
+    async fn terrain_sampler(&self, ctx: &Context<'_>, project_id: Uuid) -> Result<Option<String>> {
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+
+        let ckey: Option<(String,)> =
+            sqlx::query_as("SELECT storage_key FROM project_terrain WHERE project_id = $1")
+                .bind(project_id)
+                .fetch_optional(pool)
+                .await?;
+        let Some((ckey,)) = ckey else {
+            return Ok(None); // no coarse terrain yet
+        };
+
+        // Optional detail DEM + boundary → detail elevations inside the boundary.
+        let row: Option<(Option<serde_json::Value>, i32)> = sqlx::query_as(
+            "SELECT boundary, epsg_code FROM projects WHERE id = $1 AND org_id = $2",
+        )
+        .bind(project_id)
+        .bind(auth.org_id)
+        .fetch_optional(pool)
+        .await?;
+        let (boundary, epsg) = found_in_org(row, "project")?;
+        let boundary_lonlat: Option<Vec<[f64; 2]>> = boundary.and_then(|b| {
+            serde_json::from_value::<Vec<[f64; 2]>>(b).ok().map(|pts| {
+                pts.iter()
+                    .filter_map(|[e, n]| crate::crs::projected_to_geographic(epsg, *e, *n))
+                    .map(|(lat, lon)| [lon, lat])
+                    .collect()
+            })
+        });
+        let dkey: Option<(String,)> = sqlx::query_as(
+            "SELECT storage_key FROM project_detailed_terrain WHERE project_id = $1",
+        )
+        .bind(project_id)
+        .fetch_optional(pool)
+        .await?;
+
+        let storage = storage(ctx)?;
+        let coarse_bytes = storage.get(&ckey).await.map_err(async_graphql::Error::new)?;
+        let detail_bytes = match dkey {
+            Some((k,)) => Some(storage.get(&k).await.map_err(async_graphql::Error::new)?),
+            None => None,
+        };
+
+        let b64 = tokio::task::spawn_blocking(move || -> Result<String, String> {
+            let coarse = crate::surface::geotiff::read_geotiff(&coarse_bytes)?;
+            let detail = match detail_bytes {
+                Some(b) => Some(crate::surface::geotiff::read_geotiff(&b)?),
+                None => None,
+            };
+            // Only use detail when we also have a boundary (≥3 verts) to bound it.
+            let bnd = boundary_lonlat.as_deref().filter(|b| b.len() >= 3);
+            let grid = crate::surface::sampler::build_sampler(
+                &coarse,
+                if bnd.is_some() { detail.as_ref() } else { None },
+                bnd,
+                256,
+            );
+            let blob = crate::surface::serialize_sampler(&grid);
+            use base64::Engine;
+            Ok(base64::engine::general_purpose::STANDARD.encode(blob))
+        })
+        .await
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?
+        .map_err(async_graphql::Error::new)?;
+        Ok(Some(b64))
+    }
 }
 
 #[derive(Default)]

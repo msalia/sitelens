@@ -44,6 +44,7 @@ import {
   SurfaceMesh,
   type SurfaceMode,
 } from './terrain/surface-mesh';
+import { buildSampler } from './terrain/terrain-sampler';
 import { Utilities, type UtilityPick } from './terrain/utilities';
 import { VolumeSolid } from './terrain/volume-solid';
 import { silenceThreeClockWarning } from './three-clock-warning';
@@ -115,6 +116,9 @@ export interface TerrainViewerProps {
   overlays?: RenderableOverlay[];
   /** Drape zero-elevation points + grid lines onto the terrain surface. */
   projectOnTerrain?: boolean;
+  /** Compact draping heightfield (SAMP bytes): detail inside the boundary, coarse
+   *  outside. Drives draping without a client GeoTIFF decode. */
+  samplerBlob?: ArrayBuffer | null;
   scene: SceneData;
   /** Whether to render the extruded OSM buildings. */
   showBuildings?: boolean;
@@ -192,6 +196,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
     originProjectedN,
     overlays,
     projectOnTerrain = true,
+    samplerBlob,
     scene,
     showBuildings = true,
     showComparison = true,
@@ -241,8 +246,9 @@ export function TerrainViewer(props: TerrainViewerProps) {
   // the downloaded heightfield, with cleanup that disposes the GPU resource.
   useEffect(() => {
     let cancelled = false;
-    if (!terrain?.buffer) {
-      // Terrain genuinely removed → clear it.
+    // Skip the (heavy) GeoTIFF decode when the server composite is driving the
+    // render — draping then rides the SAMP sampler instead of this mesh.
+    if (composite || !terrain?.buffer) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setTerrainMesh(null);
       return;
@@ -267,7 +273,7 @@ export function TerrainViewer(props: TerrainViewerProps) {
     return () => {
       cancelled = true;
     };
-  }, [terrain?.buffer, frame]);
+  }, [terrain?.buffer, composite, frame]);
 
   // Dispose the final geometry when the viewer unmounts / is replaced.
   useEffect(() => () => terrainMesh?.geometry.dispose(), [terrainMesh]);
@@ -294,8 +300,11 @@ export function TerrainViewer(props: TerrainViewerProps) {
   // Dispose the surface geometry when it's replaced / the viewer unmounts.
   useEffect(() => () => surfaceGeom?.geometry.dispose(), [surfaceGeom]);
 
-  // The terrain elevation sampler, only when projecting is enabled + loaded.
-  const sampler: Sampler = projectOnTerrain ? (terrainMesh?.sample ?? null) : null;
+  // Draping sampler: prefer the compact server SAMP heightfield (detail inside the
+  // boundary, coarse outside — no GeoTIFF decode); fall back to the plain terrain
+  // mesh's sampler when there's no SAMP blob yet.
+  const sampleFn = useMemo(() => (samplerBlob ? buildSampler(samplerBlob) : null), [samplerBlob]);
+  const sampler: Sampler = projectOnTerrain ? (sampleFn ?? terrainMesh?.sample ?? null) : null;
 
   // Volume view mode: `volumeGraded` on ⇒ carve the terrain to the finished grade;
   // off ⇒ show the cut/fill as solid 3D masses over a ghosted terrain.
@@ -364,16 +373,18 @@ export function TerrainViewer(props: TerrainViewerProps) {
           presence hook when passed an empty list). */}
       {composite ? (
         // Boundary present → the server-composited coarse+detail surface replaces
-        // the plain terrain mesh. Kept mounted; visibility toggles like the plain
-        // terrain (hidden while a volume solid/carve is shown). `terrainMesh` is
-        // still built (below is skipped) purely as the drape sampler until Phase 3.
-        <CompositeTerrain
-          buffer={composite}
-          frame={frame}
-          color={palette.clay}
-          visible={showTerrain && !volumeCarve && !volumeSolidActive}
-          opacity={underground ? 0.18 : 1}
-        />
+        // the plain terrain mesh. Wrapped in `Fade` (cull) so the terrain toggle
+        // dissolves in/out like every other layer; hidden while a volume solid/
+        // carve is shown. Fade lerps both region materials' opacity, composing with
+        // the per-vertex boundary fade.
+        <Fade visible={showTerrain && !volumeCarve && !volumeSolidActive} cull>
+          <CompositeTerrain
+            buffer={composite}
+            frame={frame}
+            color={palette.clay}
+            opacity={underground ? 0.18 : 1}
+          />
+        </Fade>
       ) : terrainMesh ? (
         // `cull`: terrain is one heavy mesh kept resident in state anyway, so
         // keep it mounted + warm when hidden (no remount shader-recompile hitch
