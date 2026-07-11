@@ -34,7 +34,7 @@ Seams (from the codebase map): router `api/src/lib.rs:282`; auth `auth_from_head
 - [ ] Computed blobs (`contours` SCTR, `solid`/`graded` ESOL) still ride base64 GraphQL — deferred within 1a (graded is rewritten in P4).
 - [ ] GraphQL: (optional) `assetUrl`/`etag` metadata fields; the client builds URLs directly from ids, so this is only needed if a resolver must signal presence. Remove the base64 `content_base64` render fields in P6 once fully cut over.
 
-> **Shipped so far (1a):** *Backend* — `api/src/asset.rs` + `/asset` routes in `lib.rs`, gzip/brotli, sha256 ETag/304; `api/tests/integration/asset.rs` (8) + `etag_for` unit; suite green (200 lib + 133 integration). *Web* — `/api/asset` proxy + `lib/asset.ts` (+ `asset.test.ts`, 6 tests); **terrain, buildings, surface mesh, volume heatmap** all cut over to the binary route; tsc + eslint clean, web unit 52 green. **Remaining 1a:** computed-blob migration (deferred) + base64-field removal (P6). **Not yet browser-verified** — needs a Playwright/manual scene check (sandbox can't launch Chromium).
+> **1a COMPLETE + browser-verified.** *Backend* — `api/src/asset.rs` + `/asset` routes in `lib.rs`, gzip/brotli, sha256 ETag/304; `api/tests/integration/asset.rs` (8) + `etag_for` unit; suite green (200 lib + 133 integration). *Web* — `/api/asset` proxy + `lib/asset.ts` (+ `asset.test.ts`, 6 tests); **terrain, buildings, surface mesh, volume heatmap** all cut over to the binary route; tsc + eslint clean, web unit 52 green. *E2E* — `web/e2e/asset-transport.spec.ts` green (surface mesh over `/api/asset`: 200 + octet-stream + ETag → 304; unauth → 401), run against the rebuilt local api container. **Remaining 1a:** computed-blob migration (deferred) + base64-field removal (P6).
 
 ### Phase 1b — quantization
 
