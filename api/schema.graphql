@@ -1351,6 +1351,14 @@ type QueryRoot {
 	"""
 	projectBuildingsContent(projectId: UUID!): String!
 	"""
+	The boundary-split **composite terrain**: coarse DEM outside the property
+	boundary + the 1 m detail DEM inside it, stitched at a shared ring into one
+	continuous surface. Returned as a base64 **CTER** blob. `null` when the
+	project has no boundary or is missing either DEM (the client then falls
+	back to the plain coarse terrain). Ungated — the base scene floor.
+	"""
+	projectCompositeTerrain(projectId: UUID!): String
+	"""
 	Converts a coordinate (given in `unit`, in the named `space`) into every
 	derivable representation: grid, projected (grid + ground), and geographic.
 	"""

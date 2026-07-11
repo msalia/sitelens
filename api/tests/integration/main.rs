@@ -8,6 +8,7 @@ mod analysis;
 mod asset;
 mod auth;
 mod billing;
+mod composite;
 mod coords;
 mod export;
 mod field;

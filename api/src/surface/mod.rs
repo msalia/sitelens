@@ -31,6 +31,7 @@ pub mod dem;
 pub mod export;
 pub mod geom;
 pub mod geotiff;
+pub mod terrain_composite;
 pub mod tin;
 pub mod volume;
 
@@ -76,6 +77,13 @@ pub const SVOL_VERSION: u32 = 3;
 pub const ESOL_MAGIC: &[u8; 4] = b"ESOL";
 /// Current earthwork-solid format version (added with quantization).
 pub const ESOL_VERSION: u32 = 1;
+
+/// Magic prefix for a composite-terrain blob (boundary-split coarse + detail).
+pub const CTER_MAGIC: &[u8; 4] = b"CTER";
+/// Composite-terrain format version. Positions `u16`-quantized over the header
+/// bbox; triangles split into a coarse (outside-boundary) then detail (inside)
+/// range so the client can render + toggle the detail region independently.
+pub const CTER_VERSION: u32 = 1;
 
 /// An indexed mesh decoded from a blob: `(vertices [x/lat, y/lon, z], triangles)`.
 pub type MeshData = (Vec<[f64; 3]>, Vec<[u32; 3]>);
@@ -315,9 +323,91 @@ pub fn serialize_earthwork_solid(
     buf
 }
 
+/// Serializes a composite terrain into the **CTER** blob (little-endian).
+/// `vertices` are geographic `[lat, lon, h]`, `u16`-quantized over the bbox;
+/// triangles are the coarse (outside) range followed by the detail (inside) range.
+///
+/// ```text
+/// offset  bytes  field
+/// 0       4      magic "CTER"
+/// 4       4      version (u32)
+/// 8       4      vertex_count V (u32)
+/// 12      4      coarse_triangle_count C (u32)
+/// 16      4      detail_triangle_count D (u32)
+/// 20      48     bbox: min_lat,min_lon,min_h,max_lat,max_lon,max_h (6 x f64)
+/// 68      V*6    vertices [lat, lon, h] (3 x u16 quantized) each
+/// ...     C*12   coarse triangles [a,b,c] (3 x u32)
+/// ...     D*12   detail triangles [a,b,c] (3 x u32)
+/// ```
+pub fn serialize_composite(
+    vertices: &[[f64; 3]],
+    coarse_tris: &[[u32; 3]],
+    detail_tris: &[[u32; 3]],
+) -> Vec<u8> {
+    let mut min = [f64::INFINITY; 3];
+    let mut max = [f64::NEG_INFINITY; 3];
+    for v in vertices {
+        for k in 0..3 {
+            min[k] = min[k].min(v[k]);
+            max[k] = max[k].max(v[k]);
+        }
+    }
+    if vertices.is_empty() {
+        min = [0.0; 3];
+        max = [0.0; 3];
+    }
+
+    let mut buf =
+        Vec::with_capacity(68 + vertices.len() * 6 + (coarse_tris.len() + detail_tris.len()) * 12);
+    buf.extend_from_slice(CTER_MAGIC);
+    buf.extend_from_slice(&CTER_VERSION.to_le_bytes());
+    buf.extend_from_slice(&(vertices.len() as u32).to_le_bytes());
+    buf.extend_from_slice(&(coarse_tris.len() as u32).to_le_bytes());
+    buf.extend_from_slice(&(detail_tris.len() as u32).to_le_bytes());
+    for v in [min[0], min[1], min[2], max[0], max[1], max[2]] {
+        buf.extend_from_slice(&v.to_le_bytes());
+    }
+    for v in vertices {
+        for k in 0..3 {
+            buf.extend_from_slice(&quantize(v[k], min[k], max[k]).to_le_bytes());
+        }
+    }
+    for tri in coarse_tris.iter().chain(detail_tris) {
+        for i in tri {
+            buf.extend_from_slice(&i.to_le_bytes());
+        }
+    }
+    buf
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn composite_blob_has_expected_header_and_size() {
+        let verts = [
+            [40.0, -74.0, 10.0],
+            [40.1, -74.0, 20.0],
+            [40.0, -74.1, 30.0],
+        ];
+        let coarse = [[0u32, 1, 2]];
+        let detail = [[2u32, 1, 0], [0, 1, 2]];
+        let blob = serialize_composite(&verts, &coarse, &detail);
+        assert_eq!(&blob[0..4], CTER_MAGIC);
+        assert_eq!(
+            u32::from_le_bytes(blob[4..8].try_into().unwrap()),
+            CTER_VERSION
+        );
+        assert_eq!(u32::from_le_bytes(blob[8..12].try_into().unwrap()), 3); // V
+        assert_eq!(u32::from_le_bytes(blob[12..16].try_into().unwrap()), 1); // coarse
+        assert_eq!(u32::from_le_bytes(blob[16..20].try_into().unwrap()), 2); // detail
+                                                                             // 68-byte header, 3 verts × 6, 3 tris × 12.
+        assert_eq!(blob.len(), 68 + 3 * 6 + 3 * 12);
+        // bbox min_lat 40.0 / max_lat 40.1.
+        assert_eq!(f64::from_le_bytes(blob[20..28].try_into().unwrap()), 40.0);
+        assert_eq!(f64::from_le_bytes(blob[44..52].try_into().unwrap()), 40.1);
+    }
 
     #[test]
     fn blob_has_expected_header_and_size() {

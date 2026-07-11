@@ -264,6 +264,91 @@ impl TerrainQuery {
         let bytes = storage.get(&key).await.map_err(async_graphql::Error::new)?;
         Ok(String::from_utf8_lossy(&bytes).into_owned())
     }
+
+    /// The boundary-split **composite terrain**: coarse DEM outside the property
+    /// boundary + the 1 m detail DEM inside it, stitched at a shared ring into one
+    /// continuous surface. Returned as a base64 **CTER** blob. `null` when the
+    /// project has no boundary or is missing either DEM (the client then falls
+    /// back to the plain coarse terrain). Ungated — the base scene floor.
+    async fn project_composite_terrain(
+        &self,
+        ctx: &Context<'_>,
+        project_id: Uuid,
+    ) -> Result<Option<String>> {
+        let auth = require_auth(ctx)?;
+        let pool = pool(ctx)?;
+        ensure_project_in_org(pool, project_id, auth.org_id).await?;
+
+        let row: Option<(Option<serde_json::Value>, i32)> = sqlx::query_as(
+            "SELECT boundary, epsg_code FROM projects WHERE id = $1 AND org_id = $2",
+        )
+        .bind(project_id)
+        .bind(auth.org_id)
+        .fetch_optional(pool)
+        .await?;
+        let (boundary, epsg) = found_in_org(row, "project")?;
+        let Some(boundary) = boundary else {
+            return Ok(None); // no boundary → no split; client uses coarse terrain
+        };
+        let pts: Vec<[f64; 2]> = serde_json::from_value(boundary)
+            .map_err(|e| async_graphql::Error::new(format!("invalid boundary geometry: {e}")))?;
+        // Boundary → geographic [lon, lat] (matches how the detail AOI was fetched).
+        let boundary_lonlat: Vec<[f64; 2]> = pts
+            .iter()
+            .filter_map(|[e, n]| crate::crs::projected_to_geographic(epsg, *e, *n))
+            .map(|(lat, lon)| [lon, lat])
+            .collect();
+        if boundary_lonlat.len() < 3 {
+            return Ok(None);
+        }
+
+        // Need both DEMs cached.
+        let ckey: Option<(String,)> =
+            sqlx::query_as("SELECT storage_key FROM project_terrain WHERE project_id = $1")
+                .bind(project_id)
+                .fetch_optional(pool)
+                .await?;
+        let dkey: Option<(String,)> = sqlx::query_as(
+            "SELECT storage_key FROM project_detailed_terrain WHERE project_id = $1",
+        )
+        .bind(project_id)
+        .fetch_optional(pool)
+        .await?;
+        let (Some((ckey,)), Some((dkey,))) = (ckey, dkey) else {
+            return Ok(None);
+        };
+        let storage = storage(ctx)?;
+        let coarse_bytes = storage
+            .get(&ckey)
+            .await
+            .map_err(async_graphql::Error::new)?;
+        let detail_bytes = storage
+            .get(&dkey)
+            .await
+            .map_err(async_graphql::Error::new)?;
+
+        // Decode + composite + serialize off the async workers (CPU-bound).
+        let b64 = tokio::task::spawn_blocking(move || -> Result<String, String> {
+            let coarse = crate::surface::geotiff::read_geotiff(&coarse_bytes)?;
+            let detail = crate::surface::geotiff::read_geotiff(&detail_bytes)?;
+            let mesh = crate::surface::terrain_composite::build_composite(
+                &coarse,
+                &detail,
+                &boundary_lonlat,
+            )?;
+            let blob = crate::surface::serialize_composite(
+                &mesh.vertices,
+                &mesh.coarse_tris,
+                &mesh.detail_tris,
+            );
+            use base64::Engine;
+            Ok(base64::engine::general_purpose::STANDARD.encode(blob))
+        })
+        .await
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?
+        .map_err(async_graphql::Error::new)?;
+        Ok(Some(b64))
+    }
 }
 
 #[derive(Default)]
